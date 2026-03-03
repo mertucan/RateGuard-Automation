@@ -11,6 +11,7 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Layout><MainDashboardPage /></Layout>} />
         <Route path="/renewal-review" element={<Layout><ContractReviewPage /></Layout>} />
+        <Route path="/renewal-review/:id" element={<Layout><ContractReviewPage /></Layout>} />
         <Route path="/clients" element={<Layout><ClientManagementPage /></Layout>} />
       </Routes>
     </BrowserRouter>
