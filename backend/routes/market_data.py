@@ -1,7 +1,7 @@
 from datetime import date, timedelta
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from services.supabase_client import supabase
-from services.market_cache import get_cached_market_data
+from services.market_cache import get_cached_market_data, get_cached_history
 from veri_cekme_tcmb import get_guaranteed_market_data
 
 market_data_bp = Blueprint("market_data", __name__)
@@ -10,6 +10,17 @@ market_data_bp = Blueprint("market_data", __name__)
 @market_data_bp.route("/api/market-data", methods=["GET"])
 def get_market_data():
     return jsonify(get_cached_market_data())
+
+
+@market_data_bp.route("/api/market-data/history", methods=["GET"])
+def get_market_history():
+    period = request.args.get("period", "90")
+    try:
+        days = int(period)
+    except ValueError:
+        days = 90
+    data = get_cached_history(days)
+    return jsonify(data)
 
 
 @market_data_bp.route("/api/market-data/save", methods=["POST"])
@@ -35,14 +46,19 @@ def dashboard_stats():
     try:
         contracts = (
             supabase.table("contracts")
-            .select("id, end_date, previous_amount")
+            .select("id, end_date, previous_amount, status")
             .execute()
         ).data or []
     except Exception:
         contracts = []
 
-    expiring_30 = [c for c in contracts if c.get("end_date") and today_s <= c["end_date"] <= t30]
-    pending = [c for c in contracts if c.get("end_date") and today_s <= c["end_date"] <= t60]
+    active_contracts = [
+        c for c in contracts
+        if c.get("status", "active") not in ("approved", "rejected")
+    ]
+
+    expiring_30 = [c for c in active_contracts if c.get("end_date") and today_s <= c["end_date"] <= t30]
+    pending = [c for c in active_contracts if c.get("end_date") and today_s <= c["end_date"] <= t60]
 
     market = get_cached_market_data()
     tufe = market.get("tufe", 0)

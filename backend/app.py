@@ -5,6 +5,7 @@ from routes.companies import companies_bp
 from routes.contracts import contracts_bp
 from routes.financial_logs import financial_logs_bp
 from routes.market_data import market_data_bp
+from routes.calculations import calculations_bp
 
 
 def create_app():
@@ -15,6 +16,7 @@ def create_app():
     app.register_blueprint(contracts_bp)
     app.register_blueprint(financial_logs_bp)
     app.register_blueprint(market_data_bp)
+    app.register_blueprint(calculations_bp)
 
     @app.route("/api/health")
     def health():

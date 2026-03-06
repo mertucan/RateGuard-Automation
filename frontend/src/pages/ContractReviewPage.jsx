@@ -1,30 +1,107 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { PageLoader } from '../components/Spinner'
 import {
   getContracts,
   getContract,
-  getMarketData,
   createContract,
   deleteContract,
   getCompanies,
+  getCalculation,
+  downloadPdf,
+  saveDraft,
+  rejectContract,
+  approveContract,
 } from '../api'
 
+const STATUS_MAP = {
+  all: { label: 'All', icon: 'list' },
+  active: { label: 'Active', icon: 'check_circle', cls: 'text-emerald-500' },
+  draft: { label: 'Draft', icon: 'edit_note', cls: 'text-amber-500' },
+  approved: { label: 'Approved', icon: 'verified', cls: 'text-primary' },
+  rejected: { label: 'Rejected', icon: 'cancel', cls: 'text-red-500' },
+}
+
+const RULE_OPTIONS = ['All', 'TUFE', 'UFE', 'TUFE+UFE']
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null
+  const diff = (new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24)
+  return Math.ceil(diff)
+}
+
+function statusBadge(status) {
+  const map = {
+    active: 'bg-emerald-500/10 text-emerald-500',
+    draft: 'bg-amber-500/10 text-amber-500',
+    approved: 'bg-sky-500/10 text-sky-500',
+    rejected: 'bg-red-500/10 text-red-500',
+  }
+  return map[status] || map.active
+}
+
+function urgencyBadge(days) {
+  if (days === null) return null
+  if (days < 0) return { text: 'Expired', cls: 'bg-red-500/10 text-red-500' }
+  if (days <= 30) return { text: `${days}d left`, cls: 'bg-red-500/10 text-red-500' }
+  if (days <= 60) return { text: `${days}d left`, cls: 'bg-amber-500/10 text-amber-500' }
+  return { text: `${days}d left`, cls: 'bg-emerald-500/10 text-emerald-500' }
+}
+
+/* ─── GENERIC CONFIRM / DELETE MODAL ─── */
+function ConfirmModal({ open, title, message, details, confirmText, confirmCls, onConfirm, onCancel, loading }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl">
+        <div className="mb-4 flex items-center gap-3">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${confirmCls || 'bg-primary/10'}`}>
+            <span className="material-symbols-outlined text-xl text-primary">info</span>
+          </div>
+          <div>
+            <h3 className="text-lg font-bold">{title}</h3>
+            <p className="text-sm text-text-muted">{message}</p>
+          </div>
+        </div>
+        {details && (
+          <div className="mb-4 rounded-lg border border-border bg-surface-alt p-4 text-sm">
+            {details}
+          </div>
+        )}
+        <div className="flex justify-end gap-3">
+          <button onClick={onCancel}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-hover">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
+            {loading ? 'Processing...' : confirmText || 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── CONTRACT LIST ─── */
 function ContractList() {
   const navigate = useNavigate()
   const [contracts, setContracts] = useState([])
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [ruleFilter, setRuleFilter] = useState('All')
+  const [search, setSearch] = useState('')
   const [form, setForm] = useState({
-    company_id: '',
-    previous_amount: '',
-    end_date: '',
-    inflation_base_rule: 'TUFE',
-    max_increase_limit: '',
+    company_id: '', previous_amount: '', end_date: '',
+    inflation_base_rule: 'TUFE', max_increase_limit: '',
   })
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const [c, co] = await Promise.all([getContracts(), getCompanies()])
       setContracts(c)
@@ -34,9 +111,9 @@ function ContractList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const handleCreate = async () => {
     setSaving(true)
@@ -56,56 +133,91 @@ function ContractList() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this contract?')) return
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await deleteContract(id)
+      await deleteContract(deleteTarget)
+      setDeleteTarget(null)
       await load()
     } catch (err) {
       alert('Delete failed: ' + err.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
   const formatCurrency = (n) =>
     new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n || 0)
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center bg-background-light">
-        <p className="text-text-secondary">Loading contracts...</p>
-      </div>
-    )
-  }
+  const filtered = useMemo(() => {
+    let list = contracts
+    if (statusFilter !== 'all') {
+      list = list.filter((c) => (c.status || 'active') === statusFilter)
+    }
+    if (ruleFilter !== 'All') {
+      list = list.filter((c) => c.inflation_base_rule === ruleFilter)
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter((c) =>
+        (c.companies?.company_name || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [contracts, statusFilter, ruleFilter, search])
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: contracts.length, active: 0, draft: 0, approved: 0, rejected: 0 }
+    contracts.forEach((c) => {
+      const s = c.status || 'active'
+      if (counts[s] !== undefined) counts[s]++
+    })
+    return counts
+  }, [contracts])
+
+  if (loading) return <PageLoader />
+
+  const inputCls = 'w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary'
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background-light text-text-primary">
-      <header className="flex shrink-0 items-center justify-between border-b border-border-light bg-surface-light px-8 py-5">
-        <div>
-          <h2 className="text-2xl font-bold">Renewal Review</h2>
-          <p className="mt-1 text-sm text-text-secondary">Review and approve contract renewals.</p>
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Contract"
+        message="This action cannot be undone."
+        confirmText="Delete"
+        confirmCls="bg-red-500/10"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
+
+      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-bold sm:text-2xl">Renewal Review</h2>
+          <p className="mt-1 hidden text-sm text-text-muted sm:block">Review and approve contract renewals.</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
+          className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
         >
           {showForm ? 'Cancel' : 'New Contract'}
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-8">
-        <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+        <div className="mx-auto max-w-6xl space-y-6">
           {/* New Contract Form */}
           {showForm && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
+            <div className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
               <h3 className="mb-4 text-lg font-bold">Create New Contract</h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-secondary">Company</label>
-                  <select
-                    className="w-full rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm outline-none focus:border-primary"
-                    value={form.company_id}
-                    onChange={(e) => setForm({ ...form, company_id: e.target.value })}
-                  >
+                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Company</label>
+                  <select className={inputCls} value={form.company_id}
+                    onChange={(e) => setForm({ ...form, company_id: e.target.value })}>
                     <option value="">Select company...</option>
                     {companies.map((co) => (
                       <option key={co.id} value={co.id}>{co.company_name}</option>
@@ -113,121 +225,187 @@ function ContractList() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-secondary">Amount (TRY)</label>
-                  <input
-                    className="w-full rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm outline-none focus:border-primary"
-                    type="number"
-                    value={form.previous_amount}
-                    onChange={(e) => setForm({ ...form, previous_amount: e.target.value })}
-                  />
+                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Amount (TRY)</label>
+                  <input className={inputCls} type="number" value={form.previous_amount}
+                    onChange={(e) => setForm({ ...form, previous_amount: e.target.value })} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-secondary">End Date</label>
-                  <input
-                    className="w-full rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm outline-none focus:border-primary"
-                    type="date"
-                    value={form.end_date}
-                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-                  />
+                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">End Date</label>
+                  <input className={inputCls} type="date" value={form.end_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-secondary">Inflation Base Rule</label>
-                  <select
-                    className="w-full rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm outline-none focus:border-primary"
-                    value={form.inflation_base_rule}
-                    onChange={(e) => setForm({ ...form, inflation_base_rule: e.target.value })}
-                  >
+                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Inflation Rule</label>
+                  <select className={inputCls} value={form.inflation_base_rule}
+                    onChange={(e) => setForm({ ...form, inflation_base_rule: e.target.value })}>
                     <option value="TUFE">TUFE</option>
                     <option value="UFE">UFE</option>
                     <option value="TUFE+UFE">TUFE + UFE (Average)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-secondary">Max Increase Limit (%)</label>
-                  <input
-                    className="w-full rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm outline-none focus:border-primary"
-                    type="number"
-                    value={form.max_increase_limit}
-                    onChange={(e) => setForm({ ...form, max_increase_limit: e.target.value })}
-                  />
+                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Max Increase (%)</label>
+                  <input className={inputCls} type="number" value={form.max_increase_limit}
+                    onChange={(e) => setForm({ ...form, max_increase_limit: e.target.value })} />
+                </div>
+                <div className="flex items-end">
+                  <button onClick={handleCreate}
+                    disabled={saving || !form.company_id || !form.previous_amount}
+                    className="w-full rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
+                    {saving ? 'Creating...' : 'Create Contract'}
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={handleCreate}
-                disabled={saving || !form.company_id || !form.previous_amount}
-                className="mt-4 rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
-              >
-                {saving ? 'Creating...' : 'Create Contract'}
-              </button>
             </div>
           )}
 
-          {/* Contract Table */}
-          <div className="overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-sm">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-border-light bg-background-light text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  <th className="px-6 py-4">Company</th>
-                  <th className="px-6 py-4">Amount</th>
-                  <th className="px-6 py-4">End Date</th>
-                  <th className="px-6 py-4">Inflation Rule</th>
-                  <th className="px-6 py-4">Max Limit</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-light">
-                {contracts.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-text-secondary">
-                      No contracts found. Create one to get started.
-                    </td>
-                  </tr>
-                )}
-                {contracts.map((c) => (
-                  <tr key={c.id} className="transition-colors hover:bg-background-light">
-                    <td className="px-6 py-4 font-medium">{c.companies?.company_name || '—'}</td>
-                    <td className="px-6 py-4 text-sm">{formatCurrency(c.previous_amount)}</td>
-                    <td className="px-6 py-4 text-sm">{c.end_date || '—'}</td>
-                    <td className="px-6 py-4 text-sm">{c.inflation_base_rule || '—'}</td>
-                    <td className="px-6 py-4 text-sm">{c.max_increase_limit ? `${c.max_increase_limit}%` : '—'}</td>
-                    <td className="px-6 py-4 text-right text-sm">
-                      <button
-                        onClick={() => navigate(`/renewal-review/${c.id}`)}
-                        className="rounded border border-primary/30 px-3 py-1.5 font-medium text-primary transition-colors hover:bg-primary/5"
-                      >
+          {/* Filters Bar */}
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            {/* Status Tabs */}
+            <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-surface p-1">
+              {Object.entries(STATUS_MAP).map(([key, val]) => (
+                <button key={key} onClick={() => setStatusFilter(key)}
+                  className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
+                    statusFilter === key
+                      ? 'bg-primary text-white'
+                      : 'text-text-muted hover:bg-hover hover:text-text'
+                  }`}>
+                  {val.label}
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    statusFilter === key ? 'bg-white/20' : 'bg-surface-alt'
+                  }`}>{statusCounts[key] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Rule Filter */}
+            <select value={ruleFilter} onChange={(e) => setRuleFilter(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary">
+              {RULE_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r === 'All' ? 'All Rules' : r}</option>
+              ))}
+            </select>
+
+            {/* Search */}
+            <div className="w-full sm:flex-1">
+              <input type="text" placeholder="Search company name..."
+                value={search} onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text outline-none placeholder:text-text-muted focus:border-primary sm:max-w-xs" />
+            </div>
+
+            <span className="text-xs text-text-muted">{filtered.length} contract{filtered.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Contract Cards */}
+          {filtered.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-12 text-center">
+              <span className="material-symbols-outlined mb-2 text-4xl text-text-muted">description</span>
+              <p className="text-sm text-text-muted">No contracts match your filters.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {filtered.map((c) => {
+                const days = daysUntil(c.end_date)
+                const urgency = urgencyBadge(days)
+                const st = c.status || 'active'
+
+                return (
+                  <div key={c.id}
+                    className="group rounded-xl border border-border bg-surface p-4 transition-colors hover:border-primary/30 sm:p-5">
+                    <div className="mb-3 flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="hidden h-10 w-10 items-center justify-center rounded-lg bg-primary-soft text-sm font-bold text-primary sm:flex">
+                          {(c.companies?.company_name || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold">{c.companies?.company_name || '—'}</p>
+                          <p className="text-xs text-text-muted">ID: {c.id.slice(0, 8)}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge(st)}`}>
+                          {st.charAt(0).toUpperCase() + st.slice(1)}
+                        </span>
+                        {urgency && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${urgency.cls}`}>
+                            {urgency.text}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mb-4 grid grid-cols-3 gap-3">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase text-text-muted">Amount</p>
+                        <p className="text-sm font-bold">{formatCurrency(c.previous_amount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase text-text-muted">End Date</p>
+                        <p className="text-sm font-medium">{c.end_date || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase text-text-muted">Rule</p>
+                        <p className="text-sm font-medium">{c.inflation_base_rule || '—'}
+                          {c.max_increase_limit ? ` (max ${c.max_increase_limit}%)` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-border pt-3">
+                      <button onClick={() => navigate(`/renewal-review/${c.id}`)}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark">
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                         Review
                       </button>
-                      <button
-                        onClick={() => handleDelete(c.id)}
-                        className="ml-2 rounded border border-red-300 px-3 py-1.5 font-medium text-red-500 transition-colors hover:bg-red-50"
-                      >
+                      <button onClick={() => setDeleteTarget(c.id)}
+                        className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-red-500 opacity-0 transition-all hover:bg-red-500/5 group-hover:opacity-100">
+                        <span className="material-symbols-outlined text-[16px]">delete</span>
                         Delete
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
+/* ─── CONTRACT DETAIL ─── */
 function ContractDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [contract, setContract] = useState(null)
-  const [market, setMarket] = useState(null)
+  const [calc, setCalc] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [showApproveModal, setShowApproveModal] = useState(false)
+  const [rejectNotes, setRejectNotes] = useState('')
+  const [toast, setToast] = useState(null)
+
+  const [editAmount, setEditAmount] = useState('')
+  const [editRule, setEditRule] = useState('TUFE')
+  const [editMaxLimit, setEditMaxLimit] = useState('')
+  const [editEndDate, setEditEndDate] = useState('')
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
     async function load() {
       try {
-        const [c, m] = await Promise.all([getContract(id), getMarketData()])
+        const [c, k] = await Promise.all([getContract(id), getCalculation(id)])
         setContract(c)
-        setMarket(m)
+        setCalc(k)
+        setEditAmount(c.previous_amount || '')
+        setEditRule(c.inflation_base_rule || 'TUFE')
+        setEditMaxLimit(c.max_increase_limit ?? '')
+        setEditEndDate(c.end_date || '')
       } catch (err) {
         console.error('Contract detail error:', err)
       } finally {
@@ -237,192 +415,381 @@ function ContractDetail() {
     load()
   }, [id])
 
-  if (loading) {
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const handleFieldChange = (setter) => (e) => {
+    setter(e.target.value)
+    setDirty(true)
+  }
+
+  const amount = Number(editAmount) || 0
+  const tufe = calc?.tufe_rate || 0
+  const ufe = calc?.ufe_rate || 0
+
+  let liveAdjustment = 0
+  if (editRule === 'TUFE') liveAdjustment = tufe
+  else if (editRule === 'UFE') liveAdjustment = ufe
+  else liveAdjustment = (tufe + ufe) / 2
+
+  let liveCapped = false
+  const maxLimitNum = editMaxLimit !== '' ? Number(editMaxLimit) : null
+  if (maxLimitNum && liveAdjustment > maxLimitNum) {
+    liveAdjustment = maxLimitNum
+    liveCapped = true
+  }
+
+  const liveNewPrice = amount * (1 + liveAdjustment / 100)
+  const liveDifference = liveNewPrice - amount
+
+  const companyName = calc?.company_name || '—'
+
+  const formatCurrency = useCallback((n) =>
+    new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n), [])
+
+  useEffect(() => {
+    if (!companyName || companyName === '—') return
+    setEmailSubject(`Action Required: Service Agreement Renewal - ${companyName}`)
+    setEmailBody(`Dear ${companyName},\n\nAttached is the formal addendum outlining the new annual rate of ${formatCurrency(liveNewPrice)}, reflecting a ${liveAdjustment.toFixed(1)}% adjustment based on the ${editRule} index.\n\nPrevious rate: ${formatCurrency(amount)}\nNew rate: ${formatCurrency(liveNewPrice)}\n\nBest regards,\nRateGuard Team`)
+  }, [companyName, liveNewPrice, liveAdjustment, editRule, amount, formatCurrency])
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      await downloadPdf(id)
+    } catch (err) {
+      showToast('PDF indirilemedi: ' + err.message, 'error')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const handleSaveDraft = async () => {
+    setSaving(true)
+    try {
+      await saveDraft(id, {
+        previous_amount: amount,
+        inflation_base_rule: editRule,
+        max_increase_limit: maxLimitNum,
+        end_date: editEndDate || null,
+        new_amount: Math.round(liveNewPrice * 100) / 100,
+        applied_adjustment: Math.round(liveAdjustment * 100) / 100,
+      })
+      setDirty(false)
+      showToast('Taslak kaydedildi')
+    } catch (err) {
+      showToast('Kaydetme hatasi: ' + err.message, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReject = async () => {
+    setSaving(true)
+    try {
+      await rejectContract(id, rejectNotes)
+      setShowRejectModal(false)
+      showToast('Sozlesme reddedildi')
+      setTimeout(() => navigate('/renewal-review'), 1500)
+    } catch (err) {
+      showToast('Reddetme hatasi: ' + err.message, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleApprove = async () => {
+    setSaving(true)
+    try {
+      await approveContract(id, {
+        new_amount: Math.round(liveNewPrice * 100) / 100,
+        applied_adjustment: Math.round(liveAdjustment * 100) / 100,
+      })
+      setShowApproveModal(false)
+      showToast('Sozlesme onaylandi!')
+      setTimeout(() => navigate('/renewal-review'), 1500)
+    } catch (err) {
+      showToast('Onaylama hatasi: ' + err.message, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <PageLoader />
+
+  if (!contract || !calc) {
     return (
-      <div className="flex h-full items-center justify-center bg-background-light">
-        <p className="text-text-secondary">Loading contract...</p>
+      <div className="flex h-full items-center justify-center bg-bg">
+        <p className="text-text-muted">Contract not found.</p>
       </div>
     )
   }
 
-  if (!contract) {
-    return (
-      <div className="flex h-full items-center justify-center bg-background-light">
-        <p className="text-text-secondary">Contract not found.</p>
-      </div>
-    )
-  }
+  const contractStatus = contract.status || 'active'
+  const isFinalized = contractStatus === 'approved' || contractStatus === 'rejected'
 
-  const amount = contract.previous_amount || 0
-  const tufe = market?.tufe || 0
-  const ufe = market?.ufe || 0
-  const rule = contract.inflation_base_rule || 'TUFE'
+  const badge = {
+    active: { text: 'Active', cls: 'bg-emerald-500/10 text-emerald-500' },
+    draft: { text: 'Draft', cls: 'bg-amber-500/10 text-amber-500' },
+    approved: { text: 'Approved', cls: 'bg-primary/10 text-primary' },
+    rejected: { text: 'Rejected', cls: 'bg-red-500/10 text-red-500' },
+  }[contractStatus] || { text: 'Active', cls: 'bg-emerald-500/10 text-emerald-500' }
 
-  let adjustment = 0
-  if (rule === 'TUFE') adjustment = tufe
-  else if (rule === 'UFE') adjustment = ufe
-  else adjustment = (tufe + ufe) / 2
-
-  if (contract.max_increase_limit && adjustment > contract.max_increase_limit) {
-    adjustment = contract.max_increase_limit
-  }
-
-  const newPrice = amount * (1 + adjustment / 100)
-  const companyName = contract.companies?.company_name || '—'
-  const companyEmail = contract.companies?.authorized_email || '—'
-
-  const formatCurrency = (n) =>
-    new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n)
+  const inputCls = 'w-full rounded-md border border-border bg-surface-alt px-3 py-1.5 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary'
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background-light text-text-primary">
-      <header className="flex shrink-0 items-center justify-between border-b border-border-light bg-surface-light px-8 py-5">
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed right-6 top-20 z-50 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+          toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
+        }`}>
+          <span className="material-symbols-outlined text-[18px]">
+            {toast.type === 'error' ? 'error' : 'check_circle'}
+          </span>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+                <span className="material-symbols-outlined text-xl text-red-500">block</span>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Reject Renewal</h3>
+                <p className="text-sm text-text-muted">{companyName}</p>
+              </div>
+            </div>
+            <textarea
+              className="h-28 w-full resize-none rounded-lg border border-border bg-surface-alt p-3 text-sm text-text outline-none focus:border-primary"
+              placeholder="Rejection reason (optional)..."
+              value={rejectNotes}
+              onChange={(e) => setRejectNotes(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setShowRejectModal(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-hover">
+                Cancel
+              </button>
+              <button onClick={handleReject} disabled={saving}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50">
+                {saving ? 'Rejecting...' : 'Reject Contract'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Modal */}
+      <ConfirmModal
+        open={showApproveModal}
+        title="Approve & Send Renewal"
+        message={`${companyName} - This action is final.`}
+        details={
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-text-muted">Previous Amount</span>
+              <span className="font-semibold">{formatCurrency(amount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-muted">Adjustment ({editRule})</span>
+              <span className="font-semibold text-amber-500">+{liveAdjustment.toFixed(1)}%</span>
+            </div>
+            <div className="h-px bg-border" />
+            <div className="flex justify-between">
+              <span className="font-bold">New Amount</span>
+              <span className="font-bold text-primary">{formatCurrency(liveNewPrice)}</span>
+            </div>
+          </div>
+        }
+        confirmText="Approve & Send"
+        onConfirm={handleApprove}
+        onCancel={() => setShowApproveModal(false)}
+        loading={saving}
+      />
+
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/renewal-review')}
-            className="rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm font-semibold transition-colors hover:bg-slate-50"
-          >
+          <button onClick={() => navigate('/renewal-review')}
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold transition-colors hover:bg-hover">
             <span className="material-symbols-outlined text-base align-middle">arrow_back</span>
           </button>
           <div>
-            <h2 className="text-2xl font-bold">Renewal Review</h2>
-            <p className="mt-1 text-sm text-text-secondary">Review and approve contract renewals.</p>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold sm:text-2xl">Renewal Review</h2>
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.cls}`}>{badge.text}</span>
+            </div>
+            <p className="mt-1 hidden text-sm text-text-muted sm:block">Review and approve contract renewals.</p>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button className="rounded-lg border border-border-light bg-surface-light px-4 py-2 text-sm font-semibold transition-colors hover:bg-slate-50">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
+          <button onClick={handleDownloadPdf} disabled={pdfLoading}
+            className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold transition-colors hover:bg-hover disabled:opacity-50 sm:px-4 sm:text-sm">
+            <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+            {pdfLoading ? 'Generating...' : 'PDF'}
+          </button>
+          <button onClick={() => setShowRejectModal(true)} disabled={isFinalized}
+            className="rounded-lg border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/5 disabled:opacity-40 sm:px-4 sm:text-sm">
             Reject
           </button>
-          <button className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark">
-            Save Draft
+          <button onClick={handleSaveDraft} disabled={saving || !dirty}
+            className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold transition-colors hover:bg-hover disabled:opacity-40 sm:px-4 sm:text-sm">
+            <span className="material-symbols-outlined text-[18px]">save</span>
+            {saving ? 'Saving...' : 'Save Draft'}
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-8">
-            <h1 className="text-3xl font-black tracking-tight">{companyName} Service Agreement</h1>
-            <p className="mt-2 flex items-center gap-2 text-sm text-text-secondary">
+          <div className="mb-6 sm:mb-8">
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{companyName} Service Agreement</h1>
+            <p className="mt-2 flex items-center gap-2 text-sm text-text-muted">
               <span className="material-symbols-outlined text-base">timer</span>
-              End date: {contract.end_date || '—'} &bull; ID: {contract.id.slice(0, 8)}
+              End date: {editEndDate || '—'} &bull; ID: {contract.id.slice(0, 8)}
             </p>
           </div>
 
-          {/* KPI Cards */}
-          <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="rounded-xl border border-border-light bg-surface-light p-6 shadow-sm">
-              <p className="text-sm font-medium text-text-secondary">Current Contract Value</p>
-              <p className="mt-2 text-3xl font-bold">{formatCurrency(amount)}</p>
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:mb-8 sm:gap-6 md:grid-cols-4">
+            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+              <p className="text-xs font-medium text-text-muted sm:text-sm">Current Contract Value</p>
+              <p className="mt-2 text-xl font-bold sm:text-3xl">{formatCurrency(amount)}</p>
             </div>
-            <div className="rounded-xl border border-border-light bg-surface-light p-6 shadow-sm">
-              <p className="text-sm font-medium text-text-secondary">Inflation Adjustment ({rule})</p>
-              <p className="mt-2 text-3xl font-bold text-amber-600">+{adjustment.toFixed(1)}%</p>
+            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+              <p className="text-xs font-medium text-text-muted sm:text-sm">Inflation Adjustment ({editRule})</p>
+              <p className="mt-2 text-xl font-bold text-amber-500 sm:text-3xl">+{liveAdjustment.toFixed(1)}%</p>
+              {liveCapped && <p className="mt-1 text-xs font-medium text-red-500">Max limit applied</p>}
             </div>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
-              <p className="text-sm font-bold text-primary">Calculated New Price</p>
-              <p className="mt-2 text-4xl font-black text-primary-dark">{formatCurrency(newPrice)}</p>
+            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+              <p className="text-xs font-medium text-text-muted sm:text-sm">Price Difference</p>
+              <p className="mt-2 text-xl font-bold text-amber-500 sm:text-3xl">+{formatCurrency(liveDifference)}</p>
+            </div>
+            <div className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
+              <p className="text-xs font-bold text-primary sm:text-sm">Calculated New Price</p>
+              <p className="mt-2 text-2xl font-black text-primary sm:text-4xl">{formatCurrency(liveNewPrice)}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
-            <div className="space-y-8 xl:col-span-7">
-              {/* Calculation Logic */}
-              <section className="overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-sm">
-                <div className="flex items-center justify-between border-b border-border-light bg-background-light px-6 py-4">
+          <div className="grid grid-cols-1 gap-6 sm:gap-8 xl:grid-cols-12">
+            <div className="space-y-6 sm:space-y-8 xl:col-span-7">
+              {/* Editable Calculation */}
+              <section className="overflow-hidden rounded-xl border border-border bg-surface">
+                <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
                   <h3 className="text-lg font-bold">Calculation Logic</h3>
+                  {dirty && <span className="text-xs font-medium text-amber-500">Unsaved changes</span>}
                 </div>
-                <div className="space-y-4 p-6 text-sm">
-                  <div className="flex justify-between border-b border-dashed border-border-light py-2">
-                    <span className="text-text-secondary">Base Rate</span>
-                    <span className="font-medium">{formatCurrency(amount)}</span>
+                <div className="space-y-5 p-4 text-sm sm:p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-text-muted">Base Rate (TRY)</span>
+                    <input type="number" className={`max-w-[200px] text-right ${inputCls}`}
+                      value={editAmount} onChange={handleFieldChange(setEditAmount)} />
                   </div>
-                  <div className="flex justify-between border-b border-dashed border-border-light py-2">
-                    <span className="text-text-secondary">TUFE (CPI) Factor</span>
-                    <span className="font-medium">+{tufe.toFixed(2)}%</span>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-text-muted">End Date</span>
+                    <input type="date" className={`max-w-[200px] ${inputCls}`}
+                      value={editEndDate} onChange={handleFieldChange(setEditEndDate)} />
                   </div>
-                  <div className="flex justify-between border-b border-dashed border-border-light py-2">
-                    <span className="text-text-secondary">UFE (PPI) Factor</span>
-                    <span className="font-medium">+{ufe.toFixed(2)}%</span>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-text-muted">Inflation Rule</span>
+                    <select className={`max-w-[200px] ${inputCls}`}
+                      value={editRule} onChange={handleFieldChange(setEditRule)}>
+                      <option value="TUFE">TUFE</option>
+                      <option value="UFE">UFE</option>
+                      <option value="TUFE+UFE">TUFE + UFE (Avg)</option>
+                    </select>
                   </div>
-                  {contract.max_increase_limit && (
-                    <div className="flex justify-between border-b border-dashed border-border-light py-2">
-                      <span className="text-text-secondary">Max Increase Limit</span>
-                      <span className="font-medium text-red-600">{contract.max_increase_limit}%</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between border-b border-dashed border-border-light py-2">
-                    <span className="text-text-secondary">Applied Rule</span>
-                    <span className="font-medium">{rule}</span>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-text-muted">Max Increase Limit (%)</span>
+                    <input type="number" className={`max-w-[200px] text-right ${inputCls}`}
+                      placeholder="No limit" value={editMaxLimit} onChange={handleFieldChange(setEditMaxLimit)} />
                   </div>
-                  <div className="flex justify-between pt-2">
-                    <span className="font-bold">Total Adjustment</span>
-                    <span className="font-bold text-primary">{adjustment.toFixed(1)}%</span>
-                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between py-1"><span className="text-text-muted">TUFE (CPI)</span><span className="font-medium">+{tufe.toFixed(2)}%</span></div>
+                  <div className="flex justify-between py-1"><span className="text-text-muted">UFE (PPI)</span><span className="font-medium">+{ufe.toFixed(2)}%</span></div>
+                  <div className="flex justify-between py-1"><span className="text-text-muted">USD/TRY</span><span className="font-medium">{calc.usd_rate.toFixed(4)}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-text-muted">EUR/TRY</span><span className="font-medium">{calc.eur_rate.toFixed(4)}</span></div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between"><span className="font-bold">Total Adjustment</span><span className="font-bold text-primary">{liveAdjustment.toFixed(1)}%</span></div>
+                  <div className="flex justify-between"><span className="font-bold">New Price</span><span className="font-bold text-primary">{formatCurrency(liveNewPrice)}</span></div>
                 </div>
               </section>
 
-              {/* Generated Addendum */}
-              <section className="min-h-[500px] rounded-xl border border-border-light bg-surface-light shadow-sm">
-                <div className="border-b border-border-light bg-background-light px-6 py-4">
-                  <h3 className="text-lg font-bold">Generated Addendum</h3>
-                  <p className="text-xs text-text-secondary">Auto-generated draft</p>
+              {/* Addendum Preview */}
+              <section className="rounded-xl border border-border bg-surface">
+                <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
+                  <div>
+                    <h3 className="text-lg font-bold">Generated Addendum</h3>
+                    <p className="text-xs text-text-muted">Preview — download full PDF above</p>
+                  </div>
+                  <button onClick={handleDownloadPdf} disabled={pdfLoading}
+                    className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
+                    <span className="material-symbols-outlined text-[16px]">download</span>PDF
+                  </button>
                 </div>
-                <div className="max-h-[600px] overflow-y-auto bg-slate-100 p-8">
-                  <div className="mx-auto min-h-[842px] w-full max-w-[595px] bg-white p-12 font-serif text-[10px] text-gray-800 shadow-lg">
-                    <h1 className="mb-4 text-lg font-bold">CONTRACT ADDENDUM</h1>
-                    <p className="mb-2">Ref: Service Agreement #{contract.id.slice(0, 8)}-Renewal</p>
-                    <p className="mb-4">
-                      THIS ADDENDUM is made by and between RateGuard Systems Inc. and {companyName}.
-                    </p>
-                    <p className="mb-4">
-                      The Annual Service Fee shall be adjusted to reflect a {adjustment.toFixed(1)}% increase,
-                      calculated using the {rule} index.
-                    </p>
+                <div className="max-h-[600px] overflow-y-auto bg-neutral-200 p-4 sm:p-8">
+                  <div className="mx-auto min-h-[842px] w-full max-w-[595px] bg-white p-8 font-serif text-[10px] text-gray-800 shadow-lg sm:p-12">
+                    <h1 className="mb-1 font-sans text-sm font-bold text-blue-600">RATEGUARD</h1>
+                    <hr className="mb-4 border-blue-600" />
+                    <h2 className="mb-4 text-lg font-bold">EK SÖZLEŞME / CONTRACT ADDENDUM</h2>
+                    <p className="mb-1 text-[9px] text-gray-500">Ref: SA-{contract.id.slice(0, 8).toUpperCase()}-RNW | Tarih: {new Date().toLocaleDateString('tr-TR')}</p>
+                    <div className="my-4 h-px bg-gray-200" />
+                    <p className="mb-2 font-bold">1. TARAFLAR</p>
+                    <p className="mb-1">Hizmet Sağlayıcı: RateGuard Systems Inc.</p>
+                    <p className="mb-4">Müşteri: {companyName}</p>
+                    <p className="mb-2 font-bold">2. FİYAT HESAPLAMASI</p>
                     <table className="mt-2 w-full text-left">
                       <tbody>
-                        <tr className="border-b border-gray-300">
-                          <th className="py-1">Description</th>
-                          <th className="py-1 text-right">Amount</th>
-                        </tr>
-                        <tr>
-                          <td className="py-1">Previous Annual Base Rate</td>
-                          <td className="py-1 text-right">{formatCurrency(amount)}</td>
-                        </tr>
-                        <tr className="border-t border-gray-200">
-                          <td className="py-1 font-bold">New Annual Base Rate</td>
-                          <td className="py-1 text-right font-bold">{formatCurrency(newPrice)}</td>
-                        </tr>
+                        <tr className="border-b border-gray-300 bg-blue-50"><th className="py-1.5 pl-2 font-semibold">Açıklama</th><th className="py-1.5 pr-2 text-right font-semibold">Tutar</th></tr>
+                        <tr className="border-b border-gray-100"><td className="py-1.5 pl-2">Mevcut Sözleşme Bedeli</td><td className="py-1.5 pr-2 text-right">{formatCurrency(amount)}</td></tr>
+                        <tr className="border-b border-gray-100"><td className="py-1.5 pl-2">Uygulanan Endeks ({editRule})</td><td className="py-1.5 pr-2 text-right">%{liveAdjustment.toFixed(2)}</td></tr>
+                        <tr className="border-b border-gray-100"><td className="py-1.5 pl-2">Fark</td><td className="py-1.5 pr-2 text-right">+{formatCurrency(liveDifference)}</td></tr>
+                        <tr className="bg-blue-50"><td className="py-2 pl-2 font-bold">YENİ SÖZLEŞME BEDELİ</td><td className="py-2 pr-2 text-right text-sm font-bold text-blue-700">{formatCurrency(liveNewPrice)}</td></tr>
                       </tbody>
                     </table>
+                    <div className="mt-8">
+                      <p className="mb-2 font-bold">3. İMZALAR</p>
+                      <div className="mt-4 flex justify-between">
+                        <div><p className="mb-6">Hizmet Sağlayıcı</p><p>_________________________</p><p className="text-[8px] text-gray-400">İmza / Kaşe</p></div>
+                        <div><p className="mb-6">Müşteri</p><p>_________________________</p><p className="text-[8px] text-gray-400">İmza / Kaşe</p></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </section>
             </div>
 
-            {/* AI Email Composer */}
+            {/* Email Composer + Approve */}
             <div className="xl:col-span-5">
-              <section className="sticky top-8 flex h-full flex-col rounded-xl border border-border-light bg-surface-light shadow-sm">
-                <div className="flex items-center justify-between border-b border-border-light bg-primary/5 px-6 py-4">
+              <section className="sticky top-8 flex h-full flex-col rounded-xl border border-border bg-surface">
+                <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
                   <h3 className="text-lg font-bold text-primary">AI Email Composer</h3>
                   <span className="rounded bg-primary/10 px-2 py-1 text-xs font-bold uppercase tracking-wider text-primary">Draft</span>
                 </div>
-                <div className="flex flex-1 flex-col gap-4 p-6">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary">Subject:</label>
+                <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">Subject:</label>
                   <input
-                    className="rounded-lg border border-border-light bg-surface-light px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                    defaultValue={`Action Required: Service Agreement Renewal - ${companyName}`}
+                    className="rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
                     type="text"
                   />
-                  <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary">Message Body:</label>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">Message Body:</label>
                   <textarea
-                    className="h-64 resize-none rounded-lg border border-border-light bg-surface-light p-4 text-sm leading-relaxed outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                    defaultValue={`Dear ${companyName},\n\nAttached is the formal addendum outlining the new annual rate of ${formatCurrency(newPrice)}, reflecting a ${adjustment.toFixed(1)}% adjustment based on the ${rule} index.\n\nPrevious rate: ${formatCurrency(amount)}\nNew rate: ${formatCurrency(newPrice)}\n\nBest regards,\nRateGuard Team`}
+                    className="h-64 resize-none rounded-lg border border-border bg-surface-alt p-4 text-sm leading-relaxed text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
                   />
                 </div>
-                <div className="border-t border-border-light bg-background-light p-6">
-                  <button className="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark">
-                    Approve & Send Renewal
+                <div className="border-t border-border bg-surface-alt p-4 sm:p-6">
+                  <button onClick={() => setShowApproveModal(true)} disabled={saving || isFinalized}
+                    className="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
+                    {contractStatus === 'approved' ? 'Already Approved' : contractStatus === 'rejected' ? 'Rejected' : 'Approve & Send Renewal'}
                   </button>
                 </div>
               </section>

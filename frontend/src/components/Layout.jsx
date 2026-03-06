@@ -1,61 +1,105 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { useTheme } from '../hooks/useTheme'
+
+const navItems = [
+  { to: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
+  { to: '/renewal-review', icon: 'description', label: 'Contracts' },
+  { to: '/clients', icon: 'group', label: 'Clients' },
+  { to: '/analytics', icon: 'monitoring', label: 'Analytics' },
+]
 
 export default function Layout({ children }) {
-  const location = useLocation();
+  const location = useLocation()
+  const { dark, toggle } = useTheme()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) =>
+    path === '/renewal-review'
+      ? location.pathname.startsWith('/renewal-review')
+      : location.pathname === path
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background-light text-text-primary">
-      <aside className="flex h-full w-64 shrink-0 flex-col justify-between border-r border-border-light bg-surface-light p-4">
-        <div>
-          <div className="mb-6 px-2">
-            <h1 className="text-xl font-bold">RateGuard</h1>
-            <p className="text-xs text-text-secondary">Admin Console</p>
-          </div>
-          <nav className="space-y-1">
-            <Link
-              to="/dashboard"
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive('/dashboard')
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-text-secondary hover:bg-slate-50 hover:text-text-primary'
-              }`}
-            >
-              <span className={`material-symbols-outlined ${isActive('/dashboard') ? 'filled' : ''}`}>dashboard</span>
-              Dashboard
-            </Link>
-            <Link
-              to="/renewal-review"
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive('/renewal-review')
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-text-secondary hover:bg-slate-50 hover:text-text-primary'
-              }`}
-            >
-              <span className={`material-symbols-outlined ${isActive('/renewal-review') ? 'filled' : ''}`}>description</span>
-              Contracts
-            </Link>
-            <Link
-              to="/clients"
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive('/clients')
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-text-secondary hover:bg-slate-50 hover:text-text-primary'
-              }`}
-            >
-              <span className={`material-symbols-outlined ${isActive('/clients') ? 'filled' : ''}`}>group</span>
-              Clients
-            </Link>
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-bg text-text">
+      {/* Top Navbar */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
+        <div className="flex items-center gap-4 sm:gap-8">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover sm:hidden"
+          >
+            <span className="material-symbols-outlined text-[22px]">{mobileOpen ? 'close' : 'menu'}</span>
+          </button>
+
+          <Link to="/dashboard" className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary filled text-xl">shield</span>
+            <span className="text-lg font-bold tracking-tight">RateGuard</span>
+          </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-1 sm:flex">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isActive(item.to)
+                    ? 'bg-primary-soft text-primary'
+                    : 'text-text-muted hover:bg-hover hover:text-text'
+                }`}
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isActive(item.to) ? 'filled' : ''}`}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </Link>
+            ))}
           </nav>
         </div>
-        <div className="border-t border-border-light px-3 pt-4 text-xs text-text-secondary">
-          admin@rateguard.io
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggle}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-text"
+            title={dark ? 'Light mode' : 'Dark mode'}
+          >
+            <span className="material-symbols-outlined text-[20px]">
+              {dark ? 'light_mode' : 'dark_mode'}
+            </span>
+          </button>
+          <div className="hidden h-5 w-px bg-border sm:block" />
+          <span className="hidden text-xs text-text-muted sm:inline">admin@rateguard.io</span>
         </div>
-      </aside>
+      </header>
+
+      {/* Mobile nav dropdown */}
+      {mobileOpen && (
+        <nav className="flex flex-col border-b border-border bg-surface px-4 py-2 sm:hidden">
+          {navItems.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive(item.to)
+                  ? 'bg-primary-soft text-primary'
+                  : 'text-text-muted hover:bg-hover hover:text-text'
+              }`}
+            >
+              <span className={`material-symbols-outlined text-[18px] ${isActive(item.to) ? 'filled' : ''}`}>
+                {item.icon}
+              </span>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      {/* Page Content */}
       <main className="flex h-full flex-1 flex-col overflow-hidden">
         {children}
       </main>
     </div>
-  );
+  )
 }

@@ -1,11 +1,44 @@
 import { useEffect, useState, useCallback } from 'react'
 import { getCompanies, createCompany, updateCompany, deleteCompany } from '../api'
+import Spinner from '../components/Spinner'
 
 const emptyForm = {
   company_name: '',
   authorized_email: '',
   risk_score: '',
   communication_language: 'tr',
+}
+
+function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-xl">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10">
+            <span className="material-symbols-outlined text-xl text-red-500">warning</span>
+          </div>
+          <div>
+            <h3 className="text-lg font-bold">Delete Company</h3>
+            <p className="text-sm text-text-muted">This action cannot be undone.</p>
+          </div>
+        </div>
+        <p className="mb-4 text-sm text-text">
+          Are you sure you want to delete <strong>{name}</strong>? All related contracts will also be affected.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onCancel}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-hover">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50">
+            {loading ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function ClientManagementPage() {
@@ -16,6 +49,14 @@ export default function ClientManagementPage() {
   const [form, setForm] = useState(emptyForm)
   const [isNew, setIsNew] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const load = useCallback(async () => {
     try {
@@ -59,8 +100,10 @@ export default function ClientManagementPage() {
       }
       if (isNew) {
         await createCompany(payload)
+        showToast('Company created successfully')
       } else {
         await updateCompany(selected.id, payload)
+        showToast('Company updated successfully')
       }
       setIsNew(false)
       setSelected(null)
@@ -68,24 +111,29 @@ export default function ClientManagementPage() {
       await load()
     } catch (err) {
       console.error('Save error:', err)
-      alert('Save failed: ' + err.message)
+      showToast('Save failed: ' + err.message, 'error')
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this company?')) return
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await deleteCompany(id)
-      if (selected?.id === id) {
+      await deleteCompany(deleteTarget.id)
+      if (selected?.id === deleteTarget.id) {
         setSelected(null)
         setForm(emptyForm)
       }
+      setDeleteTarget(null)
+      showToast('Company deleted successfully')
       await load()
     } catch (err) {
       console.error('Delete error:', err)
-      alert('Delete failed: ' + err.message)
+      showToast('Delete failed: ' + err.message, 'error')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -96,20 +144,20 @@ export default function ClientManagementPage() {
   }
 
   const riskLabel = (score) => {
-    if (score == null) return { text: '—', color: 'text-slate-500' }
-    if (score >= 70) return { text: `High (${score})`, color: 'text-red-600' }
-    if (score >= 30) return { text: `Medium (${score})`, color: 'text-amber-600' }
-    return { text: `Low (${score})`, color: 'text-emerald-600' }
+    if (score == null) return { text: '—', color: 'text-text-muted' }
+    if (score >= 70) return { text: `High (${score})`, color: 'text-red-500' }
+    if (score >= 30) return { text: `Medium (${score})`, color: 'text-amber-500' }
+    return { text: `Low (${score})`, color: 'text-emerald-500' }
   }
 
   const statusBadge = (status) => {
     const map = {
-      Active: 'bg-emerald-100 text-emerald-700',
-      Renewing: 'bg-amber-100 text-amber-700',
-      Critical: 'bg-red-100 text-red-700',
-      Paused: 'bg-slate-100 text-slate-700',
+      Active: 'bg-emerald-500/10 text-emerald-500',
+      Renewing: 'bg-amber-500/10 text-amber-500',
+      Critical: 'bg-red-500/10 text-red-500',
+      Paused: 'bg-text-muted/10 text-text-muted',
     }
-    return map[status] || 'bg-slate-100 text-slate-700'
+    return map[status] || 'bg-text-muted/10 text-text-muted'
   }
 
   const formatCurrency = (n) =>
@@ -118,23 +166,43 @@ export default function ClientManagementPage() {
   const sidebarOpen = isNew || selected !== null
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background-light text-text-primary">
-      <header className="flex shrink-0 items-center justify-between border-b border-border-light bg-surface-light px-8 py-5">
-        <div>
-          <h2 className="text-2xl font-bold">Client Management</h2>
-          <p className="mt-1 text-sm text-text-secondary">Manage profiles, risk assessments, and contract renewals.</p>
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed right-6 top-20 z-50 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+          toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
+        }`}>
+          <span className="material-symbols-outlined text-[18px]">
+            {toast.type === 'error' ? 'error' : 'check_circle'}
+          </span>
+          {toast.msg}
         </div>
-        <button onClick={openNew} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark">
+      )}
+
+      {/* Delete Modal */}
+      <DeleteModal
+        open={!!deleteTarget}
+        name={deleteTarget?.company_name || ''}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+        loading={deleting}
+      />
+
+      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-bold sm:text-2xl">Client Management</h2>
+          <p className="mt-1 hidden text-sm text-text-muted sm:block">Manage profiles, risk assessments, and contract renewals.</p>
+        </div>
+        <button onClick={openNew} className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm">
           New Client
         </button>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8">
           <div className="mb-6 flex gap-4">
             <input
-              className="w-full max-w-md rounded-lg border border-border-light bg-surface-light px-4 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full max-w-md rounded-lg border border-border bg-surface px-4 py-2 text-sm text-text outline-none placeholder:text-text-muted focus:border-primary focus:ring-1 focus:ring-primary"
               placeholder="Search clients by name..."
               type="text"
               value={search}
@@ -143,89 +211,88 @@ export default function ClientManagementPage() {
           </div>
 
           {loading ? (
-            <p className="py-12 text-center text-text-secondary">Loading clients...</p>
+            <div className="flex justify-center py-16"><Spinner size="lg" /></div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-sm">
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-border-light bg-background-light text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                    <th className="px-6 py-4">Company Name</th>
-                    <th className="px-6 py-4">Contact</th>
-                    <th className="px-6 py-4">Contract Value</th>
-                    <th className="px-6 py-4">Risk Score</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-light">
-                  {clients.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-sm text-text-secondary">
-                        No clients found.
-                      </td>
+            <div className="overflow-hidden rounded-xl border border-border bg-surface">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
+                      <th className="px-4 py-3 sm:px-6 sm:py-4">Company Name</th>
+                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">Contact</th>
+                      <th className="hidden px-4 py-3 md:table-cell sm:px-6 sm:py-4">Contract Value</th>
+                      <th className="px-4 py-3 sm:px-6 sm:py-4">Risk</th>
+                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">Status</th>
+                      <th className="px-4 py-3 text-right sm:px-6 sm:py-4">Action</th>
                     </tr>
-                  )}
-                  {clients.map((c) => {
-                    const risk = riskLabel(c.risk_score)
-                    return (
-                      <tr className="transition-colors hover:bg-background-light" key={c.id}>
-                        <td className="px-6 py-4 font-medium">{c.company_name}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <span className="text-xs text-text-secondary">{c.authorized_email}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium">{formatCurrency(c.contract_value)}</td>
-                        <td className={`px-6 py-4 text-sm ${risk.color}`}>{risk.text}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusBadge(c.status)}`}>
-                            {c.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right text-sm font-medium">
-                          <button onClick={() => openEdit(c)} className="text-primary hover:text-primary-dark">
-                            Edit
-                          </button>
-                          <button onClick={() => handleDelete(c.id)} className="ml-3 text-red-500 hover:text-red-700">
-                            Delete
-                          </button>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {clients.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-text-muted">
+                          No clients found.
                         </td>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                    )}
+                    {clients.map((c) => {
+                      const risk = riskLabel(c.risk_score)
+                      return (
+                        <tr className="transition-colors hover:bg-hover" key={c.id}>
+                          <td className="px-4 py-3 font-medium sm:px-6 sm:py-4">{c.company_name}</td>
+                          <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">{c.authorized_email}</td>
+                          <td className="hidden px-4 py-3 text-sm font-medium md:table-cell sm:px-6 sm:py-4">{formatCurrency(c.contract_value)}</td>
+                          <td className={`px-4 py-3 text-sm sm:px-6 sm:py-4 ${risk.color}`}>{risk.text}</td>
+                          <td className="hidden px-4 py-3 text-sm sm:table-cell sm:px-6 sm:py-4">
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusBadge(c.status)}`}>
+                              {c.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-medium sm:px-6 sm:py-4">
+                            <button onClick={() => openEdit(c)} className="text-primary hover:text-primary-dark">
+                              Edit
+                            </button>
+                            <button onClick={() => setDeleteTarget(c)} className="ml-3 text-red-500 hover:text-red-400">
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Sidebar */}
         {sidebarOpen && (
-          <aside className="z-10 flex h-full w-[420px] shrink-0 flex-col overflow-hidden border-l border-border-light bg-surface-light shadow-lg">
-            <div className="border-b border-border-light px-6 py-5">
+          <aside className="z-10 flex h-full w-full shrink-0 flex-col overflow-hidden border-l border-border bg-surface sm:w-[420px]">
+            <div className="border-b border-border px-6 py-5">
               <h3 className="text-lg font-bold">{isNew ? 'New Client' : 'Edit Client Profile'}</h3>
-              {selected && <p className="mt-1 text-xs text-text-secondary">ID: {selected.id.slice(0, 8)}</p>}
+              {selected && <p className="mt-1 text-xs text-text-muted">ID: {selected.id.slice(0, 8)}</p>}
             </div>
             <div className="flex-1 space-y-6 overflow-y-auto p-6">
               <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">Company Name</h4>
+                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Company Name</h4>
                 <input
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   value={form.company_name}
                   onChange={(e) => setForm({ ...form, company_name: e.target.value })}
                 />
               </div>
               <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">Authorized Email</h4>
+                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Authorized Email</h4>
                 <input
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   value={form.authorized_email}
                   onChange={(e) => setForm({ ...form, authorized_email: e.target.value })}
                   type="email"
                 />
               </div>
               <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">Risk Score (0-100)</h4>
+                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Risk Score (0-100)</h4>
                 <input
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   value={form.risk_score}
                   onChange={(e) => setForm({ ...form, risk_score: e.target.value })}
                   type="number"
@@ -234,9 +301,9 @@ export default function ClientManagementPage() {
                 />
               </div>
               <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">Communication Language</h4>
+                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Communication Language</h4>
                 <select
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   value={form.communication_language}
                   onChange={(e) => setForm({ ...form, communication_language: e.target.value })}
                 >
@@ -245,8 +312,8 @@ export default function ClientManagementPage() {
                 </select>
               </div>
             </div>
-            <div className="flex gap-3 border-t border-border-light bg-background-light p-6">
-              <button onClick={closeSidebar} className="flex-1 rounded-lg border border-border-light bg-surface-light px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-border-light">
+            <div className="flex gap-3 border-t border-border bg-surface-alt p-6">
+              <button onClick={closeSidebar} className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-hover">
                 Cancel
               </button>
               <button

@@ -1,33 +1,82 @@
 @import "tailwindcss";
 
-@theme {
+/* ── Light theme (default) ── */
+:root {
+  --color-bg: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8fafc;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
   --color-primary: #136dec;
   --color-primary-dark: #0e52b5;
-  --color-background-light: #f8fafc;
-  --color-background-dark: #0f172a;
-  --color-surface-light: #ffffff;
-  --color-surface-dark: #1e293b;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #64748b;
-  --color-border-light: #e2e8f0;
-  --color-border-dark: #334155;
+  --color-primary-soft: rgba(19, 109, 236, 0.08);
+  --color-hover: #f1f5f9;
+}
+
+/* ── Dark theme ── */
+.dark {
+  --color-bg: #0b1120;
+  --color-surface: #1a2332;
+  --color-surface-alt: #141d2b;
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-border: #2a3a4e;
+  --color-primary: #60a5fa;
+  --color-primary-dark: #3b82f6;
+  --color-primary-soft: rgba(96, 165, 250, 0.1);
+  --color-hover: #1e293b;
+}
+
+@theme {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-alt: var(--color-surface-alt);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+  --color-primary: var(--color-primary);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-primary-soft: var(--color-primary-soft);
+  --color-hover: var(--color-hover);
   --font-display: "Inter", sans-serif;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color 0.2s, color 0.2s;
 }
 
 @layer utilities {
   .material-symbols-outlined {
-    font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 24;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
-  
   .material-symbols-outlined.filled {
-    font-variation-settings:
-    'FILL' 1,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 24;
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
+}
+
+/* ── Splash Screen Animations ── */
+@keyframes splash-pop {
+  0%   { opacity: 0; transform: scale(0.5); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes splash-slide-up {
+  0%   { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.splash-logo {
+  animation: splash-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.splash-text {
+  animation: splash-slide-up 0.4s ease-out 0.35s both;
+}
+
+.splash-spinner {
+  animation: splash-slide-up 0.3s ease-out 0.6s both;
 }

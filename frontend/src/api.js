@@ -44,6 +44,15 @@ export const updateContract = (id, data) =>
 export const deleteContract = (id) =>
   request(`/contracts/${id}`, { method: "DELETE" });
 
+export const saveDraft = (id, data) =>
+  request(`/contracts/${id}/save-draft`, { method: "POST", body: JSON.stringify(data) });
+
+export const rejectContract = (id, notes = "") =>
+  request(`/contracts/${id}/reject`, { method: "POST", body: JSON.stringify({ rejection_notes: notes }) });
+
+export const approveContract = (id, data) =>
+  request(`/contracts/${id}/approve`, { method: "POST", body: JSON.stringify(data) });
+
 // ── Financial Logs ─────────────────────────────────────────
 export const getFinancialLogs = (limit = 50) =>
   request(`/financial-logs?limit=${limit}`);
@@ -54,8 +63,31 @@ export const createFinancialLog = (data) =>
 export const deleteFinancialLog = (id) =>
   request(`/financial-logs/${id}`, { method: "DELETE" });
 
+// ── Calculations & PDF ──────────────────────────────────────
+export const getCalculation = (contractId) =>
+  request(`/contracts/${contractId}/calculate`);
+
+export const downloadPdf = async (contractId) => {
+  const res = await fetch(`${BASE}/contracts/${contractId}/pdf`);
+  if (!res.ok) throw new Error(`PDF download failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download =
+    res.headers.get("content-disposition")?.split("filename=")[1]?.replace(/"/g, "") ||
+    `addendum_${contractId.slice(0, 8)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
 // ── Market Data & Dashboard ────────────────────────────────
 export const getMarketData = () => request("/market-data");
+
+export const getMarketHistory = (period = 90) =>
+  request(`/market-data/history?period=${period}`);
 
 export const saveMarketData = () =>
   request("/market-data/save", { method: "POST" });

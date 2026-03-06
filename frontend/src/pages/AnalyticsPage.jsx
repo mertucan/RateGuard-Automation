@@ -1,0 +1,303 @@
+import { useEffect, useState } from 'react'
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts'
+import { getMarketHistory, getDashboardStats } from '../api'
+import Spinner from '../components/Spinner'
+
+const periods = [
+  { label: '30 Days', value: 30 },
+  { label: '90 Days', value: 90 },
+  { label: '6 Months', value: 180 },
+  { label: '1 Year', value: 365 },
+]
+
+function formatDate(raw) {
+  if (!raw) return ''
+  const parts = raw.split('-')
+  if (parts.length === 3 && parts[0].length === 2) {
+    return `${parts[0]}/${parts[1]}`
+  }
+  return raw.slice(5)
+}
+
+function ChartCard({ title, subtitle, children }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+      <div className="mb-4">
+        <h3 className="text-base font-bold">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-xs text-text-muted">{subtitle}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-lg">
+      <p className="mb-1 font-semibold text-text-muted">{label}</p>
+      {payload.map((entry, i) => (
+        <p key={i} style={{ color: entry.color }} className="font-medium">
+          {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+function EmptyState({ icon, title, subtitle }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16">
+      <span className="material-symbols-outlined mb-3 text-5xl text-text-muted">{icon}</span>
+      <p className="text-sm font-semibold text-text">{title}</p>
+      <p className="mt-1 max-w-sm text-center text-xs text-text-muted">{subtitle}</p>
+    </div>
+  )
+}
+
+export default function AnalyticsPage() {
+  const [period, setPeriod] = useState(90)
+  const [history, setHistory] = useState(null)
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    Promise.all([getMarketHistory(period), getDashboardStats()])
+      .then(([h, s]) => {
+        setHistory(h)
+        setStats(s)
+      })
+      .catch((err) => {
+        console.error('Analytics load error:', err)
+        setError(err.message || 'Failed to load analytics data')
+      })
+      .finally(() => setLoading(false))
+  }, [period])
+
+  const fxData = (history?.fx || []).map((d) => ({
+    ...d,
+    date: formatDate(d.date),
+  }))
+
+  const inflationData = (history?.inflation || []).map((d) => ({
+    ...d,
+    date: formatDate(d.date),
+  }))
+
+  const latestFx = fxData.length > 0 ? fxData[fxData.length - 1] : null
+  const latestInf = inflationData.length > 0 ? inflationData[inflationData.length - 1] : null
+
+  const fxChange = fxData.length >= 2
+    ? ((fxData[fxData.length - 1].usd - fxData[0].usd) / fxData[0].usd * 100).toFixed(1)
+    : null
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-bold sm:text-2xl">Analytics</h2>
+          <p className="mt-1 hidden text-sm text-text-muted sm:block">Historical market data and inflation trends.</p>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-alt p-1">
+          {periods.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
+                period === p.value
+                  ? 'bg-primary text-white'
+                  : 'text-text-muted hover:bg-hover hover:text-text'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+        {loading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Spinner size="lg" />
+          </div>
+        ) : error ? (
+          <EmptyState
+            icon="cloud_off"
+            title="Unable to load market data"
+            subtitle={`${error}. Please check that the backend is running and the TCMB API key is configured correctly in your .env file.`}
+          />
+        ) : (
+          <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+            {/* Summary KPI Strip */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">USD/TRY</p>
+                <p className="mt-1 text-xl font-bold sm:text-2xl">{latestFx?.usd?.toFixed(2) ?? '—'}</p>
+                {fxChange && (
+                  <p className={`mt-1 text-xs font-semibold ${Number(fxChange) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                    {Number(fxChange) > 0 ? '+' : ''}{fxChange}% period change
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">EUR/TRY</p>
+                <p className="mt-1 text-xl font-bold sm:text-2xl">{latestFx?.eur?.toFixed(2) ?? '—'}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">TUFE (YoY)</p>
+                <p className="mt-1 text-xl font-bold text-amber-500 sm:text-2xl">
+                  %{latestInf?.tufe?.toFixed(1) ?? stats?.tufe?.toFixed(1) ?? '—'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">UFE (YoY)</p>
+                <p className="mt-1 text-xl font-bold text-amber-500 sm:text-2xl">
+                  %{latestInf?.ufe?.toFixed(1) ?? stats?.ufe?.toFixed(1) ?? '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* FX Chart */}
+            <ChartCard
+              title="Exchange Rates"
+              subtitle={`USD/TRY & EUR/TRY — Last ${period} days`}
+            >
+              {fxData.length === 0 ? (
+                <EmptyState
+                  icon="show_chart"
+                  title="No exchange rate data"
+                  subtitle="TCMB EVDS did not return FX data for this period. Try a different time range or verify your API key."
+                />
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <AreaChart data={fxData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="usdGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="eurGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+                      tickLine={false}
+                      axisLine={{ stroke: 'var(--color-border)' }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+                      tickLine={false}
+                      axisLine={false}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="usd" name="USD/TRY" stroke="#3b82f6" fill="url(#usdGrad)" strokeWidth={2} dot={false} />
+                    <Area type="monotone" dataKey="eur" name="EUR/TRY" stroke="#8b5cf6" fill="url(#eurGrad)" strokeWidth={2} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+
+            {/* Inflation Chart */}
+            <ChartCard
+              title="Inflation Indices (YoY %)"
+              subtitle="TUFE (CPI) & UFE (PPI) annual change rates"
+            >
+              {inflationData.length === 0 ? (
+                <EmptyState
+                  icon="trending_up"
+                  title="No inflation data"
+                  subtitle="Inflation data is published monthly by TCMB. There may be no data points for the selected period, or the API key may be invalid."
+                />
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={inflationData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+                      tickLine={false}
+                      axisLine={{ stroke: 'var(--color-border)' }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+                      tickLine={false}
+                      axisLine={false}
+                      unit="%"
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="tufe" name="TUFE (CPI)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="ufe" name="UFE (PPI)" stroke="#ef4444" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+
+            {/* FX Data Table */}
+            {fxData.length > 0 && (
+              <div className="rounded-xl border border-border bg-surface">
+                <div className="border-b border-border p-4 sm:p-6">
+                  <h3 className="text-base font-bold">Recent Exchange Rates</h3>
+                  <p className="mt-0.5 text-xs text-text-muted">Last 10 data points</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="bg-surface-alt">
+                      <tr>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted sm:px-6">Date</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted sm:px-6">USD/TRY</th>
+                        <th className="hidden px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted sm:table-cell sm:px-6">EUR/TRY</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted sm:px-6">USD Change</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {fxData.slice(-10).reverse().map((row, i, arr) => {
+                        const prev = arr[i + 1]
+                        const change = prev?.usd && row.usd ? ((row.usd - prev.usd) / prev.usd * 100).toFixed(2) : null
+                        return (
+                          <tr key={i} className="transition-colors hover:bg-hover">
+                            <td className="px-4 py-3 font-medium sm:px-6">{row.date}</td>
+                            <td className="px-4 py-3 sm:px-6">{row.usd?.toFixed(4) ?? '—'}</td>
+                            <td className="hidden px-4 py-3 sm:table-cell sm:px-6">{row.eur?.toFixed(4) ?? '—'}</td>
+                            <td className="px-4 py-3 sm:px-6">
+                              {change !== null ? (
+                                <span className={`font-medium ${Number(change) > 0 ? 'text-red-500' : Number(change) < 0 ? 'text-emerald-500' : 'text-text-muted'}`}>
+                                  {Number(change) > 0 ? '+' : ''}{change}%
+                                </span>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

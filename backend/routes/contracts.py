@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from flask import Blueprint, request, jsonify
 from services.supabase_client import supabase
 
@@ -56,6 +56,7 @@ def create_contract():
         "end_date": body.get("end_date"),
         "inflation_base_rule": body.get("inflation_base_rule", "TUFE"),
         "max_increase_limit": body.get("max_increase_limit"),
+        "status": "active",
     }
     result = supabase.table("contracts").insert(data).execute()
     return jsonify(result.data[0]), 201
@@ -66,11 +67,64 @@ def update_contract(contract_id):
     body = request.get_json()
     allowed = [
         "previous_amount", "end_date", "inflation_base_rule",
-        "max_increase_limit", "company_id",
+        "max_increase_limit", "company_id", "status",
+        "new_amount", "applied_adjustment", "rejection_notes",
     ]
     data = {k: v for k, v in body.items() if k in allowed}
     result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
     return jsonify(result.data[0])
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/save-draft", methods=["POST"])
+def save_draft(contract_id):
+    """Sozlesme degerlerini taslak olarak kaydeder."""
+    body = request.get_json()
+    allowed = [
+        "previous_amount", "end_date", "inflation_base_rule",
+        "max_increase_limit", "new_amount", "applied_adjustment",
+    ]
+    data = {k: v for k, v in body.items() if k in allowed}
+    data["status"] = "draft"
+    try:
+        result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
+        return jsonify(result.data[0])
+    except Exception as e:
+        print(f"[save-draft] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/reject", methods=["POST"])
+def reject_contract(contract_id):
+    """Sozlesme yenilemesini reddeder."""
+    body = request.get_json() or {}
+    data = {
+        "status": "rejected",
+        "rejection_notes": body.get("rejection_notes", ""),
+    }
+    try:
+        result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
+        return jsonify(result.data[0])
+    except Exception as e:
+        print(f"[reject] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/approve", methods=["POST"])
+def approve_contract(contract_id):
+    """Sozlesme yenilemesini onaylar ve final degerleri kaydeder."""
+    body = request.get_json() or {}
+    data = {
+        "status": "approved",
+        "new_amount": body.get("new_amount"),
+        "applied_adjustment": body.get("applied_adjustment"),
+        "approved_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
+        return jsonify(result.data[0])
+    except Exception as e:
+        print(f"[approve] Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @contracts_bp.route("/api/contracts/<contract_id>", methods=["DELETE"])

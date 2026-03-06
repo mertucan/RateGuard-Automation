@@ -101,6 +101,86 @@ def get_guaranteed_market_data():
     }
 
 
+def get_historical_data(days=90):
+    """
+    Belirli bir gun araligi icin doviz kuru ve enflasyon endeks
+    zaman serilerini dondurur (grafik icin).
+    """
+    end_date = datetime.now()
+    str_end = end_date.strftime("%d-%m-%Y")
+    str_start = (end_date - timedelta(days=days)).strftime("%d-%m-%Y")
+    str_inf_start = (end_date - timedelta(days=max(days, 480))).strftime("%d-%m-%Y")
+
+    # FX daily data
+    fx_url = (
+        f"{EVDS_BASE}series=TP.DK.USD.S.YTL-TP.DK.EUR.S.YTL"
+        f"&startDate={str_start}&endDate={str_end}&type=json"
+    )
+    fx_items = _evds_get(fx_url, "FX-HIST")
+
+    fx_series = []
+    for item in fx_items:
+        usd_val = item.get("TP_DK_USD_S_YTL")
+        eur_val = item.get("TP_DK_EUR_S_YTL")
+        if usd_val or eur_val:
+            fx_series.append({
+                "date": item.get("Tarih", ""),
+                "usd": float(usd_val) if usd_val else None,
+                "eur": float(eur_val) if eur_val else None,
+            })
+
+    time.sleep(0.5)
+
+    # TUFE monthly index
+    tufe_url = (
+        f"{EVDS_BASE}series=TP.FG.J0"
+        f"&startDate={str_inf_start}&endDate={str_end}&type=json"
+    )
+    tufe_items = _evds_get(tufe_url, "TUFE-HIST")
+
+    time.sleep(0.5)
+
+    # UFE monthly index
+    ufe_url = (
+        f"{EVDS_BASE}series=TP.TUFE1YI.T1"
+        f"&startDate={str_inf_start}&endDate={str_end}&type=json"
+    )
+    ufe_items = _evds_get(ufe_url, "UFE-HIST")
+
+    tufe_values = []
+    for item in tufe_items:
+        val = item.get("TP_FG_J0")
+        if val:
+            tufe_values.append({"date": item.get("Tarih", ""), "value": float(val)})
+
+    ufe_values = []
+    for item in ufe_items:
+        val = item.get("TP_TUFE1YI_T1")
+        if val:
+            ufe_values.append({"date": item.get("Tarih", ""), "value": float(val)})
+
+    # YoY rates from indices
+    inflation_series = []
+    tufe_list = [v["value"] for v in tufe_values]
+    ufe_list = [v["value"] for v in ufe_values]
+
+    for i in range(12, len(tufe_values)):
+        t_rate = ((tufe_list[i] - tufe_list[i - 12]) / tufe_list[i - 12]) * 100
+        u_rate = 0
+        if i < len(ufe_list) and (i - 12) >= 0:
+            u_rate = ((ufe_list[i] - ufe_list[i - 12]) / ufe_list[i - 12]) * 100
+        inflation_series.append({
+            "date": tufe_values[i]["date"],
+            "tufe": round(t_rate, 2),
+            "ufe": round(u_rate, 2),
+        })
+
+    return {
+        "fx": fx_series,
+        "inflation": inflation_series,
+    }
+
+
 if __name__ == "__main__":
     data = get_guaranteed_market_data()
 
