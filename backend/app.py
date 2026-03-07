@@ -24,7 +24,7 @@ def create_app():
 
     @app.route("/api/debug")
     def debug():
-        """Supabase bağlantısını ve tabloları test eder."""
+        """Supabase veri tabanı bağlantısını ve tabloları test eder."""
         from services.supabase_client import supabase
         results = {}
         for table in ["companies", "contracts", "financial_logs"]:
