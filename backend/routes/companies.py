@@ -74,7 +74,7 @@ def create_company():
         "company_name": body["company_name"],
         "authorized_email": body["authorized_email"],
         "risk_score": body.get("risk_score"),
-        "communication_language": body.get("communication_language", "tr"),
+        "communication_language": body.get("communication_language", "profesyonel"),
     }
     result = supabase.table("companies").insert(data).execute()
     return jsonify(result.data[0]), 201
