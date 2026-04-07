@@ -1,14 +1,37 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { loginUser } from '../api';
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const user = await loginUser({ email, password });
+      localStorage.setItem('rg_user', JSON.stringify(user));
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Giriş başarısız.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="antialiased selection:bg-primary selection:text-on-primary mesh-background min-h-screen flex flex-col items-center justify-center p-6 relative">
+    <div className="antialiased bg-mesh min-h-screen flex flex-col items-center justify-center p-6 relative">
       <div className="geometric-overlay"></div>
       
       {/* Branding */}
       <div className="relative z-10 mb-12 flex flex-col items-center">
-        <div className="text-3xl font-bold tracking-tighter text-[#adc6ff] headline-font flex items-center gap-3">
+        <div className="text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3">
           <span 
             className="material-symbols-outlined text-4xl" 
             data-icon="security" 
@@ -18,39 +41,39 @@ export default function LoginPage() {
           </span>
           RateGuard
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.3em] text-outline font-semibold opacity-70">
+        <div className="mt-2 text-xs uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
           Sovereign Intelligence
         </div>
       </div>
 
       {/* Main Login Card */}
-      <div className="relative z-10 w-full max-w-xl">
-        <div className="glass-card rounded-[2rem] p-8 md:p-12 shadow-2xl overflow-hidden relative">
+      <div className="relative z-10 w-full max-w-[440px]">
+        <div className="relative bg-surface-container-low border border-outline-variant/10 rounded-xl p-10 sovereign-glow">
           {/* Subtle accent glow */}
           <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 blur-[80px] rounded-full"></div>
           
           <div className="relative z-10">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-extrabold headline-font text-on-surface mb-3 tracking-tight">Portal Access</h2>
-              <p className="text-on-surface-variant max-w-xs mx-auto text-sm leading-relaxed">
+            <div className="text-center mb-8">
+              <h2 className="font-headline text-2xl font-bold text-on-surface mb-2 tracking-tight">Portal Access</h2>
+              <p className="text-on-surface max-w-xs mx-auto text-sm leading-relaxed opacity-90">
                 Enter your institutional credentials to access the terminal.
               </p>
             </div>
 
-            <form className="space-y-6">
+            <form className="space-y-6" onSubmit={handleSubmit}>
               {/* Institutional Email */}
               <div className="space-y-2 group">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-outline ml-1">
+                <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider ml-1 opacity-90">
                   Institutional Email
                 </label>
                 <div className="relative input-focus-effect rounded-xl transition-all duration-300">
-                  <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-outline group-focus-within:text-primary transition-colors">
-                    <span className="material-symbols-outlined text-[20px]" data-icon="corporate_fare">corporate_fare</span>
-                  </span>
                   <input 
-                    className="block w-full pl-12 pr-4 py-4 bg-surface-container-highest/50 border border-outline-variant/20 rounded-xl text-on-surface focus:ring-0 focus:border-primary/40 placeholder-outline/30 transition-all text-sm" 
+                    className="block w-full px-4 py-3 bg-surface-container-highest border border-outline-variant/20 rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 focus:border-transparent transition-all"
                     placeholder="name@institution.com" 
                     type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
                   />
                 </div>
               </div>
@@ -58,24 +81,30 @@ export default function LoginPage() {
               {/* Access Key */}
               <div className="space-y-2 group">
                 <div className="flex justify-between items-center ml-1">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-outline">
+                  <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
                     Access Key
                   </label>
-                  <a className="text-[11px] font-bold uppercase tracking-widest text-primary hover:text-primary-fixed transition-colors" href="#">
+                  <a className="text-[11px] font-bold uppercase tracking-wider text-primary hover:opacity-80 transition-colors" href="#">
                     Recovery
                   </a>
                 </div>
                 <div className="relative input-focus-effect rounded-xl transition-all duration-300">
-                  <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-outline group-focus-within:text-primary transition-colors">
-                    <span className="material-symbols-outlined text-[20px]" data-icon="key">key</span>
-                  </span>
-                  <input 
-                    className="block w-full pl-12 pr-12 py-4 bg-surface-container-highest/50 border border-outline-variant/20 rounded-xl text-on-surface focus:ring-0 focus:border-primary/40 placeholder-outline/30 transition-all text-sm" 
+                  <input
+                    className="block w-full px-4 pr-12 py-3 bg-surface-container-highest border border-outline-variant/20 rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 focus:border-transparent transition-all"
                     placeholder="••••••••••••" 
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
                   />
-                  <button className="absolute inset-y-0 right-0 pr-4 flex items-center text-outline hover:text-on-surface transition-colors" type="button">
-                    <span className="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span>
+                  <button
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-on-surface-variant hover:text-on-surface transition-colors"
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                  >
+                    <span className="material-symbols-outlined text-[20px]" data-icon="visibility">
+                      {showPassword ? 'visibility_off' : 'visibility'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -89,22 +118,30 @@ export default function LoginPage() {
                     name="remember-me" 
                     type="checkbox"
                   />
-                  <label className="ml-2.5 block text-xs font-medium text-on-surface-variant cursor-pointer" htmlFor="remember-me">
+                  <label className="ml-2.5 block text-xs font-medium text-on-surface cursor-pointer opacity-90" htmlFor="remember-me">
                     Secure Session
                   </label>
                 </div>
               </div>
 
 
-              <button className="w-full primary-gradient text-on-primary font-bold py-4 rounded-xl active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-primary/20 hover:shadow-primary/30 text-base" type="submit">
-                Secure Login
+              {error && (
+                <p className="text-sm text-red-400">{error}</p>
+              )}
+
+              <button
+                className="w-full primary-gradient text-on-primary font-bold py-3.5 rounded-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:shadow-primary/30 text-base disabled:opacity-60"
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? 'Signing in...' : 'Secure Login'}
                 <span className="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
               </button>
             </form>
 
             {/* Navigation Redirect (Register'a Yönlendirme) */}
             <div className="mt-10 pt-6 border-t border-outline-variant/5 text-center">
-              <p className="text-xs text-on-surface-variant">
+              <p className="text-xs text-on-surface opacity-85">
                 Don't have an account? 
                 <Link to="/register" className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1">
                   Register
@@ -125,7 +162,7 @@ export default function LoginPage() {
       </div>
 
       {/* Global Footer */}
-      <footer className="mt-auto pt-16 pb-8 w-full flex flex-col md:flex-row justify-between items-center px-12 text-[#adc6ff] font-['Inter'] text-[10px] uppercase tracking-[0.2em] opacity-40 hover:opacity-80 transition-opacity duration-500">
+      <footer className="mt-auto pt-16 pb-8 w-full flex flex-col md:flex-row justify-between items-center px-12 text-on-surface-variant font-['Inter'] text-[10px] uppercase tracking-[0.2em] opacity-50 hover:opacity-80 transition-opacity duration-500">
         <div className="mb-6 md:mb-0">
           © 2026 RateGuard Intelligence
         </div>

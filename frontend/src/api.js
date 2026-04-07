@@ -12,6 +12,13 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+// ── Auth ───────────────────────────────────────────────────
+export const loginUser = (data) =>
+  request("/auth/login", { method: "POST", body: JSON.stringify(data) });
+
+export const registerUser = (data) =>
+  request("/auth/register", { method: "POST", body: JSON.stringify(data) });
+
 // ── Companies ──────────────────────────────────────────────
 export const getCompanies = (search = "") =>
   request(`/companies${search ? `?search=${encodeURIComponent(search)}` : ""}`);
