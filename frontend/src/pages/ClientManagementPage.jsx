@@ -6,7 +6,6 @@ const emptyForm = {
   company_name: '',
   authorized_email: '',
   risk_score: '',
-  communication_language: 'tr',
 }
 
 function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
@@ -87,7 +86,6 @@ export default function ClientManagementPage() {
       company_name: client.company_name || '',
       authorized_email: client.authorized_email || '',
       risk_score: client.risk_score ?? '',
-      communication_language: client.communication_language || 'tr',
     })
   }
 
@@ -299,17 +297,6 @@ export default function ClientManagementPage() {
                   min="0"
                   max="100"
                 />
-              </div>
-              <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Communication Language</h4>
-                <select
-                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  value={form.communication_language}
-                  onChange={(e) => setForm({ ...form, communication_language: e.target.value })}
-                >
-                  <option value="tr">Turkish</option>
-                  <option value="en">English</option>
-                </select>
               </div>
             </div>
             <div className="flex gap-3 border-t border-border bg-surface-alt p-6">

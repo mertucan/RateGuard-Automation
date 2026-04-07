@@ -63,9 +63,15 @@ export const createFinancialLog = (data) =>
 export const deleteFinancialLog = (id) =>
   request(`/financial-logs/${id}`, { method: "DELETE" });
 
-// ── Calculations & PDF ──────────────────────────────────────
+// ── Calculations, PDF & AI Email ─────────────────────────────
 export const getCalculation = (contractId) =>
   request(`/contracts/${contractId}/calculate`);
+
+export const generateEmailDraft = (contractId, data = {}) =>
+  request(`/contracts/${contractId}/generate-email`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 export const downloadPdf = async (contractId) => {
   const res = await fetch(`${BASE}/contracts/${contractId}/pdf`);

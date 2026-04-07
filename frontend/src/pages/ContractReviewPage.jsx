@@ -12,6 +12,7 @@ import {
   saveDraft,
   rejectContract,
   approveContract,
+  generateEmailDraft,
 } from '../api'
 
 const STATUS_MAP = {
@@ -394,6 +395,8 @@ function ContractDetail() {
   const [editEndDate, setEditEndDate] = useState('')
   const [emailSubject, setEmailSubject] = useState('')
   const [emailBody, setEmailBody] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiGenerated, setAiGenerated] = useState(false)
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
@@ -449,11 +452,24 @@ function ContractDetail() {
   const formatCurrency = useCallback((n) =>
     new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n), [])
 
-  useEffect(() => {
-    if (!companyName || companyName === '—') return
-    setEmailSubject(`Action Required: Service Agreement Renewal - ${companyName}`)
-    setEmailBody(`Dear ${companyName},\n\nAttached is the formal addendum outlining the new annual rate of ${formatCurrency(liveNewPrice)}, reflecting a ${liveAdjustment.toFixed(1)}% adjustment based on the ${editRule} index.\n\nPrevious rate: ${formatCurrency(amount)}\nNew rate: ${formatCurrency(liveNewPrice)}\n\nBest regards,\nRateGuard Team`)
-  }, [companyName, liveNewPrice, liveAdjustment, editRule, amount, formatCurrency])
+  const handleGenerateEmail = async () => {
+    setAiLoading(true)
+    try {
+      const result = await generateEmailDraft(id, {
+        new_amount: Math.round(liveNewPrice * 100) / 100,
+        applied_adjustment: Math.round(liveAdjustment * 100) / 100,
+        inflation_base_rule: editRule,
+      })
+      setEmailSubject(result.subject || '')
+      setEmailBody(result.body || '')
+      setAiGenerated(true)
+      showToast('AI e-posta taslağı oluşturuldu')
+    } catch (err) {
+      showToast('AI taslak hatası: ' + err.message, 'error')
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   const handleDownloadPdf = async () => {
     setPdfLoading(true)
@@ -769,22 +785,78 @@ function ContractDetail() {
               <section className="sticky top-8 flex h-full flex-col rounded-xl border border-border bg-surface">
                 <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
                   <h3 className="text-lg font-bold text-primary">AI Email Composer</h3>
-                  <span className="rounded bg-primary/10 px-2 py-1 text-xs font-bold uppercase tracking-wider text-primary">Draft</span>
+                  <span className={`rounded px-2 py-1 text-xs font-bold uppercase tracking-wider ${aiGenerated ? 'bg-emerald-500/10 text-emerald-500' : 'bg-primary/10 text-primary'}`}>
+                    {aiGenerated ? 'AI Generated' : 'Draft'}
+                  </span>
                 </div>
                 <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">Subject:</label>
-                  <input
-                    className="rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                    value={emailSubject}
-                    onChange={(e) => setEmailSubject(e.target.value)}
-                    type="text"
-                  />
-                  <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">Message Body:</label>
-                  <textarea
-                    className="h-64 resize-none rounded-lg border border-border bg-surface-alt p-4 text-sm leading-relaxed text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                    value={emailBody}
-                    onChange={(e) => setEmailBody(e.target.value)}
-                  />
+                  {!aiGenerated && !emailBody ? (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-border p-8 text-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft">
+                        <span className="material-symbols-outlined text-3xl text-primary">auto_awesome</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-text">Generate Email with AI</p>
+                        <p className="mt-1 text-xs text-text-muted">
+                          Gemini AI müşterinin iletişim tonuna göre profesyonel e-posta oluşturur
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleGenerateEmail}
+                        disabled={aiLoading || isFinalized}
+                        className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-primary-dark hover:shadow-lg disabled:opacity-50"
+                      >
+                        {aiLoading ? (
+                          <>
+                            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                            Generate with Gemini AI
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">Subject:</label>
+                        <button
+                          onClick={handleGenerateEmail}
+                          disabled={aiLoading}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:opacity-50"
+                          title="Regenerate with AI"
+                        >
+                          {aiLoading ? (
+                            <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : (
+                            <span className="material-symbols-outlined text-[16px]">refresh</span>
+                          )}
+                          Regenerate
+                        </button>
+                      </div>
+                      <input
+                        className="rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                        type="text"
+                      />
+                      <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">Message Body:</label>
+                      <textarea
+                        className="h-64 resize-none rounded-lg border border-border bg-surface-alt p-4 text-sm leading-relaxed text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                        value={emailBody}
+                        onChange={(e) => setEmailBody(e.target.value)}
+                      />
+                    </>
+                  )}
                 </div>
                 <div className="border-t border-border bg-surface-alt p-4 sm:p-6">
                   <button onClick={() => setShowApproveModal(true)} disabled={saving || isFinalized}

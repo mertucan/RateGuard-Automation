@@ -57,7 +57,7 @@ def calculate_renewal(contract_id):
         "contract_id": contract_id,
         "company_name": company.get("company_name", ""),
         "company_email": company.get("authorized_email", ""),
-        "language": company.get("communication_language", "tr"),
+        "language": company.get("communication_language", "profesyonel"),
         "end_date": contract.get("end_date", ""),
         "inflation_base_rule": rule,
         "max_increase_limit": max_limit,

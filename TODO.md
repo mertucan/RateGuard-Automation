@@ -17,8 +17,8 @@
 - [x] Hesaplanan tutarlar doğrultusunda ek sözleşme PDF belgelerinin kod ile otomatik üretilmesi (`reportlab` kütüphanesi ile).
 
 ## Aşama 4: Yapay Zeka (LLM) Entegrasyonu
-- [ ] Gemini API entegrasyonunun yapılması.
-- [ ] Müşteriye durumu izah edecek ve hazırlanan PDF'i sunacak profesyonel e-posta taslaklarının yapay zeka ile oluşturulması.
+- [x] Gemini API entegrasyonunun yapılması.
+- [x] Müşteriye durumu izah edecek ve hazırlanan PDF'i sunacak profesyonel e-posta taslaklarının yapay zeka ile oluşturulması.
 
 ## Aşama 5: Önyüz (Frontend) Paneli
 - [x] React (Vite) ile frontend projesinin başlatılması.

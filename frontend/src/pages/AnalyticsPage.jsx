@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
   AreaChart,
   Area,
   XAxis,
@@ -214,42 +212,6 @@ export default function AnalyticsPage() {
                     <Area type="monotone" dataKey="usd" name="USD/TRY" stroke="#3b82f6" fill="url(#usdGrad)" strokeWidth={2} dot={false} />
                     <Area type="monotone" dataKey="eur" name="EUR/TRY" stroke="#8b5cf6" fill="url(#eurGrad)" strokeWidth={2} dot={false} />
                   </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </ChartCard>
-
-            {/* Inflation Chart */}
-            <ChartCard
-              title="Inflation Indices (YoY %)"
-              subtitle="TUFE (CPI) & UFE (PPI) annual change rates"
-            >
-              {inflationData.length === 0 ? (
-                <EmptyState
-                  icon="trending_up"
-                  title="No inflation data"
-                  subtitle="Inflation data is published monthly by TCMB. There may be no data points for the selected period, or the API key may be invalid."
-                />
-              ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={inflationData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-                      tickLine={false}
-                      axisLine={{ stroke: 'var(--color-border)' }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-                      tickLine={false}
-                      axisLine={false}
-                      unit="%"
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="tufe" name="TUFE (CPI)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                    <Line type="monotone" dataKey="ufe" name="UFE (PPI)" stroke="#ef4444" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                  </LineChart>
                 </ResponsiveContainer>
               )}
             </ChartCard>
