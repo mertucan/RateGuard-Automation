@@ -1,3 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
 @import "tailwindcss";
 
 /* ── Light theme (default) ── */
@@ -10,8 +13,16 @@
   --color-border: #e2e8f0;
   --color-primary: #136dec;
   --color-primary-dark: #0e52b5;
-  --color-primary-soft: rgba(19, 109, 236, 0.08);
+  --color-primary-soft: rgba(38, 86, 154, 0.08);
   --color-hover: #f1f5f9;
+
+  /* Login ekranındaki Tailwind sınıfları için uyumluluk değişkenleri */
+  --color-surface-container-highest: #e2e8f0;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #64748b;
+  --color-outline: #94a3b8;
+  --color-outline-variant: #cbd5e1;
+  --color-on-primary: #ffffff;
 }
 
 /* ── Dark theme ── */
@@ -26,6 +37,14 @@
   --color-primary-dark: #3b82f6;
   --color-primary-soft: rgba(96, 165, 250, 0.1);
   --color-hover: #1e293b;
+
+  /* Login ekranındaki Tailwind sınıfları için uyumluluk değişkenleri (Stitch tasarımlı) */
+  --color-surface-container-highest: #313540;
+  --color-on-surface: #dfe2f1;
+  --color-on-surface-variant: #c6c6cd;
+  --color-outline: #909097;
+  --color-outline-variant: #45464d;
+  --color-on-primary: #002e6a;
 }
 
 @theme {
@@ -39,13 +58,25 @@
   --color-primary-dark: var(--color-primary-dark);
   --color-primary-soft: var(--color-primary-soft);
   --color-hover: var(--color-hover);
+
+  /* JSX içindeki sınıfların çalışması için renklerin Tailwind'e tanıtılması */
+  --color-surface-container-highest: var(--color-surface-container-highest);
+  --color-on-surface: var(--color-on-surface);
+  --color-on-surface-variant: var(--color-on-surface-variant);
+  --color-outline: var(--color-outline);
+  --color-outline-variant: var(--color-outline-variant);
+  --color-on-primary: var(--color-on-primary);
+
+  /* Font tanımlamaları */
   --font-display: "Inter", sans-serif;
+  --font-headline: "Manrope", sans-serif;
 }
 
 body {
   background: var(--color-bg);
   color: var(--color-text);
   transition: background-color 0.2s, color 0.2s;
+  overflow-x: hidden;
 }
 
 @layer utilities {
@@ -55,9 +86,49 @@ body {
   .material-symbols-outlined.filled {
     font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
+  .headline-font {
+    font-family: var(--font-headline);
+  }
 }
 
-/* ── Splash Screen Animations ── */
+/* ── Login Ekranı Özel Sınıfları ── */
+
+.primary-gradient {
+  /* Renkleri projenizin genel primary değişkenlerine bağladım */
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+}
+
+.mesh-background {
+  background-color: #0a0e18;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(220, 100%, 15%, 0.5) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(210, 80%, 10%, 0.5) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(200, 70%, 12%, 0.5) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(225, 90%, 8%, 0.5) 0px, transparent 50%);
+}
+
+.geometric-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(#1c1f2a 1px, transparent 1px), linear-gradient(90deg, #1c1f2a 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(circle at center, black, transparent 80%);
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.glass-card {
+  background: rgba(28, 31, 42, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(173, 198, 255, 0.1);
+}
+
+.input-focus-effect:focus-within {
+  /* Focus parlaması projenizin genel renginden besleniyor */
+  box-shadow: 0 0 0 1px var(--color-primary-soft), 0 0 20px rgba(96, 165, 250, 0.15);
+}
+
+/* ── Splash Screen Animations (Sizin Mevcut Animasyonlarınız) ── */
 @keyframes splash-pop {
   0%   { opacity: 0; transform: scale(0.5); }
   60%  { opacity: 1; transform: scale(1.08); }
@@ -79,4 +150,14 @@ body {
 
 .splash-spinner {
   animation: splash-slide-up 0.3s ease-out 0.6s both;
+}
+
+.sovereign-glow {
+  box-shadow: 0 0 80px -20px rgba(0, 46, 106, 0.3);
+}
+.bg-mesh {
+  background-color: #0f131d;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(53, 125, 241, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(173, 198, 255, 0.05) 0px, transparent 50%);
 }
