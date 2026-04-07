@@ -152,8 +152,21 @@ export default function LoginPage() {
         </div>
       </div>
 
+<<<<<<< HEAD
       <footer className="mt-auto pt-16 pb-8 w-full flex justify-center items-center px-12 text-on-surface-variant font-['Inter'] text-[10px] uppercase tracking-[0.2em] opacity-50">
         <div>&copy; 2026 RateGuard</div>
+=======
+      {/* Global Footer */}
+      <footer className="mt-auto pt-16 pb-8 w-full flex flex-col md:flex-row justify-between items-center px-12 text-on-surface-variant font-['Inter'] text-[10px] uppercase tracking-[0.2em] opacity-50 hover:opacity-80 transition-opacity duration-500">
+      <div className="mb-6 md:mb-0">
+          © 2026 RateGuard Intelligence
+        </div>
+        <div className="flex flex-wrap justify-center gap-8">
+          <a className="hover:text-primary transition-colors" href="#">Privacy</a>
+          <a className="hover:text-primary transition-colors" href="#">Security</a>
+          <a className="hover:text-primary transition-colors" href="#">Compliance</a>
+        </div>
+>>>>>>> main merged
       </footer>
     </div>
   )
