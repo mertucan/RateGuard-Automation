@@ -7,6 +7,10 @@ from routes.financial_logs import financial_logs_bp
 from routes.market_data import market_data_bp
 from routes.calculations import calculations_bp
 from routes.email import email_bp
+from routes.users import users_bp
+from routes.notifications import notifications_bp
+from routes.communications import communications_bp
+from routes.renewals import renewals_bp
 
 
 def create_app():
@@ -19,6 +23,10 @@ def create_app():
     app.register_blueprint(market_data_bp)
     app.register_blueprint(calculations_bp)
     app.register_blueprint(email_bp)
+    app.register_blueprint(users_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(communications_bp)
+    app.register_blueprint(renewals_bp)
 
     @app.route("/api/health")
     def health():
@@ -29,7 +37,7 @@ def create_app():
         """Supabase bağlantısını ve tabloları test eder."""
         from services.supabase_client import supabase
         results = {}
-        for table in ["companies", "contracts", "financial_logs"]:
+        for table in ["companies", "contracts", "financial_logs", "users", "notifications", "communications", "renewals"]:
             try:
                 res = supabase.table(table).select("*").limit(5).execute()
                 results[table] = {"count": len(res.data), "sample": res.data}

@@ -11,7 +11,7 @@ def list_companies():
 
     try:
         query = supabase.table("companies").select(
-            "*, contracts(id, previous_amount, end_date)"
+            "*, contracts!contracts_company_id_fkey(id, previous_amount, end_date)"
         )
         if search:
             query = query.ilike("company_name", f"%{search}%")
@@ -57,7 +57,7 @@ def get_company(company_id):
     try:
         result = (
             supabase.table("companies")
-            .select("*, contracts(id, previous_amount, end_date, inflation_base_rule, max_increase_limit)")
+            .select("*, contracts!contracts_company_id_fkey(id, previous_amount, end_date, inflation_base_rule, max_increase_limit)")
             .eq("id", company_id)
             .single()
             .execute()

@@ -99,3 +99,65 @@ export const saveMarketData = () =>
   request("/market-data/save", { method: "POST" });
 
 export const getDashboardStats = () => request("/dashboard/stats");
+
+// ── Users ─────────────────────────────────────────────────
+export const getUsers = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/users${qs ? `?${qs}` : ""}`);
+};
+
+export const getUser = (id) => request(`/users/${id}`);
+
+export const createUser = (data) =>
+  request("/users", { method: "POST", body: JSON.stringify(data) });
+
+export const updateUser = (id, data) =>
+  request(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const deleteUser = (id) =>
+  request(`/users/${id}`, { method: "DELETE" });
+
+// ── Notifications ─────────────────────────────────────────
+export const getNotifications = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/notifications${qs ? `?${qs}` : ""}`);
+};
+
+export const createNotification = (data) =>
+  request("/notifications", { method: "POST", body: JSON.stringify(data) });
+
+export const markNotificationRead = (id) =>
+  request(`/notifications/${id}/read`, { method: "POST" });
+
+export const markAllNotificationsRead = () =>
+  request("/notifications/read-all", { method: "POST" });
+
+export const deleteNotification = (id) =>
+  request(`/notifications/${id}`, { method: "DELETE" });
+
+// ── Communications ────────────────────────────────────────
+export const getCommunications = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/communications${qs ? `?${qs}` : ""}`);
+};
+
+export const createCommunication = (data) =>
+  request("/communications", { method: "POST", body: JSON.stringify(data) });
+
+export const deleteCommunication = (id) =>
+  request(`/communications/${id}`, { method: "DELETE" });
+
+// ── Renewals ──────────────────────────────────────────────
+export const getRenewals = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/renewals${qs ? `?${qs}` : ""}`);
+};
+
+export const createRenewal = (data) =>
+  request("/renewals", { method: "POST", body: JSON.stringify(data) });
+
+export const updateRenewal = (id, data) =>
+  request(`/renewals/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const deleteRenewal = (id) =>
+  request(`/renewals/${id}`, { method: "DELETE" });

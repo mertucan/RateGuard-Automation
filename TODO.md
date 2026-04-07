@@ -30,7 +30,10 @@
 - [x] Analytics sayfası ile tarihsel veri görselleştirme (FX, enflasyon grafikleri).
 
 ## Aşama 6: Otomasyon ve Canlıya Alma
-- [ ] Bitişine 30 gün kalan sözleşmeleri tespit edecek arka plan görevinin (cron job / Celery) yazılması.
+- [ ] Her gün sabah saat 08:00'de çalışacak arka plan görevinin (cron job / Celery) kurulması.
+- [ ] Bitiş tarihine 30 gün veya daha az kalmış sözleşmeleri tespit eden sorgunun yazılması.
+- [ ] Çekilen ham verilerin normalize edilip hesaplama motoruna uygun hale getirilmesi.
+- [ ] Onaylanan belgeleri müşteriye göndermek için SMTP/SendGrid e-posta entegrasyonunun yapılması.
 - [ ] Sistemin bütün olarak uçtan uca test edilmesi.
 - [ ] Projenin bulut ortamına (Vercel, Render, Heroku vb.) deploy edilmesi.
 
@@ -47,13 +50,16 @@
 - [x] **Mobil Uyumluluk**: Navbar hamburger menüsü, KPI kartları, tablolar ve formlar için responsive breakpoint'ler.
 - [x] **Dosya Tabanlı Cache**: Flask debug/reload modunda in-memory cache sıfırlanma sorununu çözmek için `.cache/` dizinine JSON yedekleme.
 - [x] **PDF Kaydedilmiş Değerler**: Draft/approved sözleşmelerde PDF'in canlı TCMB verisi yerine kaydedilmiş `new_amount` ve `applied_adjustment` değerlerini kullanması.
+- [x] **Onay İş Akışı (Approval Workflow)**: Sözleşme yenileme sürecine çok aşamalı onay mekanizması (hesapla → taslak → yönetici onayı → müşteriye gönder).
 
 ### Yüksek Öncelik
 - [ ] **Bildirim Sistemi**: Sözleşme bitiş tarihi yaklaştığında e-posta ve/veya in-app bildirim gönderme (30/15/7 gün kala).
-- [ ] **Kullanıcı Kimlik Doğrulama (Auth)**: Supabase Auth ile giriş/kayıt sistemi, roller (admin, manager, viewer) ve erişim kontrolü.
-- [x] **Onay İş Akışı (Approval Workflow)**: Sözleşme yenileme sürecine çok aşamalı onay mekanizması (hesapla → taslak → yönetici onayı → müşteriye gönder).
+- [ ] **Kullanıcı Kimlik Doğrulama (Auth)**: Supabase Auth ile giriş/kayıt sistemi ve kullanıcı giriş ekranı, roller (admin, manager, viewer) ve erişim kontrolü.
+- [ ] **Rol Bazlı Yetkilendirme (RBAC)**: Satış ekibinin sadece metinleri ve sözleşmeleri görebilmesi, Finans ekibinin ise ana hesaplama kurallarını (cap oranlarını) değiştirebilmesi için yetki seviyelerinin ayrılması.
+- [ ] **Geçmişe Dönük Denetim İzi (Audit Log)**: Hangi sözleşmeyi kimin, ne zaman ve hangi oranla onayladığının bir "Log" tablosunda tutulması (finansal şeffaflık için).
 
 ### Orta Öncelik
+- [ ] **Manuel Metin Editörü (Rich Text Editor)**: Yöneticinin yapay zekanın ürettiği e-posta taslağını onaylamadan önce manuel olarak düzenleyebilmesi için bir metin editörü (TinyMCE vb.) eklenmesi.
 - [ ] **Çoklu Döviz Desteği**: Sözleşmelerin USD, EUR veya TRY bazlı olabilmesi ve kur dönüşümlerinin otomatik hesaplanması.
 - [ ] **Sözleşme Geçmişi & Versiyon Takibi**: Her yenileme döngüsünün kaydını tutarak fiyat değişim tarihçesini görselleştirme.
 - [ ] **Dashboard Özelleştirme**: Kullanıcıların KPI kartlarını, grafikleri ve widget'ları sürükle-bırak ile düzenlemesi.
@@ -61,8 +67,9 @@
 - [ ] **Dışa Aktarma (Export)**: Sözleşme listelerini ve analitik verilerini CSV/Excel formatında dışa aktarma.
 
 ### Düşük Öncelik / İleri Seviye
-- [ ] **Çoklu Dil Desteği (i18n)**: Arayüzün Türkçe ve İngilizce arasında geçiş yapabilmesi.
-- [ ] **Webhook Entegrasyonu**: Sözleşme durumu değiştiğinde harici sistemlere (Slack, Teams, CRM) otomatik bildirim.
+- [ ] **Çoklu Dil Desteği (i18n)**: Arayüzün Türkçe ve İngilizce arasında geçiş yapabilmesi; EUR/USD bazlı sözleşmelerde PDF ve e-posta taslağının yapay zeka tarafından otomatik olarak müşterinin dilinde oluşturulması.
+- [ ] **Anlık Bildirim Entegrasyonları**: Web paneline bildirim düşmenin ötesinde, kritik müşteriler için Slack veya Microsoft Teams üzerinden satış temsilcisine otomatik mesaj gönderilmesi.
+- [ ] **Webhook Entegrasyonu**: Sözleşme durumu değiştiğinde harici sistemlere (CRM vb.) otomatik bildirim.
 - [ ] **Müşteri Portalı**: Müşterilerin kendi sözleşme durumlarını görebileceği salt okunur portal.
 - [ ] **Gelişmiş Raporlama**: Aylık/çeyreklik otomatik rapor üretimi (toplam sözleşme değeri, ortalama artış, risk dağılımı).
 - [ ] **API Rate Limiting & Logging**: Backend API'ye rate limiter ve yapılandırılmış loglama eklenmesi.

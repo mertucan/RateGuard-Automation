@@ -13,7 +13,7 @@ def list_contracts():
 
     try:
         query = supabase.table("contracts").select(
-            "*, companies(company_name, authorized_email)"
+            "*, companies!contracts_company_id_fkey(company_name, authorized_email)"
         )
 
         if company_id:
@@ -35,7 +35,7 @@ def get_contract(contract_id):
     try:
         result = (
             supabase.table("contracts")
-            .select("*, companies(company_name, authorized_email, communication_language)")
+            .select("*, companies!contracts_company_id_fkey(company_name, authorized_email, communication_language)")
             .eq("id", contract_id)
             .single()
             .execute()

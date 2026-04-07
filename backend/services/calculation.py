@@ -11,7 +11,7 @@ def calculate_renewal(contract_id):
     """
     result = (
         supabase.table("contracts")
-        .select("*, companies(company_name, authorized_email, communication_language)")
+        .select("*, companies!contracts_company_id_fkey(company_name, authorized_email, communication_language)")
         .eq("id", contract_id)
         .single()
         .execute()
