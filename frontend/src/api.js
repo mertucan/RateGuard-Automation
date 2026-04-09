@@ -1,8 +1,22 @@
 const BASE = "/api";
 
+function getAuthHeaders() {
+  try {
+    const user = JSON.parse(localStorage.getItem("rg_user") || "null");
+    if (user?.id) return { "X-User-Id": user.id };
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+      ...options.headers,
+    },
     ...options,
   });
   if (!res.ok) {
@@ -81,7 +95,9 @@ export const generateEmailDraft = (contractId, data = {}) =>
   });
 
 export const downloadPdf = async (contractId) => {
-  const res = await fetch(`${BASE}/contracts/${contractId}/pdf`);
+  const res = await fetch(`${BASE}/contracts/${contractId}/pdf`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`PDF download failed: ${res.status}`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -142,7 +158,10 @@ export const markAllNotificationsRead = () =>
 export const deleteNotification = (id) =>
   request(`/notifications/${id}`, { method: "DELETE" });
 
-// ── Communications ────────────────────────────────────────
+export const checkExpiringContracts = () =>
+  request("/notifications/check-expiring", { method: "POST" });
+
+// ── Communications / Chat ────────────────────────────────
 export const getCommunications = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/communications${qs ? `?${qs}` : ""}`);
@@ -153,6 +172,18 @@ export const createCommunication = (data) =>
 
 export const deleteCommunication = (id) =>
   request(`/communications/${id}`, { method: "DELETE" });
+
+export const getContractMessages = (contractId) =>
+  request(`/contracts/${contractId}/messages`);
+
+export const sendContractMessage = (contractId, data) =>
+  request(`/contracts/${contractId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const analyzeContractTone = (contractId) =>
+  request(`/contracts/${contractId}/analyze-tone`, { method: "POST" });
 
 // ── Renewals ──────────────────────────────────────────────
 export const getRenewals = (params = {}) => {
@@ -168,3 +199,9 @@ export const updateRenewal = (id, data) =>
 
 export const deleteRenewal = (id) =>
   request(`/renewals/${id}`, { method: "DELETE" });
+
+// ── Audit Logs ────────────────────────────────────────────
+export const getAuditLogs = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/audit-logs${qs ? `?${qs}` : ""}`);
+};

@@ -76,3 +76,15 @@ def delete_notification(notification_id):
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@notifications_bp.route("/api/notifications/check-expiring", methods=["POST"])
+def check_expiring():
+    """Check for contracts expiring in 30/15/7 days and create notifications + send emails."""
+    try:
+        from services.notification_service import check_expiring_contracts
+        results = check_expiring_contracts()
+        return jsonify(results)
+    except Exception as e:
+        print(f"[check-expiring] Error: {e}")
+        return jsonify({"error": str(e)}), 500

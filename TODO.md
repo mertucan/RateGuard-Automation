@@ -1,76 +1,104 @@
-# RateGuard - Geliştirme Planı (TODO)
+# Enflasyon Kalkanı - Development Plan (TODO)
 
-## Aşama 1: Temel Arkayüz (Backend) Kurulumu ve Veri Çekme
-- [x] TCMB EVDS API'sinden veri çekme scriptinin (`veri_cekme_tcmb.py`) düzenlenmesi.
-- [x] Hassas verilerin (API Key) gizlenmesi için `.env` yapısına geçilmesi ve `.gitignore` dosyasının oluşturulması.
-- [x] Kurulum talimatlarını içeren `Instructions.md` dosyasının oluşturulması.
-- [x] Backend API yapısının (Flask ile) ayağa kaldırılması.
-- [x] TCMB veri çekme scriptinin bir servis modülü (fonksiyon/API endpoint) haline getirilmesi.
+## Phase 1: Core Backend Setup and Data Fetching
+- [x] TCMB EVDS API data fetching script (`veri_cekme_tcmb.py`) setup.
+- [x] Sensitive data (API Keys) hidden via `.env` structure and `.gitignore`.
+- [x] Setup instructions in `Instructions.md`.
+- [x] Backend API (Flask) initialized.
+- [x] TCMB data fetching script converted to service module / API endpoint.
 
-## Aşama 2: Veri Tabanı ve Veri Modelleri
-- [x] Supabase/PostgreSQL projesinin oluşturulması.
-- [x] Gerekli tabloların (Müşteriler, Sözleşmeler, Finansal Veriler, vb.) tasarlanması.
-- [x] Python üzerinden Supabase'e veri yazma/okuma işlemlerinin (CRUD) entegre edilmesi.
+## Phase 2: Database and Data Models
+- [x] Supabase/PostgreSQL project created.
+- [x] Required tables designed (Companies, Contracts, Financial Data, etc.).
+- [x] Python CRUD operations integrated with Supabase.
 
-## Aşama 3: Hesaplama ve PDF Üretimi
-- [x] Enflasyon ve kur verilerine göre sözleşme tutarı hesaplama logiğinin oluşturulması.
-- [x] Hesaplanan tutarlar doğrultusunda ek sözleşme PDF belgelerinin kod ile otomatik üretilmesi (`reportlab` kütüphanesi ile).
+## Phase 3: Calculation and PDF Generation
+- [x] Inflation and FX-based contract amount calculation logic.
+- [x] Automated addendum PDF generation with `reportlab` (Turkish character support).
 
-## Aşama 4: Yapay Zeka (LLM) Entegrasyonu
-- [x] Gemini API entegrasyonunun yapılması.
-- [x] Müşteriye durumu izah edecek ve hazırlanan PDF'i sunacak profesyonel e-posta taslaklarının yapay zeka ile oluşturulması.
+## Phase 4: AI (LLM) Integration
+- [x] Gemini API integration.
+- [x] AI-generated professional email drafts for contract renewals.
+- [x] **AI Tone Detection**: Gemini analyzes client communications and detects tone (resmi, samimi, profesyonel, notr, cozumcu).
+- [x] **Auto-update company communication_language** based on tone analysis.
 
-## Aşama 5: Önyüz (Frontend) Paneli
-- [x] React (Vite) ile frontend projesinin başlatılması.
-- [x] Dashboard, Renewal Review ve Client Management ekranlarının React sayfaları olarak eklenmesi.
-- [x] Yönetici paneli dashboard tasarımının ve grafiklerin (Recharts) entegrasyonu.
-- [x] Frontend - Backend API iletişiminin sağlanması (Vite proxy + api.js).
-- [x] Müşteri ekleme, sözleşme takibi ve "Onay Bekleyenler" sayfalarının kodlanması.
-- [x] Karanlık mod (dark mode) desteği ve tema sistemi.
-- [x] Analytics sayfası ile tarihsel veri görselleştirme (FX, enflasyon grafikleri).
+## Phase 5: Frontend Panel
+- [x] React (Vite) frontend project initialized.
+- [x] Dashboard, Renewal Review, and Client Management pages created.
+- [x] Admin panel dashboard with charts (Recharts) integration.
+- [x] Frontend-Backend API communication (Vite proxy + api.js).
+- [x] Client management, contract tracking, and "Pending Approvals" pages.
+- [x] Dark mode support and theme system.
+- [x] Analytics page with historical data visualization (FX, inflation charts).
 
-## Aşama 6: Otomasyon ve Canlıya Alma
-- [ ] Her gün sabah saat 08:00'de çalışacak arka plan görevinin (cron job / Celery) kurulması.
-- [ ] Bitiş tarihine 30 gün veya daha az kalmış sözleşmeleri tespit eden sorgunun yazılması.
-- [ ] Çekilen ham verilerin normalize edilip hesaplama motoruna uygun hale getirilmesi.
-- [ ] Onaylanan belgeleri müşteriye göndermek için SMTP/SendGrid e-posta entegrasyonunun yapılması.
-- [ ] Sistemin bütün olarak uçtan uca test edilmesi.
-- [ ] Projenin bulut ortamına (Vercel, Render, Heroku vb.) deploy edilmesi.
+## Phase 6: Authentication & Authorization
+- [x] **User Authentication (Auth)**: Login/Register system with password hashing (Werkzeug).
+- [x] **Login-first flow**: App redirects to login page when not authenticated.
+- [x] **Role-based Registration**: Company Admin registration with automatic company creation, role dropdown on register page.
+- [x] **Auth Middleware**: Backend `@login_required` and `@role_required` decorators for API endpoint protection.
+- [x] **Role-Based Access Control (RBAC)**: Navigation and page access filtered by user role (super_admin, company_admin, finance, sales, client).
+- [x] **Auth Context**: Frontend AuthContext with persistent login state via localStorage.
+- [x] **Protected Routes**: Frontend route protection based on user role.
+
+## Phase 7: Multi-Role System & Communication
+- [x] **Role-specific Dashboards**: Each role sees relevant content (Super Admin sees all, Client sees their contracts, etc.).
+- [x] **Team Management Page**: Company Admins can add/remove finance, sales, and client team members.
+- [x] **Chat System**: Real-time per-contract messaging between Sales and Client users via communications table.
+- [x] **Chat Panel**: Frontend ChatPanel component with role badges, message bubbles, and auto-polling.
+- [x] **AI Tone Analysis Button**: Trigger Gemini to analyze contract chat and update company communication profile.
+
+## Phase 8: Notifications, Audit & Email
+- [x] **Notification System**: In-app notifications for contract expiry (30/15/7 days) with NotificationBell component.
+- [x] **Email Notifications**: SMTP email service for contract expiry alerts and approval confirmations.
+- [x] **Approval Emails with PDF**: When contracts are approved, PDF addendum is automatically emailed to the client.
+- [x] **Audit Log**: All contract approvals, rejections, and drafts are logged with user info, timestamps, and details.
+- [x] **Audit Log Page**: Frontend page to view audit trail with filtering by entity type.
+- [x] **Check Expiring Contracts Endpoint**: API endpoint to scan and create notifications for expiring contracts.
+
+## Phase 9: Branding & Polish
+- [x] **Rebranding**: RateGuard renamed to "Enflasyon Kalkanı" across all components (frontend, backend, PDF, email, AI prompts).
+- [x] **Login/Register Cleanup**: Removed out-of-context text ("Sovereign Intelligence", "Establish Node", "terminal key", etc.).
+- [x] **Modern Auth UI**: Clean, minimal login and register pages consistent with app theme.
+- [x] **Turkish Font Support**: PDF generation uses Arial/DejaVu/Liberation fonts for proper Turkish character rendering.
+
+## Phase 10: Automation & Deployment
+- [ ] Daily cron job (08:00) setup for background tasks (contract expiry check, market data fetch).
+- [ ] Query to detect contracts with ≤30 days until expiry.
+- [ ] Raw data normalization for the calculation engine.
+- [ ] End-to-end system testing.
+- [ ] Cloud deployment (Vercel, Render, Heroku, etc.).
 
 ---
 
-## Öneriler (Gelecek Geliştirmeler)
+## Suggestions (Future Improvements)
 
-### Tamamlanan İyileştirmeler
-- [x] **Hesaplama Kuralı Düzeltmesi**: Dashboard'da tüm sözleşmelerin TUFE+UFE ortalaması yerine, her sözleşmenin kendi `inflation_base_rule` kuralına göre hesaplanması.
-- [x] **Pending Filtresi**: Dashboard ve backend'de onaylanmış/reddedilmiş sözleşmelerin "pending" listesinden çıkarılması.
-- [x] **Email Composer Kontrollü State**: `defaultValue` yerine `value` + `onChange` ile e-posta içeriğinin güncel tutulması.
-- [x] **Analytics Hata Durumları**: Boş veri veya API hatalarında kullanıcıya açıklayıcı mesajlar (ikon, başlık, çözüm önerisi).
-- [x] **Client Management Silme Modalı**: Tarayıcının `confirm()` diyaloğu yerine özel tasarım silme onay penceresi ve toast bildirimleri.
-- [x] **Mobil Uyumluluk**: Navbar hamburger menüsü, KPI kartları, tablolar ve formlar için responsive breakpoint'ler.
-- [x] **Dosya Tabanlı Cache**: Flask debug/reload modunda in-memory cache sıfırlanma sorununu çözmek için `.cache/` dizinine JSON yedekleme.
-- [x] **PDF Kaydedilmiş Değerler**: Draft/approved sözleşmelerde PDF'in canlı TCMB verisi yerine kaydedilmiş `new_amount` ve `applied_adjustment` değerlerini kullanması.
-- [x] **Onay İş Akışı (Approval Workflow)**: Sözleşme yenileme sürecine çok aşamalı onay mekanizması (hesapla → taslak → yönetici onayı → müşteriye gönder).
+### Completed Improvements
+- [x] **Calculation Rule Fix**: Per-contract `inflation_base_rule` instead of global TUFE+UFE average.
+- [x] **Pending Filter**: Approved/rejected contracts excluded from "pending" lists.
+- [x] **Email Composer Controlled State**: `value` + `onChange` instead of `defaultValue`.
+- [x] **Analytics Error States**: User-friendly messages for empty data or API errors.
+- [x] **Client Management Delete Modal**: Custom delete confirmation modal with toast notifications.
+- [x] **Mobile Responsiveness**: Hamburger menu, responsive KPI cards, tables, and forms.
+- [x] **File-Based Cache**: `.cache/` directory JSON backup to prevent in-memory cache loss on Flask reload.
+- [x] **PDF Saved Values**: Draft/approved contracts use saved `new_amount` and `applied_adjustment` in PDF.
+- [x] **Approval Workflow**: Multi-stage approval mechanism (calculate → draft → admin approval → send to client).
+- [x] **Notification System**: Contract expiry notifications (30/15/7 days) via in-app and email.
+- [x] **User Authentication**: Login/register with role-based access control.
+- [x] **RBAC**: Role-based page and feature access (super_admin, company_admin, finance, sales, client).
+- [x] **Audit Log**: Financial transparency log tracking who approved/rejected contracts, when, and with what parameters.
 
-### Yüksek Öncelik
-- [ ] **Bildirim Sistemi**: Sözleşme bitiş tarihi yaklaştığında e-posta ve/veya in-app bildirim gönderme (30/15/7 gün kala).
-- [ ] **Kullanıcı Kimlik Doğrulama (Auth)**: Supabase Auth ile giriş/kayıt sistemi ve kullanıcı giriş ekranı, roller (admin, manager, viewer) ve erişim kontrolü.
-- [ ] **Rol Bazlı Yetkilendirme (RBAC)**: Satış ekibinin sadece metinleri ve sözleşmeleri görebilmesi, Finans ekibinin ise ana hesaplama kurallarını (cap oranlarını) değiştirebilmesi için yetki seviyelerinin ayrılması.
-- [ ] **Geçmişe Dönük Denetim İzi (Audit Log)**: Hangi sözleşmeyi kimin, ne zaman ve hangi oranla onayladığının bir "Log" tablosunda tutulması (finansal şeffaflık için).
+### Medium Priority
+- [ ] **Rich Text Editor**: TinyMCE or similar for manual editing of AI-generated email drafts before sending.
+- [ ] **Multi-Currency Support**: USD, EUR, or TRY-based contracts with automatic FX conversion.
+- [ ] **Contract History & Versioning**: Track each renewal cycle and visualize price change history.
+- [ ] **Dashboard Customization**: Drag-and-drop KPI cards, charts, and widgets.
+- [ ] **Batch Operations**: Multi-select contracts for bulk PDF generation and approval.
+- [ ] **Export**: Export contract lists and analytics data to CSV/Excel format.
 
-### Orta Öncelik
-- [ ] **Manuel Metin Editörü (Rich Text Editor)**: Yöneticinin yapay zekanın ürettiği e-posta taslağını onaylamadan önce manuel olarak düzenleyebilmesi için bir metin editörü (TinyMCE vb.) eklenmesi.
-- [ ] **Çoklu Döviz Desteği**: Sözleşmelerin USD, EUR veya TRY bazlı olabilmesi ve kur dönüşümlerinin otomatik hesaplanması.
-- [ ] **Sözleşme Geçmişi & Versiyon Takibi**: Her yenileme döngüsünün kaydını tutarak fiyat değişim tarihçesini görselleştirme.
-- [ ] **Dashboard Özelleştirme**: Kullanıcıların KPI kartlarını, grafikleri ve widget'ları sürükle-bırak ile düzenlemesi.
-- [ ] **Toplu İşlem (Batch Operations)**: Birden fazla sözleşmeyi aynı anda seçip toplu PDF üretme ve toplu onay gönderme.
-- [ ] **Dışa Aktarma (Export)**: Sözleşme listelerini ve analitik verilerini CSV/Excel formatında dışa aktarma.
-
-### Düşük Öncelik / İleri Seviye
-- [ ] **Çoklu Dil Desteği (i18n)**: Arayüzün Türkçe ve İngilizce arasında geçiş yapabilmesi; EUR/USD bazlı sözleşmelerde PDF ve e-posta taslağının yapay zeka tarafından otomatik olarak müşterinin dilinde oluşturulması.
-- [ ] **Anlık Bildirim Entegrasyonları**: Web paneline bildirim düşmenin ötesinde, kritik müşteriler için Slack veya Microsoft Teams üzerinden satış temsilcisine otomatik mesaj gönderilmesi.
-- [ ] **Webhook Entegrasyonu**: Sözleşme durumu değiştiğinde harici sistemlere (CRM vb.) otomatik bildirim.
-- [ ] **Müşteri Portalı**: Müşterilerin kendi sözleşme durumlarını görebileceği salt okunur portal.
-- [ ] **Gelişmiş Raporlama**: Aylık/çeyreklik otomatik rapor üretimi (toplam sözleşme değeri, ortalama artış, risk dağılımı).
-- [ ] **API Rate Limiting & Logging**: Backend API'ye rate limiter ve yapılandırılmış loglama eklenmesi.
-- [ ] **CI/CD Pipeline**: GitHub Actions ile otomatik test, lint ve deploy süreci.
+### Low Priority / Advanced
+- [ ] **Multi-Language Support (i18n)**: Turkish/English UI toggle; AI-generated PDFs and emails in client's language.
+- [ ] **Instant Notification Integrations**: Slack or Microsoft Teams alerts for critical clients beyond in-app notifications.
+- [ ] **Webhook Integration**: Automatic external system (CRM) notifications on contract status change.
+- [ ] **Advanced Reporting**: Monthly/quarterly automated reports (total contract value, average increase, risk distribution).
+- [ ] **API Rate Limiting & Logging**: Rate limiter and structured logging for the backend API.
+- [ ] **CI/CD Pipeline**: GitHub Actions for automated testing, linting, and deployment.

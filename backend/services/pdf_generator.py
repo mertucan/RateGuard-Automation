@@ -133,7 +133,7 @@ def generate_addendum_pdf(calc):
     ref_id = calc["contract_id"][:8].upper()
 
     # ── Header ──
-    elements.append(Paragraph("RATEGUARD", ParagraphStyle(
+    elements.append(Paragraph("ENFLASYON KALKANI", ParagraphStyle(
         "Brand", parent=s["title"],
         fontName=FONT_BOLD,
         fontSize=14, textColor=BRAND_BLUE, spaceAfter=0,
@@ -157,7 +157,7 @@ def generate_addendum_pdf(calc):
     # ── Parties ──
     elements.append(Paragraph("1. TARAFLAR", s["heading"]))
     elements.append(Paragraph(
-        f"<b>Hizmet Sa\u011flay\u0131c\u0131:</b> RateGuard Systems Inc.", s["body"],
+        f"<b>Hizmet Sa\u011flay\u0131c\u0131:</b> Enflasyon Kalkanı", s["body"],
     ))
     elements.append(Paragraph(
         f"<b>M\u00fc\u015fteri:</b> {calc['company_name']}", s["body"],
@@ -285,7 +285,7 @@ def generate_addendum_pdf(calc):
             [
                 [
                     Paragraph(
-                        f"<b>Hizmet Sa\u011flay\u0131c\u0131</b><br/>RateGuard Systems Inc.",
+                        f"<b>Hizmet Sa\u011flay\u0131c\u0131</b><br/>Enflasyon Kalkanı",
                         s["body"],
                     ),
                     Paragraph(
@@ -320,7 +320,7 @@ def generate_addendum_pdf(calc):
         spaceBefore=8, spaceAfter=6,
     ))
     elements.append(Paragraph(
-        f"Bu belge RateGuard Automation sistemi taraf\u0131ndan otomatik olarak "
+        f"Bu belge Enflasyon Kalkanı sistemi taraf\u0131ndan otomatik olarak "
         f"\u00fcretilmi\u015ftir. Referans: SA-{ref_id}-RNW | {today.strftime('%d.%m.%Y')}",
         s["small"],
     ))

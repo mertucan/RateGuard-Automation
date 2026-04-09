@@ -1,0 +1,105 @@
+import { useEffect, useState } from 'react'
+import { getAuditLogs } from '../api'
+import { PageLoader } from '../components/Spinner'
+
+const ACTION_STYLE = {
+  approve: { icon: 'verified', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+  reject: { icon: 'cancel', color: 'text-red-500', bg: 'bg-red-500/10' },
+  create: { icon: 'add_circle', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  update: { icon: 'edit', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  delete: { icon: 'delete', color: 'text-red-500', bg: 'bg-red-500/10' },
+  login: { icon: 'login', color: 'text-primary', bg: 'bg-primary/10' },
+  draft: { icon: 'edit_note', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+}
+
+export default function AuditLogPage() {
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+
+  useEffect(() => {
+    setLoading(true)
+    const params = {}
+    if (filter !== 'all') params.entity_type = filter
+    getAuditLogs(params)
+      .then(setLogs)
+      .catch((err) => console.error('Audit log error:', err))
+      .finally(() => setLoading(false))
+  }, [filter])
+
+  if (loading) return <PageLoader />
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-bold sm:text-2xl">Audit Log</h2>
+          <p className="mt-1 hidden text-sm text-text-muted sm:block">
+            Track all system actions for compliance and transparency.
+          </p>
+        </div>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
+        >
+          <option value="all">All Types</option>
+          <option value="contract">Contracts</option>
+          <option value="company">Companies</option>
+          <option value="user">Users</option>
+        </select>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+        <div className="mx-auto max-w-4xl">
+          {logs.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-12 text-center">
+              <span className="material-symbols-outlined mb-2 text-4xl text-text-muted">history</span>
+              <p className="text-sm text-text-muted">No audit logs found.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {logs.map((log) => {
+                const style = ACTION_STYLE[log.action] || ACTION_STYLE.update
+                return (
+                  <div
+                    key={log.id}
+                    className="flex items-start gap-4 rounded-xl border border-border bg-surface p-4 transition-colors hover:border-primary/20"
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${style.bg}`}
+                    >
+                      <span className={`material-symbols-outlined text-lg ${style.color}`}>
+                        {style.icon}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold">{log.user_name || 'System'}</span>
+                        <span className="rounded-full bg-surface-alt px-2 py-0.5 text-[10px] font-semibold text-text-muted uppercase">
+                          {log.action}
+                        </span>
+                        <span className="text-xs text-text-muted">{log.entity_type}</span>
+                      </div>
+                      {log.details && (
+                        <p className="mt-1 text-xs text-text-muted">
+                          {typeof log.details === 'object'
+                            ? JSON.stringify(log.details)
+                            : log.details}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[10px] text-text-muted">
+                        {new Date(log.created_at).toLocaleString('tr-TR')}
+                        {log.entity_id && ` \u2022 ID: ${log.entity_id.slice(0, 8)}`}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,7 +1,8 @@
 import uuid
 from datetime import date, timedelta, datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from services.supabase_client import supabase
+from services.auth_middleware import login_required, role_required
 
 contracts_bp = Blueprint("contracts", __name__)
 
@@ -76,8 +77,9 @@ def update_contract(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/save-draft", methods=["POST"])
+@login_required
 def save_draft(contract_id):
-    """Sozlesme degerlerini taslak olarak kaydeder."""
+    """Save contract values as draft and log the action."""
     body = request.get_json()
     allowed = [
         "previous_amount", "end_date", "inflation_base_rule",
@@ -94,8 +96,9 @@ def save_draft(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/reject", methods=["POST"])
+@login_required
 def reject_contract(contract_id):
-    """Sozlesme yenilemesini reddeder."""
+    """Reject contract renewal and log the action."""
     body = request.get_json() or {}
     data = {
         "status": "rejected",
@@ -103,6 +106,18 @@ def reject_contract(contract_id):
     }
     try:
         result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
+
+        from routes.audit_logs import log_audit
+        user = g.current_user
+        log_audit(
+            user_id=user["id"],
+            user_name=user["full_name"],
+            action="reject",
+            entity_type="contract",
+            entity_id=contract_id,
+            details={"rejection_notes": body.get("rejection_notes", "")},
+        )
+
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[reject] Error: {e}")
@@ -110,8 +125,9 @@ def reject_contract(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/approve", methods=["POST"])
+@login_required
 def approve_contract(contract_id):
-    """Sozlesme yenilemesini onaylar ve final degerleri kaydeder."""
+    """Approve contract renewal and log the action."""
     body = request.get_json() or {}
     data = {
         "status": "approved",
@@ -121,6 +137,40 @@ def approve_contract(contract_id):
     }
     try:
         result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
+
+        from routes.audit_logs import log_audit
+        user = g.current_user
+        log_audit(
+            user_id=user["id"],
+            user_name=user["full_name"],
+            action="approve",
+            entity_type="contract",
+            entity_id=contract_id,
+            details={
+                "new_amount": body.get("new_amount"),
+                "applied_adjustment": body.get("applied_adjustment"),
+            },
+        )
+
+        from services.email_service import send_approval_email
+        from services.calculation import calculate_renewal
+        from services.pdf_generator import generate_addendum_pdf
+        try:
+            calc = calculate_renewal(contract_id)
+            company_email = calc.get("company_email")
+            if company_email:
+                pdf_buf = generate_addendum_pdf(calc)
+                pdf_bytes = pdf_buf.read()
+                company_name = calc.get("company_name", "")
+                filename = f"EkSozlesme_{company_name.replace(' ', '_')}.pdf"
+                send_approval_email(
+                    company_email, company_name,
+                    body.get("new_amount", 0),
+                    pdf_bytes=pdf_bytes, pdf_filename=filename,
+                )
+        except Exception as email_err:
+            print(f"[approve] Email send error (non-blocking): {email_err}")
+
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[approve] Error: {e}")

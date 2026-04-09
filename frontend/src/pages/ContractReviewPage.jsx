@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { PageLoader } from '../components/Spinner'
+import ChatPanel from '../components/ChatPanel'
+import { useAuth } from '../contexts/AuthContext'
 import {
   getContracts,
   getContract,
@@ -13,6 +15,7 @@ import {
   rejectContract,
   approveContract,
   generateEmailDraft,
+  analyzeContractTone,
 } from '../api'
 
 const STATUS_MAP = {
@@ -750,13 +753,13 @@ function ContractDetail() {
                 </div>
                 <div className="max-h-[600px] overflow-y-auto bg-neutral-200 p-4 sm:p-8">
                   <div className="mx-auto min-h-[842px] w-full max-w-[595px] bg-white p-8 font-serif text-[10px] text-gray-800 shadow-lg sm:p-12">
-                    <h1 className="mb-1 font-sans text-sm font-bold text-blue-600">RATEGUARD</h1>
+                    <h1 className="mb-1 font-sans text-sm font-bold text-blue-600">ENFLASYON KALKANI</h1>
                     <hr className="mb-4 border-blue-600" />
                     <h2 className="mb-4 text-lg font-bold">EK SÖZLEŞME / CONTRACT ADDENDUM</h2>
                     <p className="mb-1 text-[9px] text-gray-500">Ref: SA-{contract.id.slice(0, 8).toUpperCase()}-RNW | Tarih: {new Date().toLocaleDateString('tr-TR')}</p>
                     <div className="my-4 h-px bg-gray-200" />
                     <p className="mb-2 font-bold">1. TARAFLAR</p>
-                    <p className="mb-1">Hizmet Sağlayıcı: RateGuard Systems Inc.</p>
+                    <p className="mb-1">Hizmet Sağlayıcı: Enflasyon Kalkanı</p>
                     <p className="mb-4">Müşteri: {companyName}</p>
                     <p className="mb-2 font-bold">2. FİYAT HESAPLAMASI</p>
                     <table className="mt-2 w-full text-left">
@@ -780,8 +783,11 @@ function ContractDetail() {
               </section>
             </div>
 
-            {/* Email Composer + Approve */}
-            <div className="xl:col-span-5">
+            {/* Email Composer + Chat + Approve */}
+            <div className="xl:col-span-5 space-y-6">
+              {/* Chat Panel */}
+              <ChatPanel contractId={id} />
+
               <section className="sticky top-8 flex h-full flex-col rounded-xl border border-border bg-surface">
                 <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
                   <h3 className="text-lg font-bold text-primary">AI Email Composer</h3>
@@ -858,10 +864,24 @@ function ContractDetail() {
                     </>
                   )}
                 </div>
-                <div className="border-t border-border bg-surface-alt p-4 sm:p-6">
+                <div className="border-t border-border bg-surface-alt p-4 sm:p-6 space-y-3">
                   <button onClick={() => setShowApproveModal(true)} disabled={saving || isFinalized}
                     className="w-full rounded-lg bg-primary py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-50">
                     {contractStatus === 'approved' ? 'Already Approved' : contractStatus === 'rejected' ? 'Rejected' : 'Approve & Send Renewal'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const result = await analyzeContractTone(id)
+                        showToast(`Tone detected: ${result.tone} (${result.messages_analyzed} messages analyzed)`)
+                      } catch (err) {
+                        showToast('Tone analysis failed: ' + err.message, 'error')
+                      }
+                    }}
+                    className="w-full rounded-lg border border-border py-2.5 text-xs font-semibold text-text-muted transition-colors hover:bg-hover flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">psychology</span>
+                    Analyze Communication Tone (AI)
                   </button>
                 </div>
               </section>

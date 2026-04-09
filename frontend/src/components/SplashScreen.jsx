@@ -27,7 +27,7 @@ export default function SplashScreen({ children }) {
             <span className="material-symbols-outlined filled text-5xl text-primary">shield</span>
           </div>
           <div className="splash-text flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight text-text">RateGuard</span>
+            <span className="text-xl font-bold tracking-tight text-text">Enflasyon Kalkan&#305;</span>
           </div>
           <div className="splash-spinner mt-2">
             <div className="h-6 w-6 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />

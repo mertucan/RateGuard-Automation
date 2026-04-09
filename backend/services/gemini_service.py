@@ -9,9 +9,9 @@ FALLBACK_MODEL = "gemini-2.0-flash-lite"
 
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
-    print(f"[RateGuard] Gemini API hazır. Model: {GEMINI_MODEL} | Yedek: {FALLBACK_MODEL}")
+    print(f"[Enflasyon Kalkani] Gemini API ready. Model: {GEMINI_MODEL} | Fallback: {FALLBACK_MODEL}")
 else:
-    print("[RateGuard] UYARI: GEMINI_API_KEY bulunamadı!")
+    print("[Enflasyon Kalkani] WARNING: GEMINI_API_KEY not found!")
 
 
 def generate_email_draft(calc_data: dict) -> dict:
@@ -41,7 +41,7 @@ def generate_email_draft(calc_data: dict) -> dict:
 
     tone_instruction = _get_tone_instruction(tone)
 
-    system_prompt = f"""Sen RateGuard adlı sözleşme yönetim ve fiyat güncelleme platformunun profesyonel iş yazışma asistanısın.
+    system_prompt = f"""Sen Enflasyon Kalkanı adlı sözleşme yönetim ve fiyat güncelleme platformunun profesyonel iş yazışma asistanısın.
 
 E-posta taslağını Türkçe yaz.
 
@@ -54,7 +54,7 @@ KURALLAR:
 - Markdown, kod blokları veya ekstra biçimlendirme KULLANMA
 - JSON dışında herhangi bir açıklama YAZMA
 - Konu kısa ve profesyonel olsun
-- E-postayı "RateGuard Ekibi" olarak imzala"""
+- E-postayı "Enflasyon Kalkanı Ekibi" olarak imzala"""
 
     user_prompt = f"""Aşağıdaki verilere dayanarak, müşteriye hizmet sözleşmesinin yenilenmesi hakkında bilgilendirme e-postası oluştur.
 
@@ -104,15 +104,56 @@ SÖZLEŞME VERİLERİ:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                print(f"[RateGuard] Kota dolu ({model_name}), yedek model deneniyor...")
+                print(f"[Enflasyon Kalkani] Quota exhausted ({model_name}), trying fallback...")
                 continue
-            print(f"[RateGuard] API Hatası ({model_name}): {e}")
+            print(f"[Enflasyon Kalkani] API Error ({model_name}): {e}")
             continue
 
     if not reply:
         raise RuntimeError("Gemini API kotası doldu. Lütfen birkaç dakika bekleyip tekrar deneyin.")
 
     return _parse_response(reply)
+
+
+def analyze_communication_tone(messages: list) -> str:
+    """
+    Analyze a list of communication message texts and detect the overall tone.
+    Returns one of: resmi, samimi, profesyonel, notr, cozumcu
+    """
+    if not client:
+        return "profesyonel"
+
+    combined = "\n---\n".join(messages[:20])
+
+    prompt = f"""Analyze the following customer communication messages and determine the overall communication tone.
+
+Messages:
+{combined}
+
+Return ONLY one of these exact words (nothing else): resmi, samimi, profesyonel, notr, cozumcu"""
+
+    config = types.GenerateContentConfig(
+        temperature=0.3,
+        max_output_tokens=50,
+    )
+    contents = [types.Content(role="user", parts=[types.Part(text=prompt)])]
+
+    models_to_try = [GEMINI_MODEL, FALLBACK_MODEL]
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name, contents=contents, config=config,
+            )
+            tone = response.text.strip().lower()
+            valid_tones = {"resmi", "samimi", "profesyonel", "notr", "cozumcu"}
+            if tone in valid_tones:
+                return tone
+            return "profesyonel"
+        except Exception as e:
+            print(f"[Tone Analysis] Error ({model_name}): {e}")
+            continue
+
+    return "profesyonel"
 
 
 def _get_tone_instruction(tone: str) -> str:

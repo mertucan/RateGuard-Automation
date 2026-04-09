@@ -1,43 +1,65 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../hooks/useTheme'
+import { useAuth } from '../contexts/AuthContext'
+import NotificationBell from './NotificationBell'
 
-const navItems = [
-  { to: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-  { to: '/renewal-review', icon: 'description', label: 'Contracts' },
-  { to: '/clients', icon: 'group', label: 'Clients' },
-  { to: '/analytics', icon: 'monitoring', label: 'Analytics' },
+const ALL_NAV_ITEMS = [
+  { to: '/dashboard', icon: 'dashboard', label: 'Dashboard', roles: null },
+  { to: '/renewal-review', icon: 'description', label: 'Contracts', roles: ['super_admin', 'company_admin', 'finance', 'sales'] },
+  { to: '/clients', icon: 'group', label: 'Clients', roles: ['super_admin', 'company_admin', 'sales'] },
+  { to: '/analytics', icon: 'monitoring', label: 'Analytics', roles: ['super_admin', 'company_admin', 'finance'] },
+  { to: '/team', icon: 'manage_accounts', label: 'Team', roles: ['super_admin', 'company_admin'] },
+  { to: '/audit-log', icon: 'history', label: 'Audit Log', roles: ['super_admin', 'company_admin', 'finance'] },
 ]
 
 export default function Layout({ children }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { dark, toggle } = useTheme()
+  const { user, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const navItems = ALL_NAV_ITEMS.filter(
+    (item) => !item.roles || (user && item.roles.includes(user.role))
+  )
 
   const isActive = (path) =>
     path === '/renewal-review'
       ? location.pathname.startsWith('/renewal-review')
       : location.pathname === path
 
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const ROLE_LABEL = {
+    super_admin: 'Super Admin',
+    company_admin: 'Company Admin',
+    finance: 'Finance',
+    sales: 'Sales',
+    client: 'Client',
+  }
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-bg text-text">
-      {/* Top Navbar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
         <div className="flex items-center gap-4 sm:gap-8">
-          {/* Mobile menu button */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover sm:hidden"
           >
-            <span className="material-symbols-outlined text-[22px]">{mobileOpen ? 'close' : 'menu'}</span>
+            <span className="material-symbols-outlined text-[22px]">
+              {mobileOpen ? 'close' : 'menu'}
+            </span>
           </button>
 
           <Link to="/dashboard" className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary filled text-xl">shield</span>
-            <span className="text-lg font-bold tracking-tight">RateGuard</span>
+            <span className="text-lg font-bold tracking-tight">Enflasyon Kalkanı</span>
           </Link>
 
-          {/* Desktop nav */}
           <nav className="hidden items-center gap-1 sm:flex">
             {navItems.map((item) => (
               <Link
@@ -49,7 +71,9 @@ export default function Layout({ children }) {
                     : 'text-text-muted hover:bg-hover hover:text-text'
                 }`}
               >
-                <span className={`material-symbols-outlined text-[18px] ${isActive(item.to) ? 'filled' : ''}`}>
+                <span
+                  className={`material-symbols-outlined text-[18px] ${isActive(item.to) ? 'filled' : ''}`}
+                >
                   {item.icon}
                 </span>
                 {item.label}
@@ -59,6 +83,7 @@ export default function Layout({ children }) {
         </div>
 
         <div className="flex items-center gap-3">
+          <NotificationBell />
           <button
             onClick={toggle}
             className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-text"
@@ -69,11 +94,24 @@ export default function Layout({ children }) {
             </span>
           </button>
           <div className="hidden h-5 w-px bg-border sm:block" />
-          <span className="hidden text-xs text-text-muted sm:inline">admin@rateguard.io</span>
+          <div className="hidden sm:flex items-center gap-2">
+            <div className="text-right">
+              <span className="block text-xs font-medium text-text">{user?.full_name || 'User'}</span>
+              <span className="block text-[10px] text-text-muted">
+                {ROLE_LABEL[user?.role] || user?.role}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-red-500"
+            title="Logout"
+          >
+            <span className="material-symbols-outlined text-[20px]">logout</span>
+          </button>
         </div>
       </header>
 
-      {/* Mobile nav dropdown */}
       {mobileOpen && (
         <nav className="flex flex-col border-b border-border bg-surface px-4 py-2 sm:hidden">
           {navItems.map((item) => (
@@ -87,19 +125,25 @@ export default function Layout({ children }) {
                   : 'text-text-muted hover:bg-hover hover:text-text'
               }`}
             >
-              <span className={`material-symbols-outlined text-[18px] ${isActive(item.to) ? 'filled' : ''}`}>
+              <span
+                className={`material-symbols-outlined text-[18px] ${isActive(item.to) ? 'filled' : ''}`}
+              >
                 {item.icon}
               </span>
               {item.label}
             </Link>
           ))}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-red-500 transition-colors hover:bg-hover"
+          >
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+            Logout
+          </button>
         </nav>
       )}
 
-      {/* Page Content */}
-      <main className="flex h-full flex-1 flex-col overflow-hidden">
-        {children}
-      </main>
+      <main className="flex h-full flex-1 flex-col overflow-hidden">{children}</main>
     </div>
   )
 }

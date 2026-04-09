@@ -23,13 +23,14 @@ def register():
     password = body.get("password") or ""
     role = (body.get("role") or "client").strip()
     company_id = body.get("company_id")
+    company_name = (body.get("company_name") or "").strip()
 
     if not full_name or not email or not password:
-        return jsonify({"error": "full_name, email ve password zorunludur."}), 400
+        return jsonify({"error": "full_name, email and password are required."}), 400
     if len(password) < 8:
-        return jsonify({"error": "Şifre en az 8 karakter olmalıdır."}), 400
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
     if role not in VALID_ROLES:
-        return jsonify({"error": "Geçersiz rol değeri."}), 400
+        return jsonify({"error": "Invalid role."}), 400
 
     try:
         exists = (
@@ -40,7 +41,18 @@ def register():
             .execute()
         )
         if exists.data:
-            return jsonify({"error": "Bu e-posta zaten kayıtlı."}), 409
+            return jsonify({"error": "This email is already registered."}), 409
+
+        if role == "company_admin" and company_name and not company_id:
+            company_data = {
+                "company_name": company_name,
+                "authorized_email": email,
+                "is_tenant": True,
+                "communication_language": "profesyonel",
+            }
+            company_result = supabase.table("companies").insert(company_data).execute()
+            if company_result.data:
+                company_id = company_result.data[0]["id"]
 
         password_hash = generate_password_hash(password)
         data = {

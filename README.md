@@ -1,4 +1,4 @@
-# Proje Adı: RateGuard
+# Proje Adı: Enflasyon Kalkanı
 
 ## Hakkında
 Bu proje, şirketlerin yüksek enflasyonlu dönemlerde yaşadıkları sözleşme yenileme unutkanlıklarını, hesaplama hatalarını ve finansal kayıpları engellemek amacıyla geliştirilmiş otonom bir sözleşme yenileme sistemidir. İnsan müdahalesi gerektirmeyen, dış API'lerle haberleşen ve veri odaklı bir otomasyon mimarisine sahiptir.
