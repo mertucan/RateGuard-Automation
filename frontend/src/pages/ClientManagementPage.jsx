@@ -5,7 +5,6 @@ import Spinner from '../components/Spinner'
 const emptyForm = {
   company_name: '',
   authorized_email: '',
-  risk_score: '',
 }
 
 function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
@@ -85,17 +84,13 @@ export default function ClientManagementPage() {
     setForm({
       company_name: client.company_name || '',
       authorized_email: client.authorized_email || '',
-      risk_score: client.risk_score ?? '',
     })
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const payload = {
-        ...form,
-        risk_score: form.risk_score === '' ? null : Number(form.risk_score),
-      }
+      const payload = { ...form }
       if (isNew) {
         await createCompany(payload)
         showToast('Company created successfully')
@@ -139,23 +134,6 @@ export default function ClientManagementPage() {
     setSelected(null)
     setIsNew(false)
     setForm(emptyForm)
-  }
-
-  const riskLabel = (score) => {
-    if (score == null) return { text: '—', color: 'text-text-muted' }
-    if (score >= 70) return { text: `High (${score})`, color: 'text-red-500' }
-    if (score >= 30) return { text: `Medium (${score})`, color: 'text-amber-500' }
-    return { text: `Low (${score})`, color: 'text-emerald-500' }
-  }
-
-  const statusBadge = (status) => {
-    const map = {
-      Active: 'bg-emerald-500/10 text-emerald-500',
-      Renewing: 'bg-amber-500/10 text-amber-500',
-      Critical: 'bg-red-500/10 text-red-500',
-      Paused: 'bg-text-muted/10 text-text-muted',
-    }
-    return map[status] || 'bg-text-muted/10 text-text-muted'
   }
 
   const formatCurrency = (n) =>
@@ -219,32 +197,23 @@ export default function ClientManagementPage() {
                       <th className="px-4 py-3 sm:px-6 sm:py-4">Company Name</th>
                       <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">Contact</th>
                       <th className="hidden px-4 py-3 md:table-cell sm:px-6 sm:py-4">Contract Value</th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">Risk</th>
-                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">Status</th>
                       <th className="px-4 py-3 text-right sm:px-6 sm:py-4">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {clients.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-text-muted">
+                        <td colSpan={4} className="px-6 py-8 text-center text-sm text-text-muted">
                           No clients found.
                         </td>
                       </tr>
                     )}
                     {clients.map((c) => {
-                      const risk = riskLabel(c.risk_score)
                       return (
                         <tr className="transition-colors hover:bg-hover" key={c.id}>
                           <td className="px-4 py-3 font-medium sm:px-6 sm:py-4">{c.company_name}</td>
                           <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">{c.authorized_email}</td>
                           <td className="hidden px-4 py-3 text-sm font-medium md:table-cell sm:px-6 sm:py-4">{formatCurrency(c.contract_value)}</td>
-                          <td className={`px-4 py-3 text-sm sm:px-6 sm:py-4 ${risk.color}`}>{risk.text}</td>
-                          <td className="hidden px-4 py-3 text-sm sm:table-cell sm:px-6 sm:py-4">
-                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusBadge(c.status)}`}>
-                              {c.status}
-                            </span>
-                          </td>
                           <td className="px-4 py-3 text-right text-sm font-medium sm:px-6 sm:py-4">
                             <button onClick={() => openEdit(c)} className="text-primary hover:text-primary-dark">
                               Edit
@@ -285,17 +254,6 @@ export default function ClientManagementPage() {
                   value={form.authorized_email}
                   onChange={(e) => setForm({ ...form, authorized_email: e.target.value })}
                   type="email"
-                />
-              </div>
-              <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Risk Score (0-100)</h4>
-                <input
-                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  value={form.risk_score}
-                  onChange={(e) => setForm({ ...form, risk_score: e.target.value })}
-                  type="number"
-                  min="0"
-                  max="100"
                 />
               </div>
             </div>

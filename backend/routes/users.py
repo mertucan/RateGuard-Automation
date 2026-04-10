@@ -1,6 +1,10 @@
+import random
+import string
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.supabase_client import supabase
+from services.email_service import send_email
 
 users_bp = Blueprint("users", __name__)
 
@@ -190,4 +194,111 @@ def delete_user(user_id):
         supabase.table("users").delete().eq("id", user_id).execute()
         return jsonify({"ok": True})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Forgot / Reset Password ────────────────────────────────────────────────────
+
+@users_bp.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    body = request.get_json() or {}
+    email = (body.get("email") or "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email address is required."}), 400
+
+    try:
+        result = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+        if not result.data:
+            # Return success even if email not found (security best practice)
+            return jsonify({"ok": True, "message": "If that email exists, a reset code has been sent."})
+
+        code = "".join(random.choices(string.digits, k=6))
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+
+        # Remove any existing unused codes for this email
+        supabase.table("password_reset_codes").delete().eq("email", email).eq("used", False).execute()
+
+        # Insert new code
+        supabase.table("password_reset_codes").insert({
+            "email": email,
+            "code": code,
+            "expires_at": expires_at,
+            "used": False,
+        }).execute()
+
+        # Send email
+        body_html = f"""
+        <div style="font-family: Inter, Arial, sans-serif; max-width: 520px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
+            </div>
+            <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+                <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Password Reset Request</h2>
+                <p style="color: #64748b; line-height: 1.6;">
+                    We received a request to reset your password. Use the 6-digit code below:
+                </p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #136dec; background: #f0f7ff; padding: 16px 24px; border-radius: 12px; border: 2px solid #bfdbfe;">
+                        {code}
+                    </span>
+                </div>
+                <p style="color: #64748b; line-height: 1.6; font-size: 13px;">
+                    This code expires in <strong>15 minutes</strong>. If you did not request a password reset, you can safely ignore this email.
+                </p>
+            </div>
+            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
+                RateGuard &mdash; Automated Contract Management
+            </p>
+        </div>
+        """
+        send_email(email, "Your RateGuard Password Reset Code", body_html)
+
+        return jsonify({"ok": True, "message": "If that email exists, a reset code has been sent."})
+    except Exception as e:
+        print(f"[auth/forgot-password] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@users_bp.route("/api/auth/reset-password", methods=["POST"])
+def reset_password():
+    body = request.get_json() or {}
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    new_password = body.get("new_password") or ""
+
+    if not email or not code or not new_password:
+        return jsonify({"error": "Email, code, and new password are required."}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+    if not code.isdigit() or len(code) != 6:
+        return jsonify({"error": "Invalid reset code format."}), 400
+
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            supabase.table("password_reset_codes")
+            .select("*")
+            .eq("email", email)
+            .eq("code", code)
+            .eq("used", False)
+            .gte("expires_at", now)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return jsonify({"error": "Invalid or expired reset code. Please request a new one."}), 400
+
+        record = result.data[0]
+
+        # Mark code as used
+        supabase.table("password_reset_codes").update({"used": True}).eq("id", record["id"]).execute()
+
+        # Update user password
+        new_hash = generate_password_hash(new_password)
+        supabase.table("users").update({"password_hash": new_hash}).eq("email", email).execute()
+
+        return jsonify({"ok": True, "message": "Password updated successfully."})
+    except Exception as e:
+        print(f"[auth/reset-password] Error: {e}")
         return jsonify({"error": str(e)}), 500

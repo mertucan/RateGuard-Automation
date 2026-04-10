@@ -21,32 +21,12 @@ def list_companies():
         print(f"[companies] Supabase error: {e}")
         return jsonify({"error": str(e)}), 500
 
-    today = date.today()
-    t30 = str(today + timedelta(days=30))
-    t60 = str(today + timedelta(days=60))
-    today_s = str(today)
-
     companies = []
     for c in result.data:
         contracts = c.pop("contracts", None) or []
         total_value = sum(ct.get("previous_amount", 0) or 0 for ct in contracts)
 
-        status = "Active"
-        if not contracts:
-            status = "Paused"
-        else:
-            end_dates = [ct["end_date"] for ct in contracts if ct.get("end_date")]
-            if end_dates:
-                nearest = min(end_dates)
-                if nearest <= today_s:
-                    status = "Critical"
-                elif nearest <= t30:
-                    status = "Critical"
-                elif nearest <= t60:
-                    status = "Renewing"
-
         c["contract_value"] = total_value
-        c["status"] = status
         companies.append(c)
 
     return jsonify(companies)
@@ -73,7 +53,6 @@ def create_company():
     data = {
         "company_name": body["company_name"],
         "authorized_email": body["authorized_email"],
-        "risk_score": body.get("risk_score"),
         "communication_language": body.get("communication_language", "profesyonel"),
     }
     result = supabase.table("companies").insert(data).execute()
@@ -83,7 +62,7 @@ def create_company():
 @companies_bp.route("/api/companies/<company_id>", methods=["PUT"])
 def update_company(company_id):
     body = request.get_json()
-    allowed = ["company_name", "authorized_email", "risk_score", "communication_language"]
+    allowed = ["company_name", "authorized_email", "communication_language"]
     data = {k: v for k, v in body.items() if k in allowed}
     result = supabase.table("companies").update(data).eq("id", company_id).execute()
     return jsonify(result.data[0])

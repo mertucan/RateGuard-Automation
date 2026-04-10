@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ToastProvider } from './contexts/ToastContext'
 import MainDashboardPage from './pages/MainDashboardPage'
 import ContractReviewPage from './pages/ContractReviewPage'
 import ClientManagementPage from './pages/ClientManagementPage'
@@ -10,6 +11,7 @@ import Layout from './components/Layout'
 import SplashScreen from './components/SplashScreen'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import { PageLoader } from './components/Spinner'
 
 function ProtectedRoute({ children, roles }) {
@@ -34,10 +36,8 @@ function AppRoutes() {
         element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
       />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-      <Route
-        path="/register"
-        element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
-      />
+      <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
 
       <Route
         path="/dashboard"
@@ -66,7 +66,7 @@ function AppRoutes() {
       <Route
         path="/clients"
         element={
-          <ProtectedRoute roles={['super_admin', 'company_admin', 'sales']}>
+          <ProtectedRoute roles={['super_admin', 'company_admin']}>
             <Layout><ClientManagementPage /></Layout>
           </ProtectedRoute>
         }
@@ -102,11 +102,13 @@ function AppRoutes() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <SplashScreen>
-          <AppRoutes />
-        </SplashScreen>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <SplashScreen>
+            <AppRoutes />
+          </SplashScreen>
+        </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   )
 }

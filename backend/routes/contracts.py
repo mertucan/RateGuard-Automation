@@ -10,15 +10,19 @@ contracts_bp = Blueprint("contracts", __name__)
 @contracts_bp.route("/api/contracts", methods=["GET"])
 def list_contracts():
     company_id = request.args.get("company_id")
+    tenant_company_id = request.args.get("tenant_company_id")
     pending = request.args.get("pending")
 
     try:
         query = supabase.table("contracts").select(
-            "*, companies!contracts_company_id_fkey(company_name, authorized_email)"
+            "*, companies!contracts_company_id_fkey(company_name, authorized_email, is_tenant)"
         )
 
         if company_id:
             query = query.eq("company_id", company_id)
+
+        if tenant_company_id:
+            query = query.eq("tenant_company_id", tenant_company_id)
 
         if pending == "true":
             cutoff = (date.today() + timedelta(days=60)).isoformat()
@@ -50,17 +54,29 @@ def get_contract(contract_id):
 @contracts_bp.route("/api/contracts", methods=["POST"])
 def create_contract():
     body = request.get_json()
+    
+    end_date = body.get("end_date")
+    if not end_date:  # Convert empty strings to None to prevent DB cast errors
+        end_date = None
+
     data = {
         "id": str(uuid.uuid4()),
         "company_id": body["company_id"],
+        "tenant_company_id": body.get("tenant_company_id"),
         "previous_amount": body["previous_amount"],
-        "end_date": body.get("end_date"),
+        "end_date": end_date,
         "inflation_base_rule": body.get("inflation_base_rule", "TUFE"),
         "max_increase_limit": body.get("max_increase_limit"),
         "status": "active",
     }
-    result = supabase.table("contracts").insert(data).execute()
-    return jsonify(result.data[0]), 201
+    
+    try:
+        result = supabase.table("contracts").insert(data).execute()
+        return jsonify(result.data[0]), 201
+    except Exception as e:
+        print(f"[contracts create] Error: {e}")
+        # The frontend API wrapper automatically extracts `json.error` or `json.message` from 400+ responses
+        return jsonify({"error": str(e)}), 400
 
 
 @contracts_bp.route("/api/contracts/<contract_id>", methods=["PUT"])

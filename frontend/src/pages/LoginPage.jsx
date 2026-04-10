@@ -1,27 +1,27 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { loginUser } from '../api'
 
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const { error: toastError } = useToast()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
     setLoading(true)
     try {
       const user = await loginUser({ email, password })
       login(user)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials.')
+      toastError(err.message || 'Login failed. Please check your credentials.')
     } finally {
       setLoading(false)
     }
@@ -40,7 +40,7 @@ export default function LoginPage() {
           >
             security
           </span>
-          Enflasyon Kalkanı
+          RateGuard
         </div>
         <div className="mt-2 text-xs uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
           Contract Management Platform
@@ -102,22 +102,28 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div className="flex items-center py-2">
-                <input
-                  className="h-4 w-4 rounded bg-surface-container-highest border-outline-variant/40 text-primary focus:ring-primary/20"
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                />
-                <label
-                  className="ml-2.5 block text-xs font-medium text-on-surface cursor-pointer opacity-90"
-                  htmlFor="remember-me"
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center">
+                  <input
+                    className="h-4 w-4 rounded bg-surface-container-highest border-outline-variant/40 text-primary focus:ring-primary/20"
+                    id="remember-me"
+                    name="remember-me"
+                    type="checkbox"
+                  />
+                  <label
+                    className="ml-2.5 block text-xs font-medium text-on-surface cursor-pointer opacity-90"
+                    htmlFor="remember-me"
+                  >
+                    Remember me
+                  </label>
+                </div>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-primary hover:underline decoration-primary/30 underline-offset-4 transition-all"
                 >
-                  Remember me
-                </label>
+                  Forgot password?
+                </Link>
               </div>
-
-              {error && <p className="text-sm text-red-400">{error}</p>}
 
               <button
                 className="w-full primary-gradient text-on-primary font-bold py-3.5 rounded-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:shadow-primary/30 text-base disabled:opacity-60"
@@ -147,7 +153,7 @@ export default function LoginPage() {
       </div>
 
       <footer className="mt-auto pt-16 pb-8 w-full flex justify-center items-center px-12 text-on-surface-variant font-['Inter'] text-[10px] uppercase tracking-[0.2em] opacity-50">
-        <div>&copy; 2026 Enflasyon Kalkanı</div>
+        <div>&copy; 2026 RateGuard</div>
       </footer>
     </div>
   )

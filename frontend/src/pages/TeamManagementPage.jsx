@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { getUsers, createUser, deleteUser } from '../api'
+import { getUsers, updateUser, deleteUser } from '../api'
 import { PageLoader } from '../components/Spinner'
 
 const ROLE_OPTIONS = [
@@ -20,22 +20,31 @@ const ROLE_BADGES = {
 export default function TeamManagementPage() {
   const { user } = useAuth()
   const [users, setUsers] = useState([])
+  const [clients, setClients] = useState([])
+  const [clientSearch, setClientSearch] = useState('')
+  const [selectedClient, setSelectedClient] = useState(null)
+  const [isClientsLoading, setIsClientsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'finance' })
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [form, setForm] = useState({ role: 'finance' })
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
-
+  
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
   }
 
   const load = useCallback(async () => {
+    setLoading(true)
     try {
       const params = {}
       if (user?.role === 'company_admin' && user?.company_id) {
         params.company_id = user.company_id
+      }
+      if (roleFilter !== 'all') {
+        params.role = roleFilter
       }
       const data = await getUsers(params)
       setUsers(data)
@@ -44,22 +53,54 @@ export default function TeamManagementPage() {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, roleFilter])
 
   useEffect(() => {
     load()
   }, [load])
 
+  const loadClients = useCallback(async () => {
+    setIsClientsLoading(true)
+    try {
+      // Fetch users with role client
+      const data = await getUsers({ role: 'client' })
+      setClients(data)
+    } catch (err) {
+      console.error('Clients load error:', err)
+    } finally {
+      setIsClientsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showForm) {
+      loadClients()
+      setClientSearch('')
+      setSelectedClient(null)
+    }
+  }, [showForm, loadClients])
+
+  const filteredClients = clients.filter(c => 
+    c.full_name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+    c.email.toLowerCase().includes(clientSearch.toLowerCase())
+  )
+
   const handleCreate = async () => {
+    if (!selectedClient) {
+      showToast('Please select a user first.', 'error')
+      return
+    }
     setSaving(true)
     try {
-      await createUser({
-        ...form,
+      await updateUser(selectedClient.id, {
+        role: form.role,
         company_id: user?.company_id || null,
       })
       setShowForm(false)
-      setForm({ full_name: '', email: '', password: '', role: 'finance' })
-      showToast('User created successfully')
+      setForm({ role: 'finance' })
+      setSelectedClient(null)
+      setClientSearch('')
+      showToast('User added to team successfully')
       await load()
     } catch (err) {
       showToast('Failed: ' + err.message, 'error')
@@ -105,12 +146,24 @@ export default function TeamManagementPage() {
             Manage your team members and their roles.
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
-        >
-          {showForm ? 'Cancel' : 'Add Member'}
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
+          >
+            <option value="all">All Roles</option>
+            {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            {user?.role === 'super_admin' && <option value="super_admin">Super Admin</option>}
+            {user?.role === 'super_admin' && <option value="company_admin">Company Admin</option>}
+          </select>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
+          >
+            {showForm ? 'Cancel' : 'Add Member'}
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-8">
@@ -119,41 +172,68 @@ export default function TeamManagementPage() {
             <div className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
               <h3 className="mb-4 text-lg font-bold">Add Team Member</h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
+                <div className="relative">
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
-                    Full Name
+                    Search Existing Client
                   </label>
-                  <input
-                    className={inputCls}
-                    value={form.full_name}
-                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                  />
+                  <div className="relative">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[18px]">
+                      search
+                    </span>
+                    <input
+                      className={`${inputCls} pl-9`}
+                      placeholder="Search by name or email..."
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      onFocus={() => { if (!clientSearch) setClientSearch(' ') }}
+                    />
+                    {isClientsLoading && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin"></span>
+                    )}
+                  </div>
+                  
+                  {/* Dropdown list */}
+                  {clientSearch && !selectedClient && (
+                    <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-surface shadow-xl">
+                      {filteredClients.length === 0 ? (
+                        <div className="p-3 text-sm text-text-muted text-center">No clients found</div>
+                      ) : (
+                        filteredClients.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => {
+                              setSelectedClient(c)
+                              setClientSearch(c.full_name)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-hover focus:bg-hover transition-colors flex flex-col border-b border-border last:border-0"
+                          >
+                            <span className="font-semibold text-text">{c.full_name}</span>
+                            <span className="text-xs text-text-muted">{c.email}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {selectedClient && (
+                    <div className="mt-2 flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-2">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-primary">{selectedClient.full_name}</span>
+                        <span className="text-[10px] text-text-muted">{selectedClient.email}</span>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedClient(null); setClientSearch('') }}
+                        className="text-text-muted hover:text-red-500 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">close</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
+
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
-                    Email
-                  </label>
-                  <input
-                    className={inputCls}
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
-                    Password
-                  </label>
-                  <input
-                    className={inputCls}
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
-                    Role
+                    Assign Role
                   </label>
                   <select
                     className={inputCls}
@@ -170,10 +250,10 @@ export default function TeamManagementPage() {
               </div>
               <button
                 onClick={handleCreate}
-                disabled={saving || !form.full_name || !form.email || !form.password}
+                disabled={saving || !selectedClient}
                 className="mt-4 rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
               >
-                {saving ? 'Creating...' : 'Create User'}
+                {saving ? 'Adding...' : 'Add to Team'}
               </button>
             </div>
           )}

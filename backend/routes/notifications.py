@@ -8,15 +8,18 @@ notifications_bp = Blueprint("notifications", __name__)
 def list_notifications():
     contract_id = request.args.get("contract_id")
     unread_only = request.args.get("unread")
+    tenant_company_id = request.args.get("tenant_company_id")
 
     try:
-        query = supabase.table("notifications").select(
-            "*, contracts!notifications_contract_id_fkey(id, status)"
-        )
+        select_clause = "*, contracts!inner(id, status)"
+        query = supabase.table("notifications").select(select_clause)
+        
         if contract_id:
             query = query.eq("contract_id", contract_id)
         if unread_only == "true":
             query = query.eq("is_read", False)
+        if tenant_company_id:
+            query = query.eq("contracts.tenant_company_id", tenant_company_id)
 
         result = query.order("created_at", desc=True).execute()
         return jsonify(result.data)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import {
   ResponsiveContainer,
   AreaChart,
@@ -65,6 +66,7 @@ function EmptyState({ icon, title, subtitle }) {
 }
 
 export default function AnalyticsPage() {
+  const { user } = useAuth()
   const [period, setPeriod] = useState(90)
   const [history, setHistory] = useState(null)
   const [stats, setStats] = useState(null)
@@ -74,7 +76,13 @@ export default function AnalyticsPage() {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    Promise.all([getMarketHistory(period), getDashboardStats()])
+
+    const params = {}
+    if (user?.role === 'company_admin' && user?.company_id) {
+      params.tenant_company_id = user.company_id
+    }
+
+    Promise.all([getMarketHistory(period), getDashboardStats(params)])
       .then(([h, s]) => {
         setHistory(h)
         setStats(s)
@@ -84,7 +92,7 @@ export default function AnalyticsPage() {
         setError(err.message || 'Failed to load analytics data')
       })
       .finally(() => setLoading(false))
-  }, [period])
+  }, [period, user])
 
   const fxData = (history?.fx || []).map((d) => ({
     ...d,

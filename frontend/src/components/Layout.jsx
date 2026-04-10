@@ -7,7 +7,7 @@ import NotificationBell from './NotificationBell'
 const ALL_NAV_ITEMS = [
   { to: '/dashboard', icon: 'dashboard', label: 'Dashboard', roles: null },
   { to: '/renewal-review', icon: 'description', label: 'Contracts', roles: ['super_admin', 'company_admin', 'finance', 'sales'] },
-  { to: '/clients', icon: 'group', label: 'Clients', roles: ['super_admin', 'company_admin', 'sales'] },
+  { to: '/clients', icon: 'group', label: 'Clients', roles: ['super_admin', 'company_admin'] },
   { to: '/analytics', icon: 'monitoring', label: 'Analytics', roles: ['super_admin', 'company_admin', 'finance'] },
   { to: '/team', icon: 'manage_accounts', label: 'Team', roles: ['super_admin', 'company_admin'] },
   { to: '/audit-log', icon: 'history', label: 'Audit Log', roles: ['super_admin', 'company_admin', 'finance'] },

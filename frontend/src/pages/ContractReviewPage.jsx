@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { PageLoader } from '../components/Spinner'
 import ChatPanel from '../components/ChatPanel'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import {
   getContracts,
   getContract,
@@ -10,6 +11,7 @@ import {
   deleteContract,
   getCompanies,
   getCalculation,
+  getMarketData,
   downloadPdf,
   saveDraft,
   rejectContract,
@@ -90,6 +92,8 @@ function ConfirmModal({ open, title, message, details, confirmText, confirmCls, 
 /* ─── CONTRACT LIST ─── */
 function ContractList() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { success: toastSuccess, error: toastError } = useToast()
   const [contracts, setContracts] = useState([])
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -97,6 +101,7 @@ function ContractList() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [ruleFilter, setRuleFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [marketRates, setMarketRates] = useState({ tufe: null, ufe: null })
   const [form, setForm] = useState({
     company_id: '', previous_amount: '', end_date: '',
     inflation_base_rule: 'TUFE', max_increase_limit: '',
@@ -107,17 +112,42 @@ function ContractList() {
 
   const load = useCallback(async () => {
     try {
-      const [c, co] = await Promise.all([getContracts(), getCompanies()])
+      // For company_admin, only fetch their tenant's contracts
+      const contractParams = (user?.role === 'company_admin' && user?.company_id)
+        ? { tenant_company_id: user.company_id }
+        : {}
+      const [c, co, md] = await Promise.all([
+        getContracts(contractParams),
+        getCompanies(),
+        getMarketData().catch(() => null),
+      ])
       setContracts(c)
-      setCompanies(co)
+      // company_admin only sees client companies (non-tenant), super_admin sees all
+      setCompanies(user?.role === 'company_admin' ? co.filter(c => !c.is_tenant) : co)
+      if (md) {
+        setMarketRates({ tufe: md.tufe ?? md.tufe_yoy, ufe: md.ufe ?? md.ufe_yoy })
+      }
     } catch (err) {
       console.error('Load error:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => { load() }, [load])
+
+  // Auto-fill max increase when inflation rule changes
+  const handleRuleChange = (rule) => {
+    let suggested = ''
+    if (rule === 'TUFE' && marketRates.tufe != null) {
+      suggested = String(parseFloat(marketRates.tufe).toFixed(1))
+    } else if (rule === 'UFE' && marketRates.ufe != null) {
+      suggested = String(parseFloat(marketRates.ufe).toFixed(1))
+    } else if (rule === 'TUFE+UFE' && marketRates.tufe != null && marketRates.ufe != null) {
+      suggested = String(((parseFloat(marketRates.tufe) + parseFloat(marketRates.ufe)) / 2).toFixed(1))
+    }
+    setForm((prev) => ({ ...prev, inflation_base_rule: rule, max_increase_limit: suggested }))
+  }
 
   const handleCreate = async () => {
     setSaving(true)
@@ -126,12 +156,14 @@ function ContractList() {
         ...form,
         previous_amount: Number(form.previous_amount),
         max_increase_limit: form.max_increase_limit ? Number(form.max_increase_limit) : null,
+        tenant_company_id: user?.company_id || null,
       })
       setShowForm(false)
       setForm({ company_id: '', previous_amount: '', end_date: '', inflation_base_rule: 'TUFE', max_increase_limit: '' })
+      toastSuccess('Contract created successfully.')
       await load()
     } catch (err) {
-      alert('Create failed: ' + err.message)
+      toastError('Failed to create contract: ' + err.message)
     } finally {
       setSaving(false)
     }
@@ -143,9 +175,10 @@ function ContractList() {
     try {
       await deleteContract(deleteTarget)
       setDeleteTarget(null)
+      toastSuccess('Contract deleted.')
       await load()
     } catch (err) {
-      alert('Delete failed: ' + err.message)
+      toastError('Failed to delete contract: ' + err.message)
     } finally {
       setDeleting(false)
     }
@@ -241,15 +274,24 @@ function ContractList() {
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Inflation Rule</label>
                   <select className={inputCls} value={form.inflation_base_rule}
-                    onChange={(e) => setForm({ ...form, inflation_base_rule: e.target.value })}>
-                    <option value="TUFE">TUFE</option>
-                    <option value="UFE">UFE</option>
-                    <option value="TUFE+UFE">TUFE + UFE (Average)</option>
+                    onChange={(e) => handleRuleChange(e.target.value)}>
+                    <option value="TUFE">TUFE {marketRates.tufe != null ? `(${parseFloat(marketRates.tufe).toFixed(1)}%)` : ''}</option>
+                    <option value="UFE">UFE {marketRates.ufe != null ? `(${parseFloat(marketRates.ufe).toFixed(1)}%)` : ''}</option>
+                    <option value="TUFE+UFE">TUFE + UFE — Average {marketRates.tufe != null && marketRates.ufe != null ? `(${((parseFloat(marketRates.tufe) + parseFloat(marketRates.ufe)) / 2).toFixed(1)}%)` : ''}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Max Increase (%)</label>
-                  <input className={inputCls} type="number" value={form.max_increase_limit}
+                  <label className="mb-1 flex items-center justify-between text-xs font-semibold uppercase text-text-muted">
+                    <span>Max Increase (%)</span>
+                    {form.max_increase_limit && (
+                      <span className="normal-case text-primary font-normal">
+                        Auto-filled from {form.inflation_base_rule}
+                      </span>
+                    )}
+                  </label>
+                  <input className={inputCls} type="number" step="0.1" min="0" max="200"
+                    value={form.max_increase_limit}
+                    placeholder="e.g. 36.7"
                     onChange={(e) => setForm({ ...form, max_increase_limit: e.target.value })} />
                 </div>
                 <div className="flex items-end">

@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useToast } from '../contexts/ToastContext'
 import { registerUser } from '../api'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const { error: toastError, success: toastSuccess } = useToast()
   const [form, setForm] = useState({
     full_name: '',
     email: '',
@@ -13,24 +15,22 @@ export default function RegisterPage() {
     company_name: '',
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
   const onChange = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
 
     if (form.password !== form.confirmPassword) {
-      setError('Passwords do not match.')
+      toastError('Passwords do not match. Please re-enter your password.')
       return
     }
     if (form.password.length < 8) {
-      setError('Password must be at least 8 characters.')
+      toastError('Password must be at least 8 characters long.')
       return
     }
     if (form.role === 'company_admin' && !form.company_name.trim()) {
-      setError('Company name is required for Company Administrator accounts.')
+      toastError('Company name is required for Company Administrator accounts.')
       return
     }
 
@@ -43,9 +43,10 @@ export default function RegisterPage() {
         role: form.role,
         company_name: form.role === 'company_admin' ? form.company_name : undefined,
       })
+      toastSuccess('Account created successfully! You can now sign in.', 6000)
       navigate('/login')
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.')
+      toastError(err.message || 'Registration failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -66,7 +67,7 @@ export default function RegisterPage() {
             >
               security
             </span>
-            Enflasyon Kalkanı
+            RateGuard
           </div>
           <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
             Contract Management Platform
@@ -165,7 +166,7 @@ export default function RegisterPage() {
                 </span>
                 <input
                   className={inputCls}
-                  placeholder="********"
+                  placeholder="Minimum 8 characters"
                   type="password"
                   value={form.password}
                   onChange={onChange('password')}
@@ -184,7 +185,7 @@ export default function RegisterPage() {
                 </span>
                 <input
                   className={inputCls}
-                  placeholder="********"
+                  placeholder="Repeat your password"
                   type="password"
                   value={form.confirmPassword}
                   onChange={onChange('confirmPassword')}
@@ -192,8 +193,6 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
-
-            {error && <p className="text-sm text-red-400">{error}</p>}
 
             <button
               className="w-full group mt-2 relative overflow-hidden bg-gradient-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10 disabled:opacity-60"
@@ -223,7 +222,7 @@ export default function RegisterPage() {
 
       <footer className="mt-auto w-full py-10 flex justify-center items-center px-12 opacity-40">
         <div className="text-[10px] font-headline uppercase tracking-[0.2em] text-on-surface-variant">
-          &copy; 2026 Enflasyon Kalkanı
+          &copy; 2026 RateGuard
         </div>
       </footer>
     </div>

@@ -1,25 +1,31 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function NotificationBell() {
+  const { user } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      const data = await getNotifications({ unread: 'true' })
+      const params = { unread: 'true' }
+      if (user?.role === 'company_admin' && user?.company_id) {
+        params.tenant_company_id = user.company_id
+      }
+      const data = await getNotifications(params)
       setNotifications(data)
     } catch {
       /* silent */
     }
-  }
+  }, [user])
 
   useEffect(() => {
     load()
     const interval = setInterval(load, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [load])
 
   useEffect(() => {
     const handleClick = (e) => {

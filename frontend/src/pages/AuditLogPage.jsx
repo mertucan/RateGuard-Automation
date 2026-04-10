@@ -12,6 +12,35 @@ const ACTION_STYLE = {
   draft: { icon: 'edit_note', color: 'text-amber-500', bg: 'bg-amber-500/10' },
 }
 
+function formatDetails(details) {
+  if (!details) return null
+  let obj = details
+  if (typeof details === 'string') {
+    try {
+      obj = JSON.parse(details)
+    } catch {
+      return <span>{details}</span>
+    }
+  }
+  if (typeof obj !== 'object') return <span>{String(obj)}</span>
+
+  const parts = []
+  for (const [k, v] of Object.entries(obj)) {
+    const keyName = k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+    let valStr = String(v)
+    if (k.toLowerCase().includes('amount') || k.toLowerCase().includes('value')) {
+      valStr = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(Number(v) || 0)
+    }
+    parts.push(
+      <div key={k} className="flex items-center justify-between border-b border-border/50 py-1 last:border-0">
+        <span className="font-medium text-text-muted">{keyName}</span>
+        <span className="font-semibold text-text">{valStr}</span>
+      </div>
+    )
+  }
+  return parts.length > 0 ? <div className="flex flex-col gap-1">{parts}</div> : null
+}
+
 export default function AuditLogPage() {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -74,23 +103,27 @@ export default function AuditLogPage() {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold">{log.user_name || 'System'}</span>
-                        <span className="rounded-full bg-surface-alt px-2 py-0.5 text-[10px] font-semibold text-text-muted uppercase">
-                          {log.action}
+                      <div className="flex items-center gap-2 flex-wrap text-sm text-text">
+                        <span className="font-bold">{log.user_name || 'System'}</span>
+                        <span className="text-text-muted">
+                          {log.action === 'create' && 'created a new'}
+                          {log.action === 'update' && 'updated the'}
+                          {log.action === 'delete' && 'deleted the'}
+                          {log.action === 'approve' && 'approved the'}
+                          {log.action === 'reject' && 'rejected the'}
+                          {log.action === 'login' && 'logged into'}
+                          {!['create', 'update', 'delete', 'approve', 'reject', 'login'].includes(log.action) && log.action}
                         </span>
-                        <span className="text-xs text-text-muted">{log.entity_type}</span>
+                        <span className="font-semibold text-primary">{log.entity_type}</span>
+                        {log.entity_id && <span className="text-xs text-text-muted">(ID: {log.entity_id.slice(0, 8)})</span>}
                       </div>
                       {log.details && (
-                        <p className="mt-1 text-xs text-text-muted">
-                          {typeof log.details === 'object'
-                            ? JSON.stringify(log.details)
-                            : log.details}
-                        </p>
+                        <div className="mt-2 rounded-lg bg-surface-alt p-3 text-xs text-text">
+                          {formatDetails(log.details)}
+                        </div>
                       )}
-                      <p className="mt-1 text-[10px] text-text-muted">
+                      <p className="mt-2 text-[11px] font-medium text-text-muted">
                         {new Date(log.created_at).toLocaleString('tr-TR')}
-                        {log.entity_id && ` \u2022 ID: ${log.entity_id.slice(0, 8)}`}
                       </p>
                     </div>
                   </div>

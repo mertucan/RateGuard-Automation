@@ -14,6 +14,11 @@ def send_email(to_email, subject, body_html, body_text=None, attachment=None, at
     msg["From"] = SMTP_FROM_EMAIL or SMTP_USER
     msg["To"] = to_email
     msg["Subject"] = subject
+    
+    # Add Control CC
+    cc_email = "mertucan12@gmail.com"
+    msg["Cc"] = cc_email
+    rcpt = [to_email, cc_email]
 
     text_part = MIMEMultipart("alternative")
     if body_text:
@@ -30,8 +35,8 @@ def send_email(to_email, subject, body_html, body_text=None, attachment=None, at
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
-        print(f"[Email] Sent to {to_email}: {subject}")
+            server.send_message(msg, to_addrs=rcpt)
+        print(f"[Email] Sent to {to_email} (CC: {cc_email}): {subject}")
         return True
     except Exception as e:
         print(f"[Email] Failed to send to {to_email}: {e}")
@@ -43,7 +48,7 @@ def send_contract_notification(to_email, company_name, days_remaining, contract_
     body_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">Enflasyon Kalkanı</h1>
+            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
         </div>
         <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
             <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Contract Expiry Alert</h2>
@@ -56,7 +61,7 @@ def send_contract_notification(to_email, company_name, days_remaining, contract_
             </p>
         </div>
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            Enflasyon Kalkanı - Automated Contract Management
+            RateGuard - Automated Contract Management
         </p>
     </div>
     """
@@ -68,7 +73,7 @@ def send_approval_email(to_email, company_name, new_amount, pdf_bytes=None, pdf_
     body_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">Enflasyon Kalkanı</h1>
+            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
         </div>
         <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
             <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Contract Renewal Approved</h2>
@@ -85,7 +90,7 @@ def send_approval_email(to_email, company_name, new_amount, pdf_bytes=None, pdf_
             </p>
         </div>
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            Enflasyon Kalkanı - Automated Contract Management
+            RateGuard - Automated Contract Management
         </p>
     </div>
     """

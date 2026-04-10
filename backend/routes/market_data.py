@@ -42,13 +42,13 @@ def dashboard_stats():
     t30 = (today + timedelta(days=30)).isoformat()
     t60 = (today + timedelta(days=60)).isoformat()
     today_s = today.isoformat()
+    tenant_company_id = request.args.get("tenant_company_id")
 
     try:
-        contracts = (
-            supabase.table("contracts")
-            .select("id, end_date, previous_amount, status")
-            .execute()
-        ).data or []
+        query = supabase.table("contracts").select("id, end_date, previous_amount, status")
+        if tenant_company_id:
+            query = query.eq("tenant_company_id", tenant_company_id)
+        contracts = query.execute().data or []
     except Exception:
         contracts = []
 

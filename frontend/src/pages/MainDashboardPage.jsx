@@ -14,9 +14,14 @@ export default function MainDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
+        const params = {}
+        if (user?.role === 'company_admin' && user?.company_id) {
+          params.tenant_company_id = user.company_id
+        }
+        
         const [s, c] = await Promise.all([
-          getDashboardStats(),
-          getContracts({ pending: 'true' }),
+          getDashboardStats(params),
+          getContracts({ pending: 'true', ...params }),
         ])
         setStats(s)
         const pending = (c || []).filter((ct) => {
@@ -31,7 +36,7 @@ export default function MainDashboardPage() {
       }
     }
     load()
-  }, [])
+  }, [user])
 
   const initials = (name) =>
     name

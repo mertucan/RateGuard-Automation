@@ -21,7 +21,14 @@ async function request(path, options = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
+    let message = text;
+    try {
+      const json = JSON.parse(text);
+      message = json.error || json.message || json.detail || text;
+    } catch {
+      // plain text error
+    }
+    throw new Error(message || `Request failed (${res.status})`);
   }
   return res.json();
 }
@@ -32,6 +39,12 @@ export const loginUser = (data) =>
 
 export const registerUser = (data) =>
   request("/auth/register", { method: "POST", body: JSON.stringify(data) });
+
+export const forgotPassword = (email) =>
+  request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+
+export const resetPassword = (data) =>
+  request("/auth/reset-password", { method: "POST", body: JSON.stringify(data) });
 
 // ── Companies ──────────────────────────────────────────────
 export const getCompanies = (search = "") =>
@@ -121,7 +134,10 @@ export const getMarketHistory = (period = 90) =>
 export const saveMarketData = () =>
   request("/market-data/save", { method: "POST" });
 
-export const getDashboardStats = () => request("/dashboard/stats");
+export const getDashboardStats = (params = {}) => {
+  const q = new URLSearchParams(params).toString();
+  return request(`/dashboard/stats${q ? `?${q}` : ""}`);
+};
 
 // ── Users ─────────────────────────────────────────────────
 export const getUsers = (params = {}) => {
