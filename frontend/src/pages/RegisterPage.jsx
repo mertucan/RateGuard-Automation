@@ -1,65 +1,3 @@
-<<<<<<< HEAD
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useToast } from '../contexts/ToastContext'
-import { registerUser } from '../api'
-
-export default function RegisterPage() {
-  const navigate = useNavigate()
-  const { error: toastError, success: toastSuccess } = useToast()
-  const [form, setForm] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: 'company_admin',
-    company_name: '',
-  })
-  const [loading, setLoading] = useState(false)
-
-  const onChange = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    if (form.password !== form.confirmPassword) {
-      toastError('Passwords do not match. Please re-enter your password.')
-      return
-    }
-    if (form.password.length < 8) {
-      toastError('Password must be at least 8 characters long.')
-      return
-    }
-    if (form.role === 'company_admin' && !form.company_name.trim()) {
-      toastError('Company name is required for Company Administrator accounts.')
-      return
-    }
-
-    setLoading(true)
-    try {
-      await registerUser({
-        full_name: form.full_name,
-        email: form.email,
-        password: form.password,
-        role: form.role,
-        company_name: form.role === 'company_admin' ? form.company_name : undefined,
-      })
-      toastSuccess('Account created successfully! You can now sign in.', 6000)
-      navigate('/login')
-    } catch (err) {
-      toastError(err.message || 'Registration failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const inputCls =
-    'w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all'
-
-  return (
-    <div className="bg-mesh font-body text-on-surface min-h-screen flex flex-col items-center justify-center antialiased px-4">
-      <header className="mb-10 text-center mt-8">
-=======
 import React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -67,7 +5,6 @@ export default function RegisterPage() {
   return (
     <div className="bg-mesh font-body text-on-surface min-h-screen flex flex-col items-center justify-center selection:bg-primary selection:text-on-primary antialiased px-4">
       <header className="mb-12 text-center mt-8">
->>>>>>> main merged
         <div className="flex flex-col items-center gap-2">
           <div className="text-3xl font-bold tracking-tighter text-primary font-headline flex items-center gap-3">
             <span
@@ -79,13 +16,8 @@ export default function RegisterPage() {
             </span>
             RateGuard
           </div>
-<<<<<<< HEAD
-          <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
-            Contract Management Platform
-=======
           <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-on-surface-variant font-semibold opacity-70">
             Sovereign Intelligence
->>>>>>> main merged
           </div>
         </div>
       </header>
@@ -94,51 +26,6 @@ export default function RegisterPage() {
       <div className="absolute -inset-0.5 bg-linear-to-br from-primary/10 to-transparent rounded-xl blur-sm opacity-20"></div>
         <div className="relative bg-surface-container-low border border-outline-variant/10 rounded-xl p-10 sovereign-glow">
           <div className="mb-8">
-<<<<<<< HEAD
-            <h2 className="font-headline text-xl font-bold text-on-surface">Create Account</h2>
-          </div>
-
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
-                Account Type
-              </label>
-              <div className="relative group">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
-                  badge
-                </span>
-                <select className={inputCls} value={form.role} onChange={onChange('role')}>
-                  <option value="company_admin">Company Administrator</option>
-                  <option value="client">Client</option>
-                </select>
-              </div>
-            </div>
-
-            {form.role === 'company_admin' && (
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
-                  Company Name
-                </label>
-                <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
-                    business
-                  </span>
-                  <input
-                    className={inputCls}
-                    placeholder="Acme Corporation"
-                    type="text"
-                    value={form.company_name}
-                    onChange={onChange('company_name')}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
-                Full Name
-              </label>
-=======
             <h2 className="font-headline text-xl font-bold text-on-surface">Establish Node</h2>
             <p className="text-sm text-on-surface-variant mt-1">Register institutional credentials for secure terminal access.</p>
           </div>
@@ -146,136 +33,71 @@ export default function RegisterPage() {
           <form className="space-y-6">
             <div className="space-y-2">
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Full Name</label>
->>>>>>> main merged
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   person
                 </span>
-<<<<<<< HEAD
-                <input
-                  className={inputCls}
-                  placeholder="John Doe"
-=======
                 <input 
                   className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
                   placeholder="Alexander Thorne" 
->>>>>>> main merged
                   type="text"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-<<<<<<< HEAD
-              <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
-                Email Address
-              </label>
-=======
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Institutional Email</label>
->>>>>>> main merged
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   alternate_email
                 </span>
-<<<<<<< HEAD
-                <input
-                  className={inputCls}
-                  placeholder="name@company.com"
-=======
                 <input 
                   className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
                   placeholder="a.thorne@sovereign.int" 
->>>>>>> main merged
                   type="email"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-<<<<<<< HEAD
-              <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
-                Password
-              </label>
-=======
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Secure Access Key</label>
->>>>>>> main merged
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   vpn_key
                 </span>
-<<<<<<< HEAD
-                <input
-                  className={inputCls}
-                  placeholder="Minimum 8 characters"
-=======
                 <input 
                   className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
                   placeholder="••••••••••••" 
->>>>>>> main merged
                   type="password"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-<<<<<<< HEAD
-              <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
-                Confirm Password
-              </label>
-=======
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Confirm Access Key</label>
->>>>>>> main merged
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   vpn_key
                 </span>
-<<<<<<< HEAD
-                <input
-                  className={inputCls}
-                  placeholder="Repeat your password"
-=======
                 <input 
                   className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
                   placeholder="••••••••••••" 
->>>>>>> main merged
                   type="password"
                 />
               </div>
             </div>
 
-<<<<<<< HEAD
-            <button
-              className="w-full group mt-2 relative overflow-hidden bg-gradient-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10 disabled:opacity-60"
-              type="submit"
-              disabled={loading}
-            >
-              <span>{loading ? 'Creating...' : 'Create Account'}</span>
-              <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
-                arrow_forward
-              </span>
-=======
             <button className="w-full group mt-4 relative overflow-hidden bg-linear-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10 disabled:opacity-60" type="submit" disabled={loading}>
               <span>Create Account</span>
               <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
->>>>>>> main merged
             </button>
           </form>
 
           <div className="mt-10 pt-6 border-t border-outline-variant/5 text-center">
-<<<<<<< HEAD
-            <p className="text-xs text-on-surface opacity-85">
-              Already have an account?
-              <Link
-                to="/login"
-                className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1"
-              >
-                Sign In
-=======
             <p className="text-xs text-on-surface-variant">
               Already have a terminal key? 
               <Link to="/login" className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1">
                 Login
->>>>>>> main merged
               </Link>
             </p>
           </div>
