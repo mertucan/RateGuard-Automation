@@ -1,6 +1,7 @@
 from datetime import date, timedelta
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 from services.supabase_client import supabase
+from services.auth_middleware import login_required
 from services.market_cache import get_cached_market_data, get_cached_history
 from veri_cekme_tcmb import get_guaranteed_market_data
 
@@ -37,7 +38,9 @@ def save_market_data():
 
 
 @market_data_bp.route("/api/dashboard/stats", methods=["GET"])
+@login_required
 def dashboard_stats():
+    user = g.current_user
     today = date.today()
     t30 = (today + timedelta(days=30)).isoformat()
     t60 = (today + timedelta(days=60)).isoformat()
@@ -46,8 +49,16 @@ def dashboard_stats():
 
     try:
         query = supabase.table("contracts").select("id, end_date, previous_amount, status")
+        
+        # Enforce security filtering based on user role
+        if user["role"] in ["company_admin", "finance", "sales"]:
+            query = query.eq("tenant_company_id", user["company_id"])
+        elif user["role"] == "client":
+            query = query.eq("company_id", user["company_id"])
+            
         if tenant_company_id:
             query = query.eq("tenant_company_id", tenant_company_id)
+            
         contracts = query.execute().data or []
     except Exception:
         contracts = []

@@ -1,0 +1,1 @@
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS created_by_tenant_id uuid REFERENCES public.companies(id);

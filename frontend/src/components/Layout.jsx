@@ -6,7 +6,7 @@ import NotificationBell from './NotificationBell'
 
 const ALL_NAV_ITEMS = [
   { to: '/dashboard', icon: 'dashboard', label: 'Dashboard', roles: null },
-  { to: '/renewal-review', icon: 'description', label: 'Contracts', roles: ['super_admin', 'company_admin', 'finance', 'sales'] },
+  { to: '/renewal-review', icon: 'description', label: 'Contracts', roles: ['super_admin', 'company_admin', 'finance', 'sales', 'client'] },
   { to: '/clients', icon: 'group', label: 'Clients', roles: ['super_admin', 'company_admin'] },
   { to: '/analytics', icon: 'monitoring', label: 'Analytics', roles: ['super_admin', 'company_admin', 'finance'] },
   { to: '/team', icon: 'manage_accounts', label: 'Team', roles: ['super_admin', 'company_admin'] },
@@ -57,7 +57,7 @@ export default function Layout({ children }) {
 
           <Link to="/dashboard" className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary filled text-xl">shield</span>
-            <span className="text-lg font-bold tracking-tight">Enflasyon Kalkanı</span>
+            <span className="text-lg font-bold tracking-tight">RateGuard</span>
           </Link>
 
           <nav className="hidden items-center gap-1 sm:flex">

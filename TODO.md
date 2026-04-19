@@ -89,11 +89,11 @@
 
 ### Medium Priority
 - [ ] **Rich Text Editor**: TinyMCE or similar for manual editing of AI-generated email drafts before sending.
-- [ ] **Multi-Currency Support**: USD, EUR, or TRY-based contracts with automatic FX conversion.
-- [ ] **Contract History & Versioning**: Track each renewal cycle and visualize price change history.
+- [x] **Multi-Currency Support**: USD, EUR, or TRY-based contracts with automatic FX conversion.
+- [x] **Contract History & Versioning**: Track each renewal cycle and visualize price change history.
 - [ ] **Dashboard Customization**: Drag-and-drop KPI cards, charts, and widgets.
 - [ ] **Batch Operations**: Multi-select contracts for bulk PDF generation and approval.
-- [ ] **Export**: Export contract lists and analytics data to CSV/Excel format.
+- [x] **Export**: Export contract lists and analytics data to CSV/Excel format.
 
 ### Low Priority / Advanced
 - [ ] **Multi-Language Support (i18n)**: Turkish/English UI toggle; AI-generated PDFs and emails in client's language.

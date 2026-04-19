@@ -111,6 +111,26 @@ export default function AnalyticsPage() {
     ? ((fxData[fxData.length - 1].usd - fxData[0].usd) / fxData[0].usd * 100).toFixed(1)
     : null
 
+  const handleExport = () => {
+    const headers = ["Date", "USD/TRY", "EUR/TRY", "TUFE (YoY)", "UFE (YoY)"];
+    const rows = fxData.map(d => [
+      d.date,
+      d.usd || "",
+      d.eur || "",
+      latestInf?.tufe || "",
+      latestInf?.ufe || ""
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `market_data_${period}days.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
@@ -118,20 +138,29 @@ export default function AnalyticsPage() {
           <h2 className="truncate text-xl font-bold sm:text-2xl">Analytics</h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">Historical market data and inflation trends.</p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-alt p-1">
-          {periods.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
-                period === p.value
-                  ? 'bg-primary text-white'
-                  : 'text-text-muted hover:bg-hover hover:text-text'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold transition-colors hover:bg-hover sm:px-4 sm:text-sm"
+          >
+            <span className="material-symbols-outlined text-[18px]">download</span>
+            Export
+          </button>
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-alt p-1">
+            {periods.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => setPeriod(p.value)}
+                className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
+                  period === p.value
+                    ? 'bg-primary text-white'
+                    : 'text-text-muted hover:bg-hover hover:text-text'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 

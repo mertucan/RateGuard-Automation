@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getCompanies, createCompany, updateCompany, deleteCompany } from '../api'
 import Spinner from '../components/Spinner'
 
@@ -40,6 +41,7 @@ function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
 }
 
 export default function ClientManagementPage() {
+  const navigate = useNavigate()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -92,16 +94,20 @@ export default function ClientManagementPage() {
     try {
       const payload = { ...form }
       if (isNew) {
-        await createCompany(payload)
+        const res = await createCompany(payload)
         showToast('Company created successfully')
+        setIsNew(false)
+        setSelected(null)
+        setForm(emptyForm)
+        navigate('/renewal-review')
       } else {
         await updateCompany(selected.id, payload)
         showToast('Company updated successfully')
+        setIsNew(false)
+        setSelected(null)
+        setForm(emptyForm)
+        await load()
       }
-      setIsNew(false)
-      setSelected(null)
-      setForm(emptyForm)
-      await load()
     } catch (err) {
       console.error('Save error:', err)
       showToast('Save failed: ' + err.message, 'error')
@@ -169,9 +175,6 @@ export default function ClientManagementPage() {
           <h2 className="truncate text-xl font-bold sm:text-2xl">Client Management</h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">Manage profiles, risk assessments, and contract renewals.</p>
         </div>
-        <button onClick={openNew} className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm">
-          New Client
-        </button>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -215,10 +218,7 @@ export default function ClientManagementPage() {
                           <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">{c.authorized_email}</td>
                           <td className="hidden px-4 py-3 text-sm font-medium md:table-cell sm:px-6 sm:py-4">{formatCurrency(c.contract_value)}</td>
                           <td className="px-4 py-3 text-right text-sm font-medium sm:px-6 sm:py-4">
-                            <button onClick={() => openEdit(c)} className="text-primary hover:text-primary-dark">
-                              Edit
-                            </button>
-                            <button onClick={() => setDeleteTarget(c)} className="ml-3 text-red-500 hover:text-red-400">
+                            <button onClick={() => setDeleteTarget(c)} className="text-red-500 hover:text-red-400">
                               Delete
                             </button>
                           </td>

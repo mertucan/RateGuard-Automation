@@ -62,8 +62,8 @@ export default function TeamManagementPage() {
   const loadClients = useCallback(async () => {
     setIsClientsLoading(true)
     try {
-      // Fetch users with role client
-      const data = await getUsers({ role: 'client' })
+      // Fetch users with role client and unassigned, use _t to prevent browser caching
+      const data = await getUsers({ role: 'client', unassigned: 'true', _t: Date.now() })
       setClients(data)
     } catch (err) {
       console.error('Clients load error:', err)
@@ -80,10 +80,13 @@ export default function TeamManagementPage() {
     }
   }, [showForm, loadClients])
 
-  const filteredClients = clients.filter(c => 
-    c.full_name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    c.email.toLowerCase().includes(clientSearch.toLowerCase())
-  )
+  const searchStr = clientSearch.trim().toLowerCase()
+  const filteredClients = clients.filter(c => {
+    if (!searchStr) return true;
+    const nameMatch = c.full_name ? c.full_name.toLowerCase().includes(searchStr) : false;
+    const emailMatch = c.email ? c.email.toLowerCase().includes(searchStr) : false;
+    return nameMatch || emailMatch;
+  }).slice(0, 5)
 
   const handleCreate = async () => {
     if (!selectedClient) {

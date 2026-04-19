@@ -110,7 +110,7 @@ def analyze_contract_tone(contract_id):
         ).data or []
 
         if not messages:
-            return jsonify({"tone": "profesyonel", "note": "No messages to analyze"})
+            return jsonify({"tone": "professional", "note": "No messages to analyze"})
 
         texts = [m["message_text"] for m in messages]
         tone = analyze_communication_tone(texts)
