@@ -53,8 +53,36 @@ export const resetPassword = (data) =>
   });
 
 // ── Companies ──────────────────────────────────────────────
-export const getCompanies = (search = "") =>
-  request(`/companies${search ? `?search=${encodeURIComponent(search)}` : ""}`);
+export const getCompanies = (search = "", includeAll = false) => {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (includeAll) params.set("include_all", "true");
+  const qs = params.toString();
+  return request(`/companies${qs ? `?${qs}` : ""}`);
+};
+
+export const getContractCounterparties = (search = "") =>
+  request(
+    `/companies/contract-counterparties${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+  );
+
+export const getAddClientCandidates = (tenantCompanyId = "") => {
+  const qs = tenantCompanyId
+    ? `?tenant_company_id=${encodeURIComponent(tenantCompanyId)}`
+    : "";
+  return request(`/companies/add-client-candidates${qs}`);
+};
+
+export const getCompaniesAvailableToLink = (search = "") =>
+  request(
+    `/companies/available-to-link${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+  );
+
+export const linkCompanyToTenant = (companyId, data = {}) =>
+  request(`/companies/${companyId}/link-tenant`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 export const getCompany = (id) => request(`/companies/${id}`);
 
@@ -255,3 +283,19 @@ export const getAuditLogs = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/audit-logs${qs ? `?${qs}` : ""}`);
 };
+
+// ── Applications ──────────────────────────────────────────
+export const getApplications = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/applications${qs ? `?${qs}` : ""}`);
+};
+
+export const createApplication = (data) =>
+  request("/applications", { method: "POST", body: JSON.stringify(data) });
+
+export const reviewApplication = (id, data) =>
+  request(`/applications/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
+// ── Contract: notify sales ────────────────────────────────
+export const notifySales = (contractId) =>
+  request(`/contracts/${contractId}/notify-sales`, { method: "POST" });

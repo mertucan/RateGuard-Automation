@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { PageLoader } from "../components/Spinner";
 import ChatPanel from "../components/ChatPanel";
 import { useAuth } from "../contexts/AuthContext";
@@ -9,7 +9,7 @@ import {
   getContract,
   createContract,
   deleteContract,
-  getCompanies,
+  getContractCounterparties,
   getCalculation,
   getMarketData,
   downloadPdf,
@@ -21,6 +21,7 @@ import {
   sendContractToClient,
   clientApproveContract,
   clientRejectContract,
+  notifySales,
 } from "../api";
 
 const STATUS_MAP = {
@@ -46,7 +47,7 @@ const STATUS_MAP = {
   rejected: { label: "Rejected", icon: "block", cls: "text-red-500" },
 };
 
-const RULE_OPTIONS = ["All", "TUFE", "UFE", "TUFE+UFE"];
+const RULE_OPTIONS = ["All", "TUFE", "UFE", "TUFE+UFE", "CUSTOM"];
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -131,6 +132,52 @@ function ConfirmModal({
   );
 }
 
+/* ─── FINANCE NOTIFY SALES BUTTON ─── */
+function FinanceNotifySalesButton({ contractId, contract }) {
+  const { success: toastSuccess, error: toastError } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const handleNotify = async () => {
+    setLoading(true);
+    try {
+      const res = await notifySales(contractId);
+      if (res.notified > 0) {
+        toastSuccess(`Sales team notified (${res.notified} member${res.notified > 1 ? "s" : ""})!`);
+      } else {
+        toastSuccess(res.message || "Notification sent.");
+      }
+      setSent(true);
+    } catch (err) {
+      toastError("Failed to notify sales: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const contractStatus = contract?.status || "active";
+  const disabled = loading || ["pending_client", "client_approved"].includes(contractStatus);
+
+  return (
+    <button
+      onClick={handleNotify}
+      disabled={disabled}
+      className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${
+        sent
+          ? "border border-emerald-500/30 bg-emerald-500/5 text-emerald-500"
+          : disabled
+            ? "cursor-not-allowed border border-border bg-surface-alt text-text-muted"
+            : "bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+      }`}
+    >
+      <span className="material-symbols-outlined text-[18px]">
+        {sent ? "check_circle" : "forward_to_inbox"}
+      </span>
+      {loading ? "Notifying..." : sent ? "Sales Notified ✓" : "Notify Sales Team"}
+    </button>
+  );
+}
+
 /* ─── CONTRACT LIST ─── */
 function ContractList() {
   const navigate = useNavigate();
@@ -167,13 +214,11 @@ function ContractList() {
             : {};
       const [c, co, md] = await Promise.all([
         getContracts(contractParams),
-        getCompanies(),
+        getContractCounterparties(),
         getMarketData().catch(() => null),
       ]);
       setContracts(c);
-      setCompanies(
-        user?.role === "company_admin" ? co.filter((c) => !c.is_tenant) : co,
-      );
+      setCompanies(Array.isArray(co) ? co : []);
       if (md) {
         setMarketRates({
           tufe: md.tufe ?? md.tufe_yoy,
@@ -181,10 +226,12 @@ function ContractList() {
         });
         // Seed the initial value for TUFE since it is the default selected rule
         if (md.tufe != null || md.tufe_yoy != null) {
-          setForm(prev => ({
-             ...prev, 
-             max_increase_limit: prev.max_increase_limit || String(parseFloat(md.tufe ?? md.tufe_yoy).toFixed(1))
-          }))
+          setForm((prev) => ({
+            ...prev,
+            max_increase_limit:
+              prev.max_increase_limit ||
+              String(parseFloat(md.tufe ?? md.tufe_yoy).toFixed(1)),
+          }));
         }
       }
     } catch (err) {
@@ -199,6 +246,7 @@ function ContractList() {
   }, [load]);
 
   const handleRuleChange = (rule) => {
+    // For preset rules, auto-fill max_increase_limit and lock it
     let suggested = "";
     if (rule === "TUFE" && marketRates.tufe != null) {
       suggested = String(parseFloat(marketRates.tufe).toFixed(1));
@@ -216,18 +264,28 @@ function ContractList() {
         ).toFixed(1),
       );
     }
+    // For CUSTOM, keep existing or clear
     setForm((prev) => ({
       ...prev,
       inflation_base_rule: rule,
-      max_increase_limit: suggested,
+      max_increase_limit: rule === "CUSTOM" ? "" : suggested,
     }));
   };
 
   const handleCreate = async () => {
+    if (!form.company_id) { toastError("Please select a company."); return; }
+    if (!form.previous_amount || Number(form.previous_amount) <= 0) { toastError("Please enter a valid contract amount."); return; }
+    if (!form.end_date) { toastError("Please select a contract end date."); return; }
+    if (form.inflation_base_rule === "CUSTOM" && (!form.max_increase_limit || Number(form.max_increase_limit) <= 0)) {
+      toastError("Please enter a max increase value for the custom inflation rule."); return;
+    }
     setSaving(true);
     try {
+      // Store CUSTOM as a plain numeric rule in DB, actual rule label stored separately
+      const inflationRule = form.inflation_base_rule === "CUSTOM" ? "CUSTOM" : form.inflation_base_rule;
       await createContract({
         ...form,
+        inflation_base_rule: inflationRule,
         previous_amount: Number(form.previous_amount),
         currency: form.currency,
         max_increase_limit: form.max_increase_limit
@@ -247,7 +305,10 @@ function ContractList() {
       });
       // Reseed the limit on reset
       if (marketRates.tufe != null) {
-        setForm(prev => ({...prev, max_increase_limit: String(parseFloat(marketRates.tufe).toFixed(1))}));
+        setForm((prev) => ({
+          ...prev,
+          max_increase_limit: String(parseFloat(marketRates.tufe).toFixed(1)),
+        }));
       }
       toastSuccess("Contract created successfully.");
       await load();
@@ -297,16 +358,18 @@ function ContractList() {
       c.status || "active",
     ]);
 
-    const csvContent =
-      [headers, ...rows]
-        .map((e) => e.map((val) => `"${val}"`).join(","))
-        .join("\n");
+    const csvContent = [headers, ...rows]
+      .map((e) => e.map((val) => `"${val}"`).join(","))
+      .join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Contracts_Export_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute(
+      "download",
+      `Contracts_Export_${new Date().toISOString().split("T")[0]}.csv`,
+    );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -356,6 +419,9 @@ function ContractList() {
 
   if (loading) return <PageLoader />;
 
+  const canManageClients =
+    user?.role === "super_admin" || user?.role === "company_admin";
+
   const inputCls =
     "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary";
 
@@ -382,21 +448,25 @@ function ContractList() {
             Review and approve contract renewals.
           </p>
         </div>
-        {user?.role !== "client" && (
+        {!["client", "user"].includes(user?.role) && (
           <div className="flex items-center gap-3">
             <button
               onClick={handleExport}
               className="shrink-0 flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold transition-colors hover:bg-hover sm:px-4 sm:text-sm"
             >
-              <span className="material-symbols-outlined text-[18px]">download</span>
+              <span className="material-symbols-outlined text-[18px]">
+                download
+              </span>
               Export
             </button>
+            {["company_admin", "finance", "super_admin"].includes(user?.role) && (
             <button
               onClick={() => setShowForm(!showForm)}
               className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
             >
               {showForm ? "Cancel" : "New Contract"}
             </button>
+            )}
           </div>
         )}
       </header>
@@ -418,6 +488,13 @@ function ContractList() {
                     onChange={(e) =>
                       setForm({ ...form, company_id: e.target.value })
                     }
+                    title={
+                      companies.length === 0 && user?.role !== "client"
+                        ? canManageClients
+                          ? "Add a client company on the Clients page first."
+                          : "Ask a company admin to add client companies first."
+                        : undefined
+                    }
                   >
                     <option value="">Select company...</option>
                     {companies.map((co) => (
@@ -426,6 +503,11 @@ function ContractList() {
                       </option>
                     ))}
                   </select>
+                  {companies.length === 0 && !["client", "user"].includes(user?.role) && (
+                    <p className="mt-2 text-xs leading-relaxed text-text-muted">
+                      No companies available in the directory. Please contact a Super Admin.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
@@ -466,7 +548,9 @@ function ContractList() {
                   >
                     <option value="service_contract">Service Contract</option>
                     <option value="lease_agreement">Lease Agreement</option>
-                    <option value="maintenance_agreement">Maintenance Agreement</option>
+                    <option value="maintenance_agreement">
+                      Maintenance Agreement
+                    </option>
                     <option value="supply_agreement">Supply Agreement</option>
                   </select>
                 </div>
@@ -493,46 +577,48 @@ function ContractList() {
                     onChange={(e) => handleRuleChange(e.target.value)}
                   >
                     <option value="TUFE">
-                      TUFE{" "}
-                      {marketRates.tufe != null
-                        ? `(${parseFloat(marketRates.tufe).toFixed(1)}%)`
-                        : ""}
+                      TUFE{marketRates.tufe != null ? ` (${parseFloat(marketRates.tufe).toFixed(1)}%)` : ""}
                     </option>
                     <option value="UFE">
-                      UFE{" "}
-                      {marketRates.ufe != null
-                        ? `(${parseFloat(marketRates.ufe).toFixed(1)}%)`
-                        : ""}
+                      UFE{marketRates.ufe != null ? ` (${parseFloat(marketRates.ufe).toFixed(1)}%)` : ""}
                     </option>
                     <option value="TUFE+UFE">
-                      TUFE + UFE — Average{" "}
-                      {marketRates.tufe != null && marketRates.ufe != null
-                        ? `(${((parseFloat(marketRates.tufe) + parseFloat(marketRates.ufe)) / 2).toFixed(1)}%)`
+                      TUFE + UFE — Average{marketRates.tufe != null && marketRates.ufe != null
+                        ? ` (${((parseFloat(marketRates.tufe) + parseFloat(marketRates.ufe)) / 2).toFixed(1)}%)`
                         : ""}
                     </option>
+                    <option value="CUSTOM">Custom</option>
                   </select>
                 </div>
                 <div>
                   <label className="mb-1 flex items-center justify-between text-xs font-semibold uppercase text-text-muted">
                     <span>Max Increase (%)</span>
-                    {form.max_increase_limit && (
-                      <span className="normal-case text-primary font-normal">
-                        Auto-filled from {form.inflation_base_rule}
+                    {form.inflation_base_rule !== "CUSTOM" && form.max_increase_limit && (
+                      <span className="normal-case font-normal text-amber-500 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">lock</span>
+                        Auto from {form.inflation_base_rule}
                       </span>
                     )}
                   </label>
                   <input
-                    className={inputCls}
+                    className={`${inputCls} ${form.inflation_base_rule !== "CUSTOM" ? "cursor-not-allowed opacity-70" : ""}`}
                     type="number"
                     step="0.1"
                     min="0"
                     max="200"
                     value={form.max_increase_limit}
-                    placeholder="e.g. 36.7"
+                    placeholder={form.inflation_base_rule === "CUSTOM" ? "Enter custom % limit" : "Auto-filled"}
+                    readOnly={form.inflation_base_rule !== "CUSTOM"}
                     onChange={(e) =>
+                      form.inflation_base_rule === "CUSTOM" &&
                       setForm({ ...form, max_increase_limit: e.target.value })
                     }
                   />
+                  {form.inflation_base_rule !== "CUSTOM" && (
+                    <p className="mt-1 text-[10px] text-text-muted">
+                      Select <strong>Custom</strong> to enter a manual value.
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-end">
                   <button
@@ -622,10 +708,16 @@ function ContractList() {
                     <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
                       <th className="px-4 py-3 sm:px-6 sm:py-4">Company</th>
                       <th className="px-4 py-3 sm:px-6 sm:py-4">Amount</th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">Rule & Limit</th>
-                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">End Date</th>
+                      <th className="px-4 py-3 sm:px-6 sm:py-4">
+                        Rule & Limit
+                      </th>
+                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">
+                        End Date
+                      </th>
                       <th className="px-4 py-3 sm:px-6 sm:py-4">Status</th>
-                      <th className="px-4 py-3 text-right sm:px-6 sm:py-4">Actions</th>
+                      <th className="px-4 py-3 text-right sm:px-6 sm:py-4">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -635,11 +727,15 @@ function ContractList() {
                       const st = c.status || "active";
 
                       return (
-                        <tr className="group transition-colors hover:bg-hover" key={c.id}>
+                        <tr
+                          className="group transition-colors hover:bg-hover"
+                          key={c.id}
+                        >
                           <td className="px-4 py-3 sm:px-6 sm:py-4">
                             <div className="flex items-center gap-3">
                               <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary sm:flex">
-                                {(c.companies?.company_name || "?")[0].toUpperCase()}
+                                {(c.companies?.company_name ||
+                                  "?")[0].toUpperCase()}
                               </div>
                               <div>
                                 <p className="font-semibold text-sm">
@@ -655,7 +751,9 @@ function ContractList() {
                             {formatCurrency(c.previous_amount, c.currency)}
                           </td>
                           <td className="px-4 py-3 text-sm sm:px-6 sm:py-4">
-                            <span className="font-medium">{c.inflation_base_rule || "—"}</span>
+                            <span className="font-medium">
+                              {c.inflation_base_rule || "—"}
+                            </span>
                             {c.max_increase_limit && (
                               <span className="ml-1 text-xs text-text-muted">
                                 (max {c.max_increase_limit}%)
@@ -667,11 +765,15 @@ function ContractList() {
                           </td>
                           <td className="px-4 py-3 sm:px-6 sm:py-4">
                             <div className="flex flex-col items-start gap-1">
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge(st)}`}>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge(st)}`}
+                              >
                                 {STATUS_MAP[st]?.label || st}
                               </span>
                               {urgency && (
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${urgency.cls}`}>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${urgency.cls}`}
+                                >
                                   {urgency.text}
                                 </span>
                               )}
@@ -680,7 +782,9 @@ function ContractList() {
                           <td className="px-4 py-3 text-right sm:px-6 sm:py-4">
                             <div className="flex items-center justify-end gap-2">
                               <button
-                                onClick={() => navigate(`/renewal-review/${c.id}`)}
+                                onClick={() =>
+                                  navigate(`/renewal-review/${c.id}`)
+                                }
                                 className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
                               >
                                 Review
@@ -709,6 +813,771 @@ function ContractList() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── CONTRACT DOCUMENT PREVIEW ─── */
+function ContractDocumentPreview({
+  contractType,
+  companyName,
+  liveNewPrice,
+  editEndDate,
+  amount,
+  liveAdjustment,
+  liveDifference,
+  editRule,
+  contractId,
+  formatCurrency,
+}) {
+  const bl = (n = 20) => "_".repeat(n);
+  const today = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const Title = ({ children }) => (
+    <p className="mb-1 text-center text-[13px] font-bold uppercase tracking-wide text-gray-900">
+      {children}
+    </p>
+  );
+  const ThickHR = () => (
+    <hr className="mb-3 border-gray-800" style={{ borderTopWidth: "1px" }} />
+  );
+  const ThinHR = () => (
+    <hr className="my-3 border-gray-400" style={{ borderTopWidth: "0.5px" }} />
+  );
+  const Section = ({ children }) => (
+    <p className="mb-0.5 mt-3 text-[9.5px] font-bold text-gray-900">
+      {children}
+    </p>
+  );
+  const Body = ({ children }) => (
+    <p className="mb-1 text-justify text-[9px] leading-[1.5] text-gray-800">
+      {children}
+    </p>
+  );
+  const Indent = ({ children }) => (
+    <p className="mb-0.5 ml-5 text-[9px] leading-[1.4] text-gray-800">
+      {children}
+    </p>
+  );
+  const DblIndent = ({ children }) => (
+    <p className="mb-0.5 ml-10 text-[9px] leading-[1.4] text-gray-800">
+      {children}
+    </p>
+  );
+  const CB = () => <span className="font-mono text-[9px]">[ ]</span>;
+
+  if (contractType === "lease_agreement") {
+    return (
+      <>
+        <Title>LEASE AGREEMENT</Title>
+        <ThickHR />
+        <Body>
+          <strong>I. The Parties.</strong> This Lease Agreement ("Agreement")
+          made {today}, is by and between:
+        </Body>
+        <Indent>
+          <u>Landlord:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+          ("Landlord"), and
+        </Indent>
+        <Indent>
+          <u>Tenant:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+          ("Tenant").
+        </Indent>
+        <Body>
+          Landlord and Tenant are each referred to herein as a "Party" and,
+          collectively, as the "Parties."
+        </Body>
+        <Body>
+          NOW, THEREFORE, FOR AND IN CONSIDERATION of the mutual promises and
+          agreements contained herein, the Landlord agrees to lease the Property
+          to the Tenant under the following terms and conditions:
+        </Body>
+
+        <Section>II. Leased Property.</Section>
+        <Body>The address of the leased property is: {bl(40)}</Body>
+        <Body>{bl(65)}</Body>
+        <Body>Hereinafter known as the "Property".</Body>
+
+        <Section>III. Term.</Section>
+        <Body>
+          This Agreement shall commence on {today}, and terminate: (check one)
+        </Body>
+        <Indent>
+          <CB /> - Fixed Term. On {editEndDate || bl(15)}.
+        </Indent>
+        <Indent>
+          <CB /> - Month-to-Month. Written notice of at least {bl(6)} days.
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>IV. Rent.</Section>
+        <Body>
+          The Tenant agrees to pay the Landlord the following rent: (check one)
+        </Body>
+        <Indent>
+          <CB /> - {formatCurrency(liveNewPrice)} / Month
+        </Indent>
+        <Indent>
+          <CB /> - {bl(10)} / Year
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+        <Body>Hereinafter known as the "Rent".</Body>
+
+        <Section>V. Payment Method.</Section>
+        <Body>The Rent shall be paid as follows: (check one)</Body>
+        <Indent>
+          <CB /> - On the {bl(6)} day of each month
+        </Indent>
+        <Indent>
+          <CB /> - Bank transfer / wire
+        </Indent>
+        <Indent>
+          <CB /> - Cash
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>VI. Security Deposit.</Section>
+        <Body>This Agreement requires: (check one)</Body>
+        <Indent>
+          <CB /> - A Security Deposit. Tenant agrees to pay {bl(10)} as a
+          security deposit.
+        </Indent>
+        <DblIndent>
+          <CB /> - Deposit is refundable.
+        </DblIndent>
+        <DblIndent>
+          <CB /> - Deposit is non-refundable.
+        </DblIndent>
+        <Indent>
+          <CB /> - No Security Deposit required.
+        </Indent>
+
+        <Section>VII. Use of Property.</Section>
+        <Body>
+          Tenant shall use the Property solely for residential/commercial
+          purposes and shall maintain the Property in good condition. Tenant
+          shall not make any alterations or modifications to the Property
+          without the prior written consent of the Landlord.
+        </Body>
+
+        <Section>VIII. Maintenance and Repairs.</Section>
+        <Body>
+          Routine maintenance and minor repairs are the responsibility of the
+          Tenant; major structural repairs are the responsibility of the
+          Landlord. The maximum repair cost borne by the Tenant shall not exceed{" "}
+          {bl(10)} per occurrence.
+        </Body>
+
+        <Section>IX. Termination.</Section>
+        <Body>
+          This Agreement may be terminated by either Party upon written notice
+          of at least {bl(6)} days. In the event of Tenant default, the Landlord
+          may pursue legal eviction proceedings.
+        </Body>
+
+        <Section>X. Confidentiality.</Section>
+        <Body>
+          Both Parties agree to keep the terms of this Agreement and any
+          proprietary business information confidential and shall not disclose
+          such information to third parties.
+        </Body>
+
+        <Section>XI. Governing Law.</Section>
+        <Body>
+          This Agreement shall be governed by and construed in accordance with
+          the laws of the State of {bl(20)}.
+        </Body>
+
+        <Section>XII. Additional Terms &amp; Conditions.</Section>
+        <Body>{bl(70)}</Body>
+        <Body>{bl(70)}</Body>
+        <Body>{bl(70)}</Body>
+
+        <Section>XIII. Entire Agreement.</Section>
+        <Body>
+          This Agreement constitutes the entire agreement between the Parties
+          and supersedes all prior agreements, representations, and
+          understandings. No amendment shall be binding unless executed in
+          writing by both Parties.
+        </Body>
+
+        <ThinHR />
+        <p className="mb-2 text-[9px] text-gray-800">
+          <strong>Landlord's Signature</strong> {bl(22)}&nbsp;&nbsp;&nbsp;Date{" "}
+          {bl(12)}
+        </p>
+        <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="mb-2 text-[9px] text-gray-800">
+          <strong>Tenant's Signature</strong> {bl(24)}&nbsp;&nbsp;&nbsp;Date{" "}
+          {bl(12)}
+        </p>
+        <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+      </>
+    );
+  }
+
+  if (contractType === "maintenance_agreement") {
+    return (
+      <>
+        <Title>MAINTENANCE AGREEMENT</Title>
+        <ThickHR />
+        <Body>
+          <strong>I. The Parties.</strong> This Maintenance Agreement
+          ("Agreement") made {today}, is by and between:
+        </Body>
+        <Indent>
+          <u>Service Provider:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+          ("Service Provider"), and
+        </Indent>
+        <Indent>
+          <u>Client:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+          ("Client").
+        </Indent>
+        <Body>
+          Service Provider and Client are each referred to herein as a "Party"
+          and, collectively, as the "Parties."
+        </Body>
+        <Body>
+          NOW, THEREFORE, FOR AND IN CONSIDERATION of the mutual promises and
+          agreements contained herein, the Client hires the Service Provider to
+          perform maintenance services under the following terms and conditions:
+        </Body>
+
+        <Section>II. Term.</Section>
+        <Body>
+          This Agreement shall commence on {today}, and terminate: (check one)
+        </Body>
+        <Indent>
+          <CB /> - At-Will. Written notice of at least {bl(6)} days.
+        </Indent>
+        <Indent>
+          <CB /> - End Date. On {editEndDate || bl(15)}.
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>III. Maintenance Services.</Section>
+        <Body>
+          The Service Provider agrees to perform the following maintenance
+          services:
+        </Body>
+        <Body>{bl(70)}</Body>
+        <Body>{bl(70)}</Body>
+        <Body>Hereinafter known as the "Services".</Body>
+        <Body>
+          The Service Provider shall comply with the policies, standards, and
+          regulations of the Client, including all applicable local, state, and
+          federal laws, to the best of their abilities.
+        </Body>
+
+        <Section>IV. Scope of Services.</Section>
+        <Body>The maintenance services shall include: (check one)</Body>
+        <Indent>
+          <CB /> - Scheduled / preventive maintenance
+        </Indent>
+        <Indent>
+          <CB /> - Corrective / on-demand maintenance
+        </Indent>
+        <Indent>
+          <CB /> - Full coverage (scheduled + corrective)
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>V. Payment Amount.</Section>
+        <Body>
+          The Client agrees to pay the Service Provider the following
+          compensation: (check one)
+        </Body>
+        <Indent>
+          <CB /> - {formatCurrency(liveNewPrice)} / Month (flat fee)
+        </Indent>
+        <Indent>
+          <CB /> - {bl(10)} / Hour
+        </Indent>
+        <Indent>
+          <CB /> - {bl(10)} / Visit
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+        <Body>Hereinafter known as the "Payment Amount".</Body>
+
+        <Section>VI. Payment Method.</Section>
+        <Body>The Client shall pay the Payment Amount: (check one)</Body>
+        <Indent>
+          <CB /> - When Invoiced
+        </Indent>
+        <Indent>
+          <CB /> - Weekly
+        </Indent>
+        <Indent>
+          <CB /> - Monthly
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>VII. Inspection of Services.</Section>
+        <Body>
+          Any payment shall be subject to the Client inspecting the completed
+          Services. If any Services are found to be defective or incomplete, the
+          Client shall notify the Service Provider in writing, and the Service
+          Provider shall promptly correct such work within a reasonable time.
+        </Body>
+
+        <Section>VIII. Parts and Materials.</Section>
+        <Body>
+          Parts and materials required to perform the Services shall be: (check
+          one)
+        </Body>
+        <Indent>
+          <CB /> - Supplied by the Service Provider (included in the Payment
+          Amount).
+        </Indent>
+        <Indent>
+          <CB /> - Supplied by the Client.
+        </Indent>
+        <Indent>
+          <CB /> - Agreed upon mutually on a case-by-case basis.
+        </Indent>
+
+        <Section>IX. Confidentiality.</Section>
+        <Body>
+          Service Provider acknowledges and agrees that all financial records,
+          client lists, and business information related to the Client are
+          confidential ("Confidential Information") and shall not be disclosed
+          to any third party during or after the term of this Agreement.
+        </Body>
+
+        <Section>X. Independent Contractor Status.</Section>
+        <Body>
+          Service Provider acknowledges that he/she/they are an independent
+          contractor and not an employee, agent, partner, or joint venturer of
+          the Client.
+        </Body>
+
+        <Section>XI. Governing Law.</Section>
+        <Body>
+          This Agreement shall be governed by and construed in accordance with
+          the laws of the State of {bl(20)}.
+        </Body>
+
+        <Section>XII. Additional Terms &amp; Conditions.</Section>
+        <Body>{bl(70)}</Body>
+        <Body>{bl(70)}</Body>
+
+        <Section>XIII. Entire Agreement.</Section>
+        <Body>
+          This Agreement constitutes the entire agreement between the Parties
+          and supersedes all prior agreements. No amendment shall be binding
+          unless executed in writing by both Parties.
+        </Body>
+
+        <ThinHR />
+        <p className="mb-2 text-[9px] text-gray-800">
+          <strong>Client's Signature</strong> {bl(25)}&nbsp;&nbsp;&nbsp;Date{" "}
+          {bl(12)}
+        </p>
+        <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="mb-2 text-[9px] text-gray-800">
+          <strong>Service Provider's Signature</strong> {bl(18)}
+          &nbsp;&nbsp;&nbsp;Date {bl(12)}
+        </p>
+        <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+      </>
+    );
+  }
+
+  if (contractType === "supply_agreement") {
+    return (
+      <>
+        <Title>SUPPLY AGREEMENT</Title>
+        <ThickHR />
+        <Body>
+          <strong>I. The Parties.</strong> This Supply Agreement ("Agreement")
+          made {today}, is by and between:
+        </Body>
+        <Indent>
+          <u>Supplier:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+          ("Supplier"), and
+        </Indent>
+        <Indent>
+          <u>Buyer:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+          ("Buyer").
+        </Indent>
+        <Body>
+          Supplier and Buyer are each referred to herein as a "Party" and,
+          collectively, as the "Parties."
+        </Body>
+        <Body>
+          NOW, THEREFORE, FOR AND IN CONSIDERATION of the mutual promises and
+          agreements contained herein, the Buyer engages the Supplier to provide
+          goods and/or services under the following terms and conditions:
+        </Body>
+
+        <Section>II. Term.</Section>
+        <Body>
+          This Agreement shall commence on {today}, and terminate: (check one)
+        </Body>
+        <Indent>
+          <CB /> - At-Will. Written notice of at least {bl(6)} days.
+        </Indent>
+        <Indent>
+          <CB /> - End Date. On {editEndDate || bl(15)}.
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>III. Scope of Supply.</Section>
+        <Body>
+          The Supplier agrees to supply the following goods and/or services:
+        </Body>
+        <Body>{bl(70)}</Body>
+        <Body>{bl(70)}</Body>
+        <Body>Hereinafter known as the "Supply".</Body>
+        <Body>
+          The Supplier shall, while providing the Supply, comply with the
+          policies, standards, and regulations of the Buyer, including all
+          applicable local, state, and federal laws.
+        </Body>
+
+        <Section>IV. Price.</Section>
+        <Body>
+          The Buyer agrees to pay the Supplier the following: (check one)
+        </Body>
+        <Indent>
+          <CB /> - Lump Sum: {formatCurrency(liveNewPrice)} for the entire
+          Supply
+        </Indent>
+        <Indent>
+          <CB /> - Unit Price: {bl(10)} per {bl(15)}
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+        <Body>Hereinafter known as the "Contract Price".</Body>
+
+        <Section>V. Payment Terms.</Section>
+        <Body>
+          The Buyer shall pay the Contract Price as follows: (check one)
+        </Body>
+        <Indent>
+          <CB /> - Upfront / prior to delivery
+        </Indent>
+        <Indent>
+          <CB /> - Upon delivery
+        </Indent>
+        <Indent>
+          <CB /> - Within {bl(6)} days of invoice date
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>VI. Delivery.</Section>
+        <Body>Delivery address: {bl(50)}</Body>
+        <Body>Estimated delivery date: {editEndDate || bl(25)}</Body>
+        <Body>Delivery method: (check one)</Body>
+        <Indent>
+          <CB /> - Delivered by Supplier (shipping included)
+        </Indent>
+        <Indent>
+          <CB /> - Collected by Buyer
+        </Indent>
+        <Indent>
+          <CB /> - Third-party carrier: {bl(25)}
+        </Indent>
+
+        <Section>VII. Inspection and Acceptance.</Section>
+        <Body>
+          The Buyer shall inspect all delivered goods within {bl(6)} business
+          days of receipt. If any goods fail to conform to the agreed
+          specifications or quality standards, the Buyer shall notify the
+          Supplier in writing, and the Supplier shall remedy the non-conformance
+          within a reasonable time.
+        </Body>
+
+        <Section>VIII. Warranty.</Section>
+        <Body>The Supplier offers the following warranty: (check one)</Body>
+        <Indent>
+          <CB /> - {bl(6)}-month warranty from date of delivery
+        </Indent>
+        <Indent>
+          <CB /> - Manufacturer's warranty applies
+        </Indent>
+        <Indent>
+          <CB /> - No warranty provided
+        </Indent>
+        <Indent>
+          <CB /> - Other: {bl(30)}.
+        </Indent>
+
+        <Section>IX. Confidentiality.</Section>
+        <Body>
+          Both Parties agree to keep all trade secrets and confidential business
+          information ("Confidential Information") learned under this Agreement
+          strictly confidential and shall not disclose such information to any
+          third party, both during and after the term of this Agreement.
+        </Body>
+
+        <Section>X. Force Majeure.</Section>
+        <Body>
+          Neither Party shall be liable for delays or failures in performance
+          resulting from causes beyond their reasonable control, including
+          natural disasters, war, pandemic, or government actions. The affected
+          Party shall notify the other Party in writing without delay.
+        </Body>
+
+        <Section>XI. Default.</Section>
+        <Body>
+          In the event of default under this Agreement, the defaulting Party
+          shall reimburse the non-defaulting Party for all costs and expenses
+          reasonably incurred, including attorney's fees. The prevailing Party
+          in any dispute shall be entitled to recover reasonable legal costs.
+        </Body>
+
+        <Section>XII. Governing Law.</Section>
+        <Body>
+          This Agreement shall be governed by and construed in accordance with
+          the laws of the State of {bl(20)}.
+        </Body>
+
+        <Section>XIII. Additional Terms &amp; Conditions.</Section>
+        <Body>{bl(70)}</Body>
+        <Body>{bl(70)}</Body>
+
+        <Section>XIV. Entire Agreement.</Section>
+        <Body>
+          This Agreement constitutes the entire agreement between the Parties
+          and supersedes all prior agreements, representations, and
+          understandings. No amendment shall be binding unless executed in
+          writing by both Parties.
+        </Body>
+
+        <ThinHR />
+        <p className="mb-2 text-[9px] text-gray-800">
+          <strong>Buyer's Signature</strong> {bl(26)}&nbsp;&nbsp;&nbsp;Date{" "}
+          {bl(12)}
+        </p>
+        <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="mb-2 text-[9px] text-gray-800">
+          <strong>Supplier's Signature</strong> {bl(24)}&nbsp;&nbsp;&nbsp;Date{" "}
+          {bl(12)}
+        </p>
+        <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+      </>
+    );
+  }
+
+  // Default: service_contract
+  return (
+    <>
+      <Title>SERVICE CONTRACT</Title>
+      <ThickHR />
+      <Body>
+        <strong>I. The Parties.</strong> This Service Contract ("Agreement")
+        made {today}, is by and between:
+      </Body>
+      <Indent>
+        <u>Service Provider:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+        ("Service Provider"), and
+      </Indent>
+      <Indent>
+        <u>Client:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+        ("Client").
+      </Indent>
+      <Body>
+        Service Provider and Client are each referred to herein as a "Party"
+        and, collectively, as the "Parties."
+      </Body>
+      <Body>
+        NOW, THEREFORE, FOR AND IN CONSIDERATION of the mutual promises and
+        agreements contained herein, the Client hires the Service Provider to
+        work under the terms and conditions hereby agreed upon by the Parties:
+      </Body>
+
+      <Section>II. Term.</Section>
+      <Body>
+        The term of this Agreement shall commence on {today}, and terminate:
+        (check one)
+      </Body>
+      <Indent>
+        <CB /> - At-Will. Written notice of at least {bl(6)} days.
+      </Indent>
+      <Indent>
+        <CB /> - End Date. On {editEndDate || bl(15)}.
+      </Indent>
+      <Indent>
+        <CB /> - Other: {bl(30)}.
+      </Indent>
+
+      <Section>III. The Service.</Section>
+      <Body>The Service Provider agrees to provide the following:</Body>
+      <Body>{bl(70)}</Body>
+      <Body>{bl(70)}</Body>
+      <Body>Hereinafter known as the "Service".</Body>
+      <Body>
+        The Service Provider shall, while performing the Service, comply with
+        the policies, standards, and regulations of the Client, including local,
+        State, and Federal laws and to the best of their abilities.
+      </Body>
+
+      <Section>IV. Payment Amount.</Section>
+      <Body>
+        The Client agrees to pay the Service Provider the following compensation
+        for the Service performed under this Agreement: (check one)
+      </Body>
+      <Indent>
+        <CB /> - {formatCurrency(liveNewPrice)} / Month
+      </Indent>
+      <Indent>
+        <CB /> - {bl(10)} / Hour
+      </Indent>
+      <Indent>
+        <CB /> - Other: {bl(30)}.
+      </Indent>
+      <Body>Hereinafter known as the "Payment Amount".</Body>
+
+      <Section>V. Payment Method.</Section>
+      <Body>The Client shall pay the Payment Amount: (check one)</Body>
+      <Indent>
+        <CB /> - When Invoiced
+      </Indent>
+      <Indent>
+        <CB /> - Daily
+      </Indent>
+      <Indent>
+        <CB /> - Weekly
+      </Indent>
+      <Indent>
+        <CB /> - Bi-Weekly
+      </Indent>
+      <Indent>
+        <CB /> - Monthly
+      </Indent>
+      <Indent>
+        <CB /> - Other: {bl(30)}.
+      </Indent>
+      <Body>
+        The Payment Amount and Payment Method collectively shall be referred to
+        as "Compensation".
+      </Body>
+
+      <Section>VI. Retainer.</Section>
+      <Body>This Agreement requires: (check one)</Body>
+      <Indent>
+        <CB /> - A Retainer. Client agrees to pay a retainer of {bl(10)} as an
+        advance on future Services.
+      </Indent>
+      <DblIndent>
+        <CB /> - Retainer is refundable.
+      </DblIndent>
+      <DblIndent>
+        <CB /> - Retainer is non-refundable.
+      </DblIndent>
+      <Indent>
+        <CB /> - No Retainer. The Client is not required to pay a retainer
+        before work commences.
+      </Indent>
+
+      <Section>VII. Inspection of Services.</Section>
+      <Body>
+        Any Compensation shall be subject to the Client inspecting the completed
+        Services of the Service Provider. If any Services are defective or
+        incomplete, the Client shall notify the Service Provider, who shall
+        promptly correct such work within a reasonable time.
+      </Body>
+
+      <Section>VIII. Return of Property.</Section>
+      <Body>
+        Upon termination of this Agreement, all property provided by the Client,
+        including but not limited to equipment, supplies, and uniforms, must be
+        returned by the Service Provider. Failure to do so may result in a delay
+        in any final payment.
+      </Body>
+
+      <Section>IX. Time is of the Essence.</Section>
+      <Body>
+        Service Provider acknowledges that time is of the essence in regard to
+        the performance of all Services.
+      </Body>
+
+      <Section>X. Confidentiality.</Section>
+      <Body>
+        Service Provider acknowledges and agrees that all financial and
+        accounting records, client and customer lists, and any other data
+        related to the Client's business is confidential ("Confidential
+        Information") and shall not be disclosed during or after the term of
+        this Agreement without prior written consent of the Client.
+      </Body>
+
+      <Section>XI. Taxes.</Section>
+      <Body>
+        Service Provider shall pay and be solely responsible for all
+        withholdings, including Social Security, State unemployment, State and
+        Federal income taxes, and any other applicable tax obligations arising
+        from the Services performed.
+      </Body>
+
+      <Section>XII. Independent Contractor Status.</Section>
+      <Body>
+        Service Provider acknowledges that he/she/they are an independent
+        contractor and not an agent, partner, joint venturer, nor an employee of
+        the Client. Service Provider shall have no authority to bind or obligate
+        the Client in any manner.
+      </Body>
+
+      <Section>XIII. Safety.</Section>
+      <Body>
+        Service Provider shall, at their own expense, be solely responsible for
+        protecting all persons from risk of death, injury, or bodily harm
+        arising from the Services or the Work Site. Service Provider shall
+        comply with all applicable regulations and federal law.
+      </Body>
+
+      <Section>XIV. Governing Law.</Section>
+      <Body>
+        This Agreement shall be governed by and construed in accordance with the
+        laws of the State of {bl(20)}.
+      </Body>
+
+      <Section>XV. Additional Terms &amp; Conditions.</Section>
+      <Body>{bl(70)}</Body>
+      <Body>{bl(70)}</Body>
+
+      <Section>XVI. Entire Agreement.</Section>
+      <Body>
+        This Agreement constitutes the entire agreement between the Parties and
+        supersedes all prior contemporaneous agreements, representations, and
+        understandings. No supplement, modification, or amendment shall be
+        binding unless executed in writing by all Parties.
+      </Body>
+
+      <ThinHR />
+      <p className="mb-2 text-[9px] text-gray-800">
+        <strong>Client's Signature</strong> {bl(25)}&nbsp;&nbsp;&nbsp;Date{" "}
+        {bl(12)}
+      </p>
+      <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+      <p className="mb-2 text-[9px] text-gray-800">
+        <strong>Service Provider's Signature</strong> {bl(18)}
+        &nbsp;&nbsp;&nbsp;Date {bl(12)}
+      </p>
+      <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+    </>
   );
 }
 
@@ -1087,7 +1956,9 @@ function ContractDetail() {
           <div className="space-y-2">
             <div className="flex justify-between">
               <span className="text-text-muted">Previous Amount</span>
-              <span className="font-semibold">{formatCurrency(amount, contract?.currency)}</span>
+              <span className="font-semibold">
+                {formatCurrency(amount, contract?.currency)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-text-muted">Adjustment ({editRule})</span>
@@ -1131,12 +2002,16 @@ function ContractDetail() {
                 </span>
               </div>
             </div>
-            
+
             <div className="rounded border border-border bg-surface-alt p-3">
               <p className="text-xs text-text-muted mb-1">Email to be sent:</p>
-              <p className="text-sm font-semibold truncate">{emailSubject || "Default Notification"}</p>
+              <p className="text-sm font-semibold truncate">
+                {emailSubject || "Default Notification"}
+              </p>
               <p className="text-xs text-text-muted truncate mt-1">
-                {emailBody ? "Custom email body will be included." : "Default email template will be used."}
+                {emailBody
+                  ? "Custom email body will be included."
+                  : "Default email template will be used."}
               </p>
             </div>
           </div>
@@ -1192,7 +2067,14 @@ function ContractDetail() {
         <div className="mx-auto max-w-7xl">
           <div className="mb-6 sm:mb-8">
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
-              {companyName} Service Agreement
+              {companyName}{" "}
+              {contract.contract_type === "lease_agreement"
+                ? "Lease Agreement"
+                : contract.contract_type === "maintenance_agreement"
+                  ? "Maintenance Agreement"
+                  : contract.contract_type === "supply_agreement"
+                    ? "Supply Agreement"
+                    : "Service Contract"}
             </h1>
             <p className="mt-2 flex items-center gap-2 text-sm text-text-muted">
               <span className="material-symbols-outlined text-base">timer</span>
@@ -1246,8 +2128,8 @@ function ContractDetail() {
           <div className="grid grid-cols-1 gap-6 sm:gap-8 xl:grid-cols-12">
             {/* ── Left Column ── */}
             <div className="space-y-6 sm:space-y-8 xl:col-span-7">
-              {/* Client Decision Panel — only visible to client when pending */}
-              {user?.role === "client" &&
+              {/* Client Decision Panel — only visible to client/user when pending */}
+              {["client", "user"].includes(user?.role) &&
                 contractStatus === "pending_client" && (
                   <section className="rounded-xl border-2 border-violet-500/30 bg-violet-500/5 p-4 sm:p-6">
                     <div className="mb-4 flex items-center gap-3">
@@ -1327,11 +2209,18 @@ function ContractDetail() {
                 )}
 
               {/* Editable Calculation */}
-              {user?.role !== "client" && (
+              {!["client", "user"].includes(user?.role) && (() => {
+                const isSalesReadonly = user?.role === "sales";
+                return (
                 <section className="overflow-hidden rounded-xl border border-border bg-surface">
                   <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
                     <h3 className="text-lg font-bold">Calculation Logic</h3>
-                    {dirty && (
+                    {isSalesReadonly ? (
+                      <span className="flex items-center gap-1 text-xs font-medium text-text-muted">
+                        <span className="material-symbols-outlined text-[14px]">lock</span>
+                        Read-only for Sales
+                      </span>
+                    ) : dirty && (
                       <span className="text-xs font-medium text-amber-500">
                         Unsaved changes
                       </span>
@@ -1342,30 +2231,34 @@ function ContractDetail() {
                       <span className="text-text-muted">Base Rate (TRY)</span>
                       <input
                         type="number"
-                        className={`max-w-[200px] text-right ${inputCls}`}
+                        className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                         value={editAmount}
-                        onChange={handleFieldChange(setEditAmount)}
+                        readOnly={isSalesReadonly}
+                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditAmount)}
                       />
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-text-muted">End Date</span>
                       <input
                         type="date"
-                        className={`max-w-[200px] ${inputCls}`}
+                        className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                         value={editEndDate}
-                        onChange={handleFieldChange(setEditEndDate)}
+                        readOnly={isSalesReadonly}
+                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditEndDate)}
                       />
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-text-muted">Inflation Rule</span>
                       <select
-                        className={`max-w-[200px] ${inputCls}`}
+                        className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                         value={editRule}
-                        onChange={handleFieldChange(setEditRule)}
+                        disabled={isSalesReadonly}
+                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditRule)}
                       >
                         <option value="TUFE">TUFE</option>
                         <option value="UFE">UFE</option>
                         <option value="TUFE+UFE">TUFE + UFE (Avg)</option>
+                        <option value="CUSTOM">Custom</option>
                       </select>
                     </div>
                     <div className="flex items-center justify-between gap-4">
@@ -1374,29 +2267,50 @@ function ContractDetail() {
                       </span>
                       <input
                         type="number"
-                        className={`max-w-[200px] text-right ${inputCls}`}
+                        className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                         placeholder="No limit"
                         value={editMaxLimit}
-                        onChange={handleFieldChange(setEditMaxLimit)}
+                        readOnly={isSalesReadonly}
+                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditMaxLimit)}
                       />
                     </div>
                     <div className="h-px bg-border" />
                     <div className="flex justify-between py-1">
-                      <span className="text-text-muted" title="Consumer Price Index (TCMB)">TUFE (CPI)</span>
+                      <span
+                        className="text-text-muted"
+                        title="Consumer Price Index (TCMB)"
+                      >
+                        TUFE (CPI)
+                      </span>
                       <span className="font-medium">+{tufe.toFixed(2)}%</span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-text-muted" title="Producer Price Index (TCMB)">UFE (PPI)</span>
+                      <span
+                        className="text-text-muted"
+                        title="Producer Price Index (TCMB)"
+                      >
+                        UFE (PPI)
+                      </span>
                       <span className="font-medium">+{ufe.toFixed(2)}%</span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-text-muted" title="TCMB Official Exchange Rate">USD/TRY</span>
+                      <span
+                        className="text-text-muted"
+                        title="TCMB Official Exchange Rate"
+                      >
+                        USD/TRY
+                      </span>
                       <span className="font-medium">
                         {calc.usd_rate.toFixed(4)}
                       </span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="text-text-muted" title="TCMB Official Exchange Rate">EUR/TRY</span>
+                      <span
+                        className="text-text-muted"
+                        title="TCMB Official Exchange Rate"
+                      >
+                        EUR/TRY
+                      </span>
                       <span className="font-medium">
                         {calc.eur_rate.toFixed(4)}
                       </span>
@@ -1416,15 +2330,16 @@ function ContractDetail() {
                     </div>
                   </div>
                 </section>
-              )}
+                );
+              })()}
 
               {/* Addendum Preview */}
               <section className="rounded-xl border border-border bg-surface">
                 <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
                   <div>
-                    <h3 className="text-lg font-bold">Generated Addendum</h3>
+                    <h3 className="text-lg font-bold">Contract Preview</h3>
                     <p className="text-xs text-text-muted">
-                      Preview — download full PDF above
+                      Template view — download addendum PDF above
                     </p>
                   </div>
                   <button
@@ -1440,92 +2355,27 @@ function ContractDetail() {
                 </div>
                 <div className="max-h-[600px] overflow-y-auto bg-neutral-200 p-4 sm:p-8">
                   <div className="mx-auto min-h-[842px] w-full max-w-[595px] bg-white p-8 font-serif text-[10px] text-gray-800 shadow-lg sm:p-12">
-                    <h1 className="mb-1 font-sans text-sm font-bold text-blue-600">
-                      RATEGUARD
-                    </h1>
-                    <hr className="mb-4 border-blue-600" />
-                    <h2 className="mb-4 text-lg font-bold">
-                      CONTRACT ADDENDUM
-                    </h2>
-                    <p className="mb-1 text-[9px] text-gray-500">
-                      Ref: SA-{contract.id.slice(0, 8).toUpperCase()}-RNW |
-                      Date: {new Date().toLocaleDateString("tr-TR")}
-                    </p>
-                    <div className="my-4 h-px bg-gray-200" />
-                    <p className="mb-2 font-bold">1. PARTIES</p>
-                    <p className="mb-1">Service Provider: RateGuard</p>
-                    <p className="mb-4">Client: {companyName}</p>
-                    <p className="mb-2 font-bold">2. PRICE CALCULATION</p>
-                    <table className="mt-2 w-full text-left">
-                      <tbody>
-                        <tr className="border-b border-gray-300 bg-blue-50">
-                          <th className="py-1.5 pl-2 font-semibold">
-                            Description
-                          </th>
-                          <th className="py-1.5 pr-2 text-right font-semibold">
-                            Amount
-                          </th>
-                        </tr>
-                        <tr className="border-b border-gray-100">
-                          <td className="py-1.5 pl-2">
-                            Current Contract Value
-                          </td>
-                          <td className="py-1.5 pr-2 text-right">
-                            {formatCurrency(amount)}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-gray-100">
-                          <td className="py-1.5 pl-2">
-                            Applied Index ({editRule})
-                          </td>
-                          <td className="py-1.5 pr-2 text-right">
-                            %{liveAdjustment.toFixed(2)}
-                          </td>
-                        </tr>
-                        <tr className="border-b border-gray-100">
-                          <td className="py-1.5 pl-2">Difference</td>
-                          <td className="py-1.5 pr-2 text-right">
-                            +{formatCurrency(liveDifference)}
-                          </td>
-                        </tr>
-                        <tr className="bg-blue-50">
-                          <td className="py-2 pl-2 font-bold">
-                            NEW CONTRACT VALUE
-                          </td>
-                          <td className="py-2 pr-2 text-right text-sm font-bold text-blue-700">
-                            {formatCurrency(liveNewPrice)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div className="mt-8">
-                      <p className="mb-2 font-bold">3. SIGNATURES</p>
-                      <div className="mt-4 flex justify-between">
-                        <div>
-                          <p className="mb-6">Service Provider</p>
-                          <p>_________________________</p>
-                          <p className="text-[8px] text-gray-400">
-                            Signature / Stamp
-                          </p>
-                        </div>
-                        <div>
-                          <p className="mb-6">Client</p>
-                          <p>_________________________</p>
-                          <p className="text-[8px] text-gray-400">
-                            Signature / Stamp
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    <ContractDocumentPreview
+                      contractType={
+                        contract.contract_type || "service_contract"
+                      }
+                      companyName={companyName}
+                      liveNewPrice={liveNewPrice}
+                      editEndDate={editEndDate}
+                      amount={amount}
+                      liveAdjustment={liveAdjustment}
+                      liveDifference={liveDifference}
+                      editRule={editRule}
+                      contractId={contract.id}
+                      formatCurrency={formatCurrency}
+                    />
                   </div>
                 </div>
               </section>
 
               {/* Create New Version — shown to staff when client has rejected */}
               {contractStatus === "client_rejected" &&
-                ["finance", "company_admin", "super_admin", "sales"].includes(
-                  user?.role,
-                ) && (
+                ["finance", "company_admin", "super_admin", "sales"].includes(user?.role) && (
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-6">
                     <div>
                       <p className="font-semibold text-amber-600">
@@ -1593,9 +2443,13 @@ function ContractDetail() {
                     </div>
                   </div>
 
-                  {/* Primary CTA: Send to Client */}
+                  {/* Finance: Notify Sales (instead of send-to-client) */}
+                  {user?.role === "finance" && (
+                    <FinanceNotifySalesButton contractId={id} contract={contract} />
+                  )}
+
+                  {/* Sales + Admin: Send to Client */}
                   {[
-                    "finance",
                     "company_admin",
                     "super_admin",
                     "sales",
@@ -1639,7 +2493,7 @@ function ContractDetail() {
                     </button>
                   )}
 
-                  {/* Finance/Admin: Save Draft */}
+                  {/* Finance/Admin: Save Draft (not Sales) */}
                   {["finance", "company_admin", "super_admin"].includes(
                     user?.role,
                   ) && (
@@ -1662,8 +2516,8 @@ function ContractDetail() {
               {/* Chat Panel */}
               <ChatPanel contractId={id} />
 
-              {/* AI Email Composer */}
-              <section className="rounded-xl border border-border bg-surface">
+              {/* AI Email Composer — only for Sales and Admin roles */}
+              {["sales", "company_admin", "super_admin"].includes(user?.role) && <section className="rounded-xl border border-border bg-surface">
                 <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
                   <h3 className="text-lg font-bold text-primary">
                     AI Email Composer
@@ -1786,7 +2640,23 @@ function ContractDetail() {
                     </>
                   )}
                 </div>
-              </section>
+              </section>}
+
+              {/* Finance: Internal Notes reminder */}
+              {user?.role === "finance" && (
+                <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-amber-500 mt-0.5">info</span>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-600">Finance Workflow</p>
+                      <p className="mt-1 text-xs text-text-muted leading-relaxed">
+                        Once you finish preparing this contract, click <strong>Notify Sales Team</strong> above.
+                        Sales will handle communication with the counterparty and send the contract for their review.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              )}
             </div>
           </div>
         </div>

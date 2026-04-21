@@ -1,12 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getCompanies, createCompany, updateCompany, deleteCompany } from '../api'
+import { getCompanies, deleteCompany } from '../api'
 import Spinner from '../components/Spinner'
-
-const emptyForm = {
-  company_name: '',
-  authorized_email: '',
-}
+import { useAuth } from '../contexts/AuthContext'
 
 function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
   if (!open) return null
@@ -18,12 +13,12 @@ function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
             <span className="material-symbols-outlined text-xl text-red-500">warning</span>
           </div>
           <div>
-            <h3 className="text-lg font-bold">Delete Company</h3>
-            <p className="text-sm text-text-muted">This action cannot be undone.</p>
+            <h3 className="text-lg font-bold">Remove company</h3>
+            <p className="text-sm text-text-muted">Contracts with this company will be removed.</p>
           </div>
         </div>
         <p className="mb-4 text-sm text-text">
-          Are you sure you want to delete <strong>{name}</strong>? All related contracts will also be affected.
+          Remove <strong>{name}</strong>? All contracts between your organization and this company will be deleted.
         </p>
         <div className="flex justify-end gap-3">
           <button onClick={onCancel}
@@ -32,7 +27,7 @@ function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
           </button>
           <button onClick={onConfirm} disabled={loading}
             className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50">
-            {loading ? 'Deleting...' : 'Delete'}
+            {loading ? 'Removing...' : 'Remove'}
           </button>
         </div>
       </div>
@@ -41,14 +36,9 @@ function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
 }
 
 export default function ClientManagementPage() {
-  const navigate = useNavigate()
+  const { user } = useAuth()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState(null)
-  const [form, setForm] = useState(emptyForm)
-  const [isNew, setIsNew] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
@@ -59,74 +49,28 @@ export default function ClientManagementPage() {
   }
 
   const load = useCallback(async () => {
+    setLoading(true)
     try {
-      const data = await getCompanies(search)
-      setClients(data)
+      const data = await getCompanies()
+      setClients(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Companies load error:', err)
     } finally {
       setLoading(false)
     }
-  }, [search])
+  }, [])
 
   useEffect(() => {
-    const timer = setTimeout(load, 300)
-    return () => clearTimeout(timer)
+    load()
   }, [load])
-
-  const openNew = () => {
-    setSelected(null)
-    setForm(emptyForm)
-    setIsNew(true)
-  }
-
-  const openEdit = (client) => {
-    setIsNew(false)
-    setSelected(client)
-    setForm({
-      company_name: client.company_name || '',
-      authorized_email: client.authorized_email || '',
-    })
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const payload = { ...form }
-      if (isNew) {
-        const res = await createCompany(payload)
-        showToast('Company created successfully')
-        setIsNew(false)
-        setSelected(null)
-        setForm(emptyForm)
-        navigate('/renewal-review')
-      } else {
-        await updateCompany(selected.id, payload)
-        showToast('Company updated successfully')
-        setIsNew(false)
-        setSelected(null)
-        setForm(emptyForm)
-        await load()
-      }
-    } catch (err) {
-      console.error('Save error:', err)
-      showToast('Save failed: ' + err.message, 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
       await deleteCompany(deleteTarget.id)
-      if (selected?.id === deleteTarget.id) {
-        setSelected(null)
-        setForm(emptyForm)
-      }
       setDeleteTarget(null)
-      showToast('Company deleted successfully')
+      showToast('Company removed and contracts deleted')
       await load()
     } catch (err) {
       console.error('Delete error:', err)
@@ -136,16 +80,8 @@ export default function ClientManagementPage() {
     }
   }
 
-  const closeSidebar = () => {
-    setSelected(null)
-    setIsNew(false)
-    setForm(emptyForm)
-  }
-
   const formatCurrency = (n) =>
     new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n || 0)
-
-  const sidebarOpen = isNew || selected !== null
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
@@ -170,106 +106,62 @@ export default function ClientManagementPage() {
         loading={deleting}
       />
 
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-bold sm:text-2xl">Client Management</h2>
-          <p className="mt-1 hidden text-sm text-text-muted sm:block">Manage profiles, risk assessments, and contract renewals.</p>
+          <p className="mt-1 hidden text-sm text-text-muted sm:block">
+            Companies you have active contracts with. Remove a company to delete all contracts between you.
+          </p>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-          <div className="mb-6 flex gap-4">
-            <input
-              className="w-full max-w-md rounded-lg border border-border bg-surface px-4 py-2 text-sm text-text outline-none placeholder:text-text-muted focus:border-primary focus:ring-1 focus:ring-primary"
-              placeholder="Search clients by name..."
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center py-16"><Spinner size="lg" /></div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-border bg-surface">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">Company Name</th>
-                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">Contact</th>
-                      <th className="hidden px-4 py-3 md:table-cell sm:px-6 sm:py-4">Contract Value</th>
-                      <th className="px-4 py-3 text-right sm:px-6 sm:py-4">Action</th>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+        {loading ? (
+          <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 sm:px-6 sm:py-4">Company Name</th>
+                    <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">Contact</th>
+                    <th className="hidden px-4 py-3 md:table-cell sm:px-6 sm:py-4">Contract Value</th>
+                    <th className="px-4 py-3 text-right sm:px-6 sm:py-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {clients.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-sm text-text-muted">
+                        <span className="material-symbols-outlined mb-2 block text-3xl">business</span>
+                        No companies found. Create a contract on the <strong className="text-text">Contracts</strong> page to see companies here.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {clients.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-sm text-text-muted">
-                          No clients found.
-                        </td>
-                      </tr>
-                    )}
-                    {clients.map((c) => {
-                      return (
-                        <tr className="transition-colors hover:bg-hover" key={c.id}>
-                          <td className="px-4 py-3 font-medium sm:px-6 sm:py-4">{c.company_name}</td>
-                          <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">{c.authorized_email}</td>
-                          <td className="hidden px-4 py-3 text-sm font-medium md:table-cell sm:px-6 sm:py-4">{formatCurrency(c.contract_value)}</td>
-                          <td className="px-4 py-3 text-right text-sm font-medium sm:px-6 sm:py-4">
-                            <button onClick={() => setDeleteTarget(c)} className="text-red-500 hover:text-red-400">
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                  )}
+                  {clients.map((c) => (
+                    <tr className="transition-colors hover:bg-hover" key={c.id}>
+                      <td className="px-4 py-3 font-medium sm:px-6 sm:py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary sm:flex">
+                            {(c.company_name || '?')[0].toUpperCase()}
+                          </div>
+                          <span>{c.company_name}</span>
+                        </div>
+                      </td>
+                      <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">{c.authorized_email}</td>
+                      <td className="hidden px-4 py-3 text-sm font-medium md:table-cell sm:px-6 sm:py-4">{formatCurrency(c.contract_value)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-medium sm:px-6 sm:py-4">
+                        <button type="button" onClick={() => setDeleteTarget(c)} className="text-red-500 hover:text-red-400 font-medium">
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
-
-        {sidebarOpen && (
-          <aside className="z-10 flex h-full w-full shrink-0 flex-col overflow-hidden border-l border-border bg-surface sm:w-[420px]">
-            <div className="border-b border-border px-6 py-5">
-              <h3 className="text-lg font-bold">{isNew ? 'New Client' : 'Edit Client Profile'}</h3>
-              {selected && <p className="mt-1 text-xs text-text-muted">ID: {selected.id.slice(0, 8)}</p>}
-            </div>
-            <div className="flex-1 space-y-6 overflow-y-auto p-6">
-              <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Company Name</h4>
-                <input
-                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  value={form.company_name}
-                  onChange={(e) => setForm({ ...form, company_name: e.target.value })}
-                />
-              </div>
-              <div>
-                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">Authorized Email</h4>
-                <input
-                  className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  value={form.authorized_email}
-                  onChange={(e) => setForm({ ...form, authorized_email: e.target.value })}
-                  type="email"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 border-t border-border bg-surface-alt p-6">
-              <button onClick={closeSidebar} className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-hover">
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !form.company_name || !form.authorized_email}
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : isNew ? 'Create' : 'Save Changes'}
-              </button>
-            </div>
-          </aside>
+          </div>
         )}
       </div>
     </div>

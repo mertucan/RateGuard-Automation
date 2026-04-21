@@ -1,20 +1,21 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { getUsers, updateUser, deleteUser } from '../api'
 import { PageLoader } from '../components/Spinner'
 
-const ROLE_OPTIONS = [
+// Team invites only internal roles; clients belong on the Clients flow, not as a team role.
+const TEAM_ROLE_OPTIONS = [
   { value: 'finance', label: 'Finance' },
   { value: 'sales', label: 'Sales' },
-  { value: 'client', label: 'Client' },
 ]
 
-const ROLE_BADGES = {
+  const ROLE_BADGES = {
   super_admin: 'bg-red-500/10 text-red-500',
   company_admin: 'bg-purple-500/10 text-purple-500',
   finance: 'bg-amber-500/10 text-amber-500',
   sales: 'bg-blue-500/10 text-blue-500',
   client: 'bg-emerald-500/10 text-emerald-500',
+  user: 'bg-emerald-500/10 text-emerald-500',
 }
 
 export default function TeamManagementPage() {
@@ -62,11 +63,11 @@ export default function TeamManagementPage() {
   const loadClients = useCallback(async () => {
     setIsClientsLoading(true)
     try {
-      // Fetch users with role client and unassigned, use _t to prevent browser caching
-      const data = await getUsers({ role: 'client', unassigned: 'true', _t: Date.now() })
+      // Fetch users with role 'user' (unassigned), use _t to prevent browser caching
+      const data = await getUsers({ role: 'user', unassigned: 'true', _t: Date.now() })
       setClients(data)
     } catch (err) {
-      console.error('Clients load error:', err)
+      console.error('Users load error:', err)
     } finally {
       setIsClientsLoading(false)
     }
@@ -156,7 +157,11 @@ export default function TeamManagementPage() {
             className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
           >
             <option value="all">All Roles</option>
-            {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            {TEAM_ROLE_OPTIONS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
             {user?.role === 'super_admin' && <option value="super_admin">Super Admin</option>}
             {user?.role === 'super_admin' && <option value="company_admin">Company Admin</option>}
           </select>
@@ -177,7 +182,7 @@ export default function TeamManagementPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="relative">
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
-                    Search Existing Client
+                    Search user to invite
                   </label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[18px]">
@@ -199,7 +204,7 @@ export default function TeamManagementPage() {
                   {clientSearch && !selectedClient && (
                     <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-surface shadow-xl">
                       {filteredClients.length === 0 ? (
-                        <div className="p-3 text-sm text-text-muted text-center">No clients found</div>
+                        <div className="p-3 text-sm text-text-muted text-center">No eligible users found</div>
                       ) : (
                         filteredClients.map((c) => (
                           <button
@@ -243,7 +248,7 @@ export default function TeamManagementPage() {
                     value={form.role}
                     onChange={(e) => setForm({ ...form, role: e.target.value })}
                   >
-                    {ROLE_OPTIONS.map((r) => (
+                    {TEAM_ROLE_OPTIONS.map((r) => (
                       <option key={r.value} value={r.value}>
                         {r.label}
                       </option>

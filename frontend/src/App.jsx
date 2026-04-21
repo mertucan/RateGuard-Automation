@@ -7,6 +7,8 @@ import ClientManagementPage from "./pages/ClientManagementPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AuditLogPage from "./pages/AuditLogPage";
 import TeamManagementPage from "./pages/TeamManagementPage";
+import ApplicationsPage from "./pages/ApplicationsPage";
+import ApplicationManagementPage from "./pages/ApplicationManagementPage";
 import Layout from "./components/Layout";
 import SplashScreen from "./components/SplashScreen";
 import LoginPage from "./pages/LoginPage";
@@ -78,6 +80,7 @@ function AppRoutes() {
               "finance",
               "sales",
               "client",
+              "user",
             ]}
           >
             <Layout>
@@ -98,6 +101,7 @@ function AppRoutes() {
               "finance",
               "sales",
               "client",
+              "user",
             ]}
           >
             <Layout>
@@ -121,9 +125,29 @@ function AppRoutes() {
       <Route
         path="/analytics"
         element={
-          <ProtectedRoute roles={["super_admin", "company_admin", "finance"]}>
+          <ProtectedRoute roles={["super_admin", "company_admin", "finance", "user", "client"]}>
             <Layout>
               <AnalyticsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/applications"
+        element={
+          <ProtectedRoute roles={["user", "client"]}>
+            <Layout>
+              <ApplicationsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/application-management"
+        element={
+          <ProtectedRoute roles={["super_admin", "company_admin"]}>
+            <Layout>
+              <ApplicationManagementPage />
             </Layout>
           </ProtectedRoute>
         }

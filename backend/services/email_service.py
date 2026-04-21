@@ -259,6 +259,90 @@ def send_mutual_approval_email(
     )
 
 
+def send_finance_ready_notification(
+    to_email, sales_name, finance_name, client_company_name,
+    contract_id, previous_amount, new_amount, end_date, inflation_rule
+):
+    subject = f"Sözleşme Hazır — {client_company_name} için Sales Aksiyonu Gerekiyor"
+    prev_fmt = f"{previous_amount:,.2f} TL" if previous_amount is not None else "—"
+    new_fmt = f"{new_amount:,.2f} TL" if new_amount is not None else "Henüz hesaplanmadı"
+    body_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
+            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 13px;">Finance → Sales Bildirimi</p>
+        </div>
+        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Sözleşme Hazırlığı Tamamlandı</h2>
+            <p style="color: #64748b; line-height: 1.6;">
+                Merhaba <strong>{sales_name}</strong>,
+            </p>
+            <p style="color: #64748b; line-height: 1.6;">
+                Finance departmanından <strong>{finance_name}</strong>, <strong>{client_company_name}</strong> şirketi ile olan sözleşme yenileme hazırlığını tamamladı. Artık sıra sende!
+            </p>
+            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                <p style="color: #0369a1; margin: 0 0 8px; font-size: 14px;"><strong>Sözleşme Detayları:</strong></p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">🏢 <strong>Şirket:</strong> {client_company_name}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">💰 <strong>Mevcut Tutar:</strong> {prev_fmt}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📈 <strong>Önerilen Yeni Tutar:</strong> {new_fmt}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📅 <strong>Bitiş Tarihi:</strong> {end_date}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📊 <strong>Enflasyon Kuralı:</strong> {inflation_rule}</p>
+            </div>
+            <p style="color: #64748b; line-height: 1.6;">
+                Lütfen RateGuard portalına giriş yaparak sözleşmeyi incele ve karşı şirkete göndermek için gerekli adımları tamamla.
+            </p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+                Sözleşme referansı: {contract_id}
+            </p>
+        </div>
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
+            RateGuard — Otomatik Sözleşme Yönetimi
+        </p>
+    </div>
+    """
+    return send_email(to_email, subject, body_html)
+
+
+def send_application_notification_email(
+    to_email, applicant_name, applicant_email, company_name, department, message, application_id
+):
+    dept_label = {"sales": "Sales", "finance": "Finance"}.get(department, department.capitalize())
+    subject = f"Yeni Başvuru — {company_name} {dept_label} Departmanına"
+    msg_html = f'<p style="color: #334155; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 0;">{message}</p>' if message else '<p style="color: #94a3b8; font-size: 14px;">Başvuru mesajı girilmedi.</p>'
+    body_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
+            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 13px;">Yeni Departman Başvurusu</p>
+        </div>
+        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Yeni Başvuru Alındı</h2>
+            <p style="color: #64748b; line-height: 1.6;">
+                <strong>{company_name}</strong> firmasının <strong>{dept_label}</strong> departmanına yeni bir başvuru yapıldı.
+            </p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 0 0 8px; color: #334155; font-size: 14px;">👤 <strong>Başvuran:</strong> {applicant_name}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">✉️ <strong>E-posta:</strong> {applicant_email}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">🏢 <strong>Şirket:</strong> {company_name}</p>
+                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📁 <strong>Departman:</strong> {dept_label}</p>
+            </div>
+            <p style="color: #475569; font-size: 14px; margin-bottom: 8px;"><strong>Başvuru Mesajı:</strong></p>
+            {msg_html}
+            <p style="color: #64748b; line-height: 1.6; margin-top: 16px;">
+                RateGuard portalına giriş yaparak başvuruyu onaylayabilir veya reddedebilirsiniz.
+            </p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+                Başvuru referansı: {application_id}
+            </p>
+        </div>
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
+            RateGuard — Otomatik Sözleşme Yönetimi
+        </p>
+    </div>
+    """
+    return send_email(to_email, subject, body_html)
+
+
 def send_user_removed_email(to_email, user_name, company_name, role):
     subject = f"Account Update — {company_name}"
     body_html = f"""

@@ -8,7 +8,7 @@ from services.email_service import send_email
 
 users_bp = Blueprint("users", __name__)
 
-VALID_ROLES = {"super_admin", "company_admin", "finance", "sales", "client"}
+VALID_ROLES = {"super_admin", "company_admin", "finance", "sales", "user", "client"}  # "client" kept for backward compat
 
 
 def _sanitize_user(user):
@@ -25,7 +25,7 @@ def register():
     full_name = (body.get("full_name") or "").strip()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
-    role = (body.get("role") or "client").strip()
+    role = (body.get("role") or "user").strip()
     company_id = body.get("company_id")
     company_name = (body.get("company_name") or "").strip()
 
@@ -137,10 +137,10 @@ def get_user(user_id):
             supabase.table("users")
             .select("*, companies!users_company_id_fkey(id, company_name)")
             .eq("id", user_id)
-            .single()
+            .limit(1)
             .execute()
         )
-        return jsonify(_sanitize_user(result.data))
+        return jsonify(_sanitize_user(result.data[0] if result.data else None))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -196,11 +196,11 @@ def update_user(user_id):
 def delete_user(user_id):
     try:
         # Fetch user and company details
-        user_res = supabase.table("users").select("*, companies!users_company_id_fkey(company_name)").eq("id", user_id).single().execute()
+        user_res = supabase.table("users").select("*, companies!users_company_id_fkey(company_name)").eq("id", user_id).limit(1).execute()
         if not user_res.data:
             return jsonify({"error": "User not found"}), 404
             
-        user = user_res.data
+        user = user_res.data[0]
         company_name = user.get("companies", {}).get("company_name", "the company") if user.get("companies") else "the company"
         old_role = user.get("role", "member")
         email = user.get("email")
@@ -209,7 +209,7 @@ def delete_user(user_id):
         # Update user instead of deleting
         supabase.table("users").update({
             "company_id": None,
-            "role": "client"
+            "role": "user"
         }).eq("id", user_id).execute()
         
         # Send removal email
@@ -220,7 +220,7 @@ def delete_user(user_id):
             except Exception as email_err:
                 print(f"[delete_user] Email send error: {email_err}")
                 
-        return jsonify({"ok": True, "message": "User removed from company and reverted to client."})
+        return jsonify({"ok": True, "message": "User removed from company and reverted to user."})
     except Exception as e:
         print(f"[delete_user] Error: {e}")
         return jsonify({"error": str(e)}), 500

@@ -13,10 +13,10 @@ def calculate_renewal(contract_id):
         supabase.table("contracts")
         .select("*, companies!contracts_company_id_fkey(company_name, authorized_email, communication_language)")
         .eq("id", contract_id)
-        .single()
+        .limit(1)
         .execute()
     )
-    contract = result.data
+    contract = result.data[0] if result.data else None
     if not contract:
         raise ValueError(f"Contract {contract_id} not found")
 

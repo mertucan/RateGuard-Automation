@@ -6,9 +6,11 @@ import NotificationBell from './NotificationBell'
 
 const ALL_NAV_ITEMS = [
   { to: '/dashboard', icon: 'dashboard', label: 'Dashboard', roles: null },
-  { to: '/renewal-review', icon: 'description', label: 'Contracts', roles: ['super_admin', 'company_admin', 'finance', 'sales', 'client'] },
+  { to: '/renewal-review', icon: 'description', label: 'Contracts', roles: ['super_admin', 'company_admin', 'finance', 'sales', 'client', 'user'] },
   { to: '/clients', icon: 'group', label: 'Clients', roles: ['super_admin', 'company_admin'] },
-  { to: '/analytics', icon: 'monitoring', label: 'Analytics', roles: ['super_admin', 'company_admin', 'finance'] },
+  { to: '/analytics', icon: 'monitoring', label: 'Analytics', roles: ['super_admin', 'company_admin', 'finance', 'user', 'client'] },
+  { to: '/applications', icon: 'work', label: 'Applications', roles: ['user', 'client'] },
+  { to: '/application-management', icon: 'assignment_ind', label: 'Applications', roles: ['super_admin', 'company_admin'] },
   { to: '/team', icon: 'manage_accounts', label: 'Team', roles: ['super_admin', 'company_admin'] },
   { to: '/audit-log', icon: 'history', label: 'Audit Log', roles: ['super_admin', 'company_admin', 'finance'] },
 ]
@@ -39,7 +41,8 @@ export default function Layout({ children }) {
     company_admin: 'Company Admin',
     finance: 'Finance',
     sales: 'Sales',
-    client: 'Client',
+    client: 'User',
+    user: 'User',
   }
 
   return (

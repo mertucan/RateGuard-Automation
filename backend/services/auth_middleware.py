@@ -12,10 +12,10 @@ def get_current_user():
             supabase.table("users")
             .select("id, full_name, email, role, company_id")
             .eq("id", user_id)
-            .single()
+            .limit(1)
             .execute()
         )
-        return result.data
+        return result.data[0] if result.data else None
     except Exception:
         return None
 

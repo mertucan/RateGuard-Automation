@@ -2,7 +2,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+_backend_dir = Path(__file__).resolve().parent
+_repo_root = _backend_dir.parent
+# Prefer backend/.env; fill missing keys from repo root .env (common when .env lives in project root).
+load_dotenv(_backend_dir / ".env")
+load_dotenv(_repo_root / ".env")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")

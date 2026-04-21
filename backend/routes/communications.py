@@ -89,13 +89,14 @@ def analyze_contract_tone(contract_id):
     try:
         from services.gemini_service import analyze_communication_tone
 
-        contract = (
+        contract_res = (
             supabase.table("contracts")
             .select("company_id")
             .eq("id", contract_id)
-            .single()
+            .limit(1)
             .execute()
-        ).data
+        )
+        contract = contract_res.data[0] if contract_res.data else {}
 
         if not contract or not contract.get("company_id"):
             return jsonify({"error": "Contract not found"}), 404

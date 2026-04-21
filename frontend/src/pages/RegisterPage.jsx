@@ -1,7 +1,23 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { registerUser } from '../api'
+
+function getPasswordStrength(password) {
+  if (!password) return { score: 0, label: '', color: '' }
+  let score = 0
+  if (password.length >= 8) score++
+  if (password.length >= 12) score++
+  if (/[A-Z]/.test(password)) score++
+  if (/[0-9]/.test(password)) score++
+  if (/[^A-Za-z0-9]/.test(password)) score++
+
+  if (score <= 1) return { score, label: 'Very Weak', color: 'bg-red-500' }
+  if (score === 2) return { score, label: 'Weak', color: 'bg-orange-500' }
+  if (score === 3) return { score, label: 'Fair', color: 'bg-yellow-500' }
+  if (score === 4) return { score, label: 'Strong', color: 'bg-emerald-500' }
+  return { score, label: 'Very Strong', color: 'bg-emerald-600' }
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -15,8 +31,10 @@ export default function RegisterPage() {
     company_name: '',
   })
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const onChange = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
+  const passwordStrength = useMemo(() => getPasswordStrength(form.password), [form.password])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -27,6 +45,10 @@ export default function RegisterPage() {
     }
     if (form.password.length < 8) {
       toastError('Password must be at least 8 characters long.')
+      return
+    }
+    if (passwordStrength.score < 2) {
+      toastError('Password is too weak. Add uppercase letters, numbers, or symbols.')
       return
     }
     if (form.role === 'company_admin' && !form.company_name.trim()) {
@@ -93,7 +115,7 @@ export default function RegisterPage() {
                 </span>
                 <select className={inputCls} value={form.role} onChange={onChange('role')}>
                   <option value="company_admin">Company Administrator</option>
-                  <option value="client">Client</option>
+                  <option value="user">User</option>
                 </select>
               </div>
             </div>
@@ -167,12 +189,48 @@ export default function RegisterPage() {
                 <input
                   className={inputCls}
                   placeholder="Minimum 8 characters"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={onChange('password')}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {showPassword ? 'visibility_off' : 'visibility'}
+                  </span>
+                </button>
               </div>
+              {form.password && (
+                <div className="space-y-1.5">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                          i <= passwordStrength.score ? passwordStrength.color : 'bg-outline-variant/20'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-xs font-medium ${
+                      passwordStrength.score <= 1 ? 'text-red-500' :
+                      passwordStrength.score === 2 ? 'text-orange-500' :
+                      passwordStrength.score === 3 ? 'text-yellow-500' :
+                      'text-emerald-500'
+                    }`}>
+                      {passwordStrength.label}
+                    </p>
+                    <p className="text-[10px] text-on-surface opacity-50">
+                      Use uppercase, numbers & symbols to strengthen
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
