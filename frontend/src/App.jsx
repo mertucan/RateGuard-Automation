@@ -14,6 +14,10 @@ import SplashScreen from "./components/SplashScreen";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import LandingPage from "./pages/LandingPage";
+import SolutionsPage from "./pages/SolutionsPage";
+import AboutUsPage from "./pages/AboutUsPage";
+import KeyBenefitsPage from "./pages/KeyBenefitsPage";
 import { PageLoader } from "./components/Spinner";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -41,10 +45,13 @@ function AppRoutes() {
           user ? (
             <Navigate to="/dashboard" replace />
           ) : (
-            <Navigate to="/login" replace />
+            <LandingPage />
           )
         }
       />
+      <Route path="/solutions" element={<SolutionsPage />} />
+      <Route path="/about-us" element={<AboutUsPage />} />
+      <Route path="/key-benefits" element={<KeyBenefitsPage />} />
       <Route
         path="/login"
         element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
