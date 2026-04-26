@@ -23,11 +23,13 @@ export default function RegisterPage() {
       </header>
 
       <main className="w-full max-w-[440px] relative">
-      <div className="absolute -inset-0.5 bg-linear-to-br from-primary/10 to-transparent rounded-xl blur-sm opacity-20"></div>
+        <div className="absolute -inset-0.5 bg-linear-to-br from-primary/10 to-transparent rounded-xl blur-sm opacity-20" />
         <div className="relative bg-surface-container-low border border-outline-variant/10 rounded-xl p-10 sovereign-glow">
           <div className="mb-8">
             <h2 className="font-headline text-xl font-bold text-on-surface">Establish Node</h2>
-            <p className="text-sm text-on-surface-variant mt-1">Register institutional credentials for secure terminal access.</p>
+            <p className="text-sm text-on-surface-variant mt-1">
+              Register institutional credentials for secure terminal access.
+            </p>
           </div>
 
           <form className="space-y-6">
@@ -37,9 +39,9 @@ export default function RegisterPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   person
                 </span>
-                <input 
-                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
-                  placeholder="Alexander Thorne" 
+                <input
+                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all"
+                  placeholder="Alexander Thorne"
                   type="text"
                 />
               </div>
@@ -51,9 +53,9 @@ export default function RegisterPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   alternate_email
                 </span>
-                <input 
-                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
-                  placeholder="a.thorne@sovereign.int" 
+                <input
+                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all"
+                  placeholder="a.thorne@sovereign.int"
                   type="email"
                 />
               </div>
@@ -65,9 +67,9 @@ export default function RegisterPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   vpn_key
                 </span>
-                <input 
-                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
-                  placeholder="••••••••••••" 
+                <input
+                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all"
+                  placeholder="............."
                   type="password"
                 />
               </div>
@@ -79,15 +81,18 @@ export default function RegisterPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   vpn_key
                 </span>
-                <input 
-                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all" 
-                  placeholder="••••••••••••" 
+                <input
+                  className="w-full bg-surface-container-highest border-none rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all"
+                  placeholder="............."
                   type="password"
                 />
               </div>
             </div>
 
-            <button className="w-full group mt-4 relative overflow-hidden bg-linear-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10 disabled:opacity-60" type="submit" disabled={loading}>
+            <button
+              className="w-full group mt-4 relative overflow-hidden bg-linear-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10"
+              type="submit"
+            >
               <span>Create Account</span>
               <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
             </button>
@@ -95,7 +100,7 @@ export default function RegisterPage() {
 
           <div className="mt-10 pt-6 border-t border-outline-variant/5 text-center">
             <p className="text-xs text-on-surface-variant">
-              Already have a terminal key? 
+              Already have a terminal key?
               <Link to="/login" className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1">
                 Login
               </Link>
