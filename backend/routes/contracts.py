@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, request, send_file
 from services.auth_middleware import login_required, role_required
 from services.supabase_client import supabase
 
@@ -41,6 +41,34 @@ def list_contracts():
         return jsonify(result.data)
     except Exception as e:
         print(f"[contracts] Supabase error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/approved-agreements", methods=["GET"])
+@login_required
+def list_approved_agreements():
+    user = g.current_user
+    select_query = "*, tenant_company:companies!contracts_tenant_company_id_fkey(id, company_name), client_company:companies!contracts_company_id_fkey(id, company_name, authorized_email)"
+
+    try:
+        query = supabase.table("contracts").select(select_query)
+
+        if user["role"] == "super_admin":
+            query = query.eq("status", "client_approved")
+        elif user["role"] == "company_admin":
+            company_id = user["company_id"]
+            query = query.eq("status", "client_approved").or_(
+                f"tenant_company_id.eq.{company_id},company_id.eq.{company_id}"
+            )
+        else:
+            query = query.eq("status", "client_approved").eq(
+                "company_id", user["company_id"]
+            )
+
+        result = query.order("approved_at", desc=True).execute()
+        return jsonify(result.data), 200
+    except Exception as e:
+        print(f"[approved-agreements] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -98,8 +126,16 @@ def create_contract():
                 .execute()
             )
 
-            client_email = client_company_res.data[0].get("authorized_email") if client_company_res.data else None
-            client_company_name = client_company_res.data[0].get("company_name") if client_company_res.data else None
+            client_email = (
+                client_company_res.data[0].get("authorized_email")
+                if client_company_res.data
+                else None
+            )
+            client_company_name = (
+                client_company_res.data[0].get("company_name")
+                if client_company_res.data
+                else None
+            )
 
             tenant_company_name = "RateGuard"  # default
             if body.get("tenant_company_id"):
@@ -110,9 +146,11 @@ def create_contract():
                     .limit(1)
                     .execute()
                 )
-                tenant_company_name = tenant_company_res.data[0].get(
-                    "company_name", "RateGuard"
-                ) if tenant_company_res.data else "RateGuard"
+                tenant_company_name = (
+                    tenant_company_res.data[0].get("company_name", "RateGuard")
+                    if tenant_company_res.data
+                    else "RateGuard"
+                )
 
             from services.email_service import send_contract_created_email
 
@@ -332,7 +370,7 @@ def send_to_client(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/client-approve", methods=["POST"])
-@role_required("client", "user")
+@role_required("client", "user", "super_admin", "company_admin")
 def client_approve(contract_id):
     """Client approves the contract renewal; sends mutual confirmation email with PDF."""
     try:
@@ -352,9 +390,11 @@ def client_approve(contract_id):
         )
         contract = contract_res.data[0] if contract_res.data else {}
 
-        # Verify the logged-in client belongs to this contract's client company
-        if user.get("company_id") != contract.get("company_id"):
-            return jsonify({"error": "Forbidden: company mismatch"}), 403
+        # super_admin and company_admin can approve on behalf of any client
+        # For regular client/user roles, verify they belong to the contract's client company
+        if user.get("role") not in ("super_admin", "company_admin"):
+            if user.get("company_id") != contract.get("company_id"):
+                return jsonify({"error": "Forbidden: company mismatch"}), 403
 
         data = {
             "status": "client_approved",
@@ -408,7 +448,7 @@ def client_approve(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/client-reject", methods=["POST"])
-@role_required("client", "user")
+@role_required("client", "user", "super_admin", "company_admin")
 def client_reject(contract_id):
     """Client rejects the contract renewal with a mandatory reason."""
     try:
@@ -429,8 +469,10 @@ def client_reject(contract_id):
         )
         contract = contract_res.data[0] if contract_res.data else {}
 
-        if user.get("company_id") != contract.get("company_id"):
-            return jsonify({"error": "Forbidden: company mismatch"}), 403
+        # super_admin and company_admin can reject on behalf of any client
+        if user.get("role") not in ("super_admin", "company_admin"):
+            if user.get("company_id") != contract.get("company_id"):
+                return jsonify({"error": "Forbidden: company mismatch"}), 403
 
         data = {
             "status": "client_rejected",
@@ -466,9 +508,7 @@ def notify_sales(contract_id):
 
         contract_res = (
             supabase.table("contracts")
-            .select(
-                "*, companies!contracts_company_id_fkey(company_name)"
-            )
+            .select("*, companies!contracts_company_id_fkey(company_name)")
             .eq("id", contract_id)
             .limit(1)
             .execute()
@@ -492,7 +532,9 @@ def notify_sales(contract_id):
         sales_users = sales_users_res.data or []
 
         if not sales_users:
-            return jsonify({"ok": True, "message": "No sales users found in your company."}), 200
+            return jsonify(
+                {"ok": True, "message": "No sales users found in your company."}
+            ), 200
 
         from services.email_service import send_finance_ready_notification
 
@@ -514,6 +556,7 @@ def notify_sales(contract_id):
                     print(f"[notify-sales] Email error for {su['email']}: {email_err}")
 
         from routes.audit_logs import log_audit
+
         log_audit(
             user_id=user["id"],
             user_name=user["full_name"],
@@ -533,3 +576,46 @@ def notify_sales(contract_id):
 def delete_contract(contract_id):
     supabase.table("contracts").delete().eq("id", contract_id).execute()
     return jsonify({"ok": True})
+
+
+@contracts_bp.route("/api/ratebot/chat", methods=["POST"])
+@login_required
+def ratebot_chat():
+    """RateBot: Gemini-powered contract analysis chatbot."""
+    try:
+        body = request.get_json() or {}
+        message = body.get("message", "").strip()
+        contract_id = body.get("contract_id")  # optional context
+        history = body.get("history", [])  # list of {role, text}
+
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+
+        from services.gemini_service import ratebot_respond
+
+        reply = ratebot_respond(
+            message=message, contract_id=contract_id, history=history
+        )
+        return jsonify({"reply": reply})
+    except Exception as e:
+        print(f"[ratebot] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/approved-pdf", methods=["GET"])
+@login_required
+def get_approved_pdf(contract_id):
+    try:
+        from services.calculation import calculate_renewal
+        from services.pdf_generator import generate_addendum_pdf
+
+        calc = calculate_renewal(contract_id)
+        pdf_buf = generate_addendum_pdf(calc)
+        return send_file(
+            pdf_buf,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"contract_{contract_id[:8]}.pdf",
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

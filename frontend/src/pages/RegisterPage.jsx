@@ -1,81 +1,90 @@
-import React, { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useToast } from '../contexts/ToastContext'
-import { registerUser } from '../api'
+import React, { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useToast } from "../contexts/ToastContext";
+import { registerUser } from "../api";
 
 function getPasswordStrength(password) {
-  if (!password) return { score: 0, label: '', color: '' }
-  let score = 0
-  if (password.length >= 8) score++
-  if (password.length >= 12) score++
-  if (/[A-Z]/.test(password)) score++
-  if (/[0-9]/.test(password)) score++
-  if (/[^A-Za-z0-9]/.test(password)) score++
+  if (!password) return { score: 0, label: "", color: "" };
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
 
-  if (score <= 1) return { score, label: 'Very Weak', color: 'bg-red-500' }
-  if (score === 2) return { score, label: 'Weak', color: 'bg-orange-500' }
-  if (score === 3) return { score, label: 'Fair', color: 'bg-yellow-500' }
-  if (score === 4) return { score, label: 'Strong', color: 'bg-emerald-500' }
-  return { score, label: 'Very Strong', color: 'bg-emerald-600' }
+  if (score <= 1) return { score, label: "Very Weak", color: "bg-red-500" };
+  if (score === 2) return { score, label: "Weak", color: "bg-orange-500" };
+  if (score === 3) return { score, label: "Fair", color: "bg-yellow-500" };
+  if (score === 4) return { score, label: "Strong", color: "bg-emerald-500" };
+  return { score, label: "Very Strong", color: "bg-emerald-600" };
 }
 
 export default function RegisterPage() {
-  const navigate = useNavigate()
-  const { error: toastError, success: toastSuccess } = useToast()
+  const navigate = useNavigate();
+  const { error: toastError, success: toastSuccess } = useToast();
   const [form, setForm] = useState({
-    full_name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: 'company_admin',
-    company_name: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+    full_name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "company_admin",
+    company_name: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const onChange = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
-  const passwordStrength = useMemo(() => getPasswordStrength(form.password), [form.password])
+  const onChange = (key) => (e) =>
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const passwordStrength = useMemo(
+    () => getPasswordStrength(form.password),
+    [form.password],
+  );
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (form.password !== form.confirmPassword) {
-      toastError('Passwords do not match. Please re-enter your password.')
-      return
+      toastError("Passwords do not match. Please re-enter your password.");
+      return;
     }
     if (form.password.length < 8) {
-      toastError('Password must be at least 8 characters long.')
-      return
+      toastError("Password must be at least 8 characters long.");
+      return;
     }
     if (passwordStrength.score < 2) {
-      toastError('Password is too weak. Add uppercase letters, numbers, or symbols.')
-      return
+      toastError(
+        "Password is too weak. Add uppercase letters, numbers, or symbols.",
+      );
+      return;
     }
-    if (form.role === 'company_admin' && !form.company_name.trim()) {
-      toastError('Company name is required for Company Administrator accounts.')
-      return
+    if (form.role === "company_admin" && !form.company_name.trim()) {
+      toastError(
+        "Company name is required for Company Administrator accounts.",
+      );
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
       await registerUser({
         full_name: form.full_name,
         email: form.email,
         password: form.password,
         role: form.role,
-        company_name: form.role === 'company_admin' ? form.company_name : undefined,
-      })
-      toastSuccess('Account created successfully! You can now sign in.', 6000)
-      navigate('/login')
+        company_name:
+          form.role === "company_admin" ? form.company_name : undefined,
+      });
+      toastSuccess("Account created successfully! You can now sign in.", 6000);
+      navigate("/login");
     } catch (err) {
-      toastError(err.message || 'Registration failed. Please try again.')
+      toastError(err.message || "Registration failed. Please try again.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const inputCls =
-    'w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all'
+    "w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all";
 
   return (
     <div className="bg-mesh font-body text-on-surface min-h-screen flex flex-col items-center justify-center selection:bg-primary selection:text-on-primary antialiased px-4">
@@ -101,7 +110,9 @@ export default function RegisterPage() {
         <div className="absolute -inset-0.5 bg-linear-to-br from-primary/10 to-transparent rounded-xl blur-sm opacity-20" />
         <div className="relative bg-surface-container-low border border-outline-variant/10 rounded-xl p-10 sovereign-glow">
           <div className="mb-8">
-            <h2 className="font-headline text-xl font-bold text-on-surface">Establish Node</h2>
+            <h2 className="font-headline text-xl font-bold text-on-surface">
+              Establish Node
+            </h2>
             <p className="text-sm text-on-surface-variant mt-1">
               Register institutional credentials for secure terminal access.
             </p>
@@ -116,14 +127,18 @@ export default function RegisterPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   badge
                 </span>
-                <select className={inputCls} value={form.role} onChange={onChange('role')}>
+                <select
+                  className={inputCls}
+                  value={form.role}
+                  onChange={onChange("role")}
+                >
                   <option value="company_admin">Company Administrator</option>
                   <option value="user">User</option>
                 </select>
               </div>
             </div>
 
-            {form.role === 'company_admin' && (
+            {form.role === "company_admin" && (
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
                   Company Name
@@ -137,14 +152,16 @@ export default function RegisterPage() {
                     placeholder="Acme Corporation"
                     type="text"
                     value={form.company_name}
-                    onChange={onChange('company_name')}
+                    onChange={onChange("company_name")}
                   />
                 </div>
               </div>
             )}
 
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Full Name</label>
+              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+                Full Name
+              </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   person
@@ -154,14 +171,16 @@ export default function RegisterPage() {
                   placeholder="Alexander Thorne"
                   type="text"
                   value={form.full_name}
-                  onChange={onChange('full_name')}
+                  onChange={onChange("full_name")}
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Institutional Email</label>
+              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+                Institutional Email
+              </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   alternate_email
@@ -171,14 +190,16 @@ export default function RegisterPage() {
                   placeholder="a.thorne@sovereign.int"
                   type="email"
                   value={form.email}
-                  onChange={onChange('email')}
+                  onChange={onChange("email")}
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Secure Access Key</label>
+              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+                Secure Access Key
+              </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   vpn_key
@@ -186,9 +207,9 @@ export default function RegisterPage() {
                 <input
                   className={inputCls}
                   placeholder="Minimum 8 characters"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   value={form.password}
-                  onChange={onChange('password')}
+                  onChange={onChange("password")}
                   required
                 />
                 <button
@@ -197,7 +218,7 @@ export default function RegisterPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
                 >
                   <span className="material-symbols-outlined text-[18px]">
-                    {showPassword ? 'visibility_off' : 'visibility'}
+                    {showPassword ? "visibility_off" : "visibility"}
                   </span>
                 </button>
               </div>
@@ -208,18 +229,25 @@ export default function RegisterPage() {
                       <div
                         key={i}
                         className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                          i <= passwordStrength.score ? passwordStrength.color : 'bg-outline-variant/20'
+                          i <= passwordStrength.score
+                            ? passwordStrength.color
+                            : "bg-outline-variant/20"
                         }`}
                       />
                     ))}
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className={`text-xs font-medium ${
-                      passwordStrength.score <= 1 ? 'text-red-500' :
-                      passwordStrength.score === 2 ? 'text-orange-500' :
-                      passwordStrength.score === 3 ? 'text-yellow-500' :
-                      'text-emerald-500'
-                    }`}>
+                    <p
+                      className={`text-xs font-medium ${
+                        passwordStrength.score <= 1
+                          ? "text-red-500"
+                          : passwordStrength.score === 2
+                            ? "text-orange-500"
+                            : passwordStrength.score === 3
+                              ? "text-yellow-500"
+                              : "text-emerald-500"
+                      }`}
+                    >
                       {passwordStrength.label}
                     </p>
                     <p className="text-[10px] text-on-surface opacity-50">
@@ -231,7 +259,9 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">Confirm Access Key</label>
+              <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+                Confirm Access Key
+              </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   vpn_key
@@ -239,27 +269,42 @@ export default function RegisterPage() {
                 <input
                   className={inputCls}
                   placeholder="............."
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   value={form.confirmPassword}
-                  onChange={onChange('confirmPassword')}
+                  onChange={onChange("confirmPassword")}
                   required
                 />
               </div>
             </div>
 
             <button
-              className="w-full group mt-4 relative overflow-hidden bg-linear-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10"
+              className="w-full group mt-4 relative overflow-hidden bg-linear-to-br from-primary to-[#357df1] text-on-primary font-bold py-3.5 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
               type="submit"
+              disabled={loading}
             >
-              <span>Create Account</span>
-              <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+              {loading ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-on-primary/30 border-t-on-primary" />
+                  <span>Creating Account...</span>
+                </>
+              ) : (
+                <>
+                  <span>Create Account</span>
+                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
+                    arrow_forward
+                  </span>
+                </>
+              )}
             </button>
           </form>
 
           <div className="mt-10 pt-6 border-t border-outline-variant/5 text-center">
             <p className="text-xs text-on-surface-variant">
               Already have a terminal key?
-              <Link to="/login" className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1">
+              <Link
+                to="/login"
+                className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1"
+              >
                 Login
               </Link>
             </p>
@@ -273,5 +318,5 @@ export default function RegisterPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

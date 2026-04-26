@@ -1,8 +1,10 @@
 import json
 import logging
+from typing import Optional
+
+from config import GEMINI_API_KEY
 from google import genai
 from google.genai import types
-from config import GEMINI_API_KEY
 
 client = None
 GEMINI_MODEL = "gemini-2.5-flash-lite"
@@ -10,7 +12,9 @@ FALLBACK_MODEL = "gemini-2.0-flash-lite"
 
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
-    print(f"[RateGuard] Gemini API ready. Model: {GEMINI_MODEL} | Fallback: {FALLBACK_MODEL}")
+    print(
+        f"[RateGuard] Gemini API ready. Model: {GEMINI_MODEL} | Fallback: {FALLBACK_MODEL}"
+    )
 else:
     print("[RateGuard] WARNING: GEMINI_API_KEY not found!")
 
@@ -76,10 +80,7 @@ CONTRACT DATA:
 - Contract End Date: {end_date}
 - Max Cap Applied: {"Yes (capped at " + str(max_limit) + "%)" if capped else "No"}"""
 
-    contents = [types.Content(
-        role="user",
-        parts=[types.Part(text=user_prompt)]
-    )]
+    contents = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
 
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
@@ -108,7 +109,9 @@ CONTRACT DATA:
             continue
 
     if not reply:
-        raise RuntimeError("Gemini API quota exhausted. Please wait a few minutes and try again.")
+        raise RuntimeError(
+            "Gemini API quota exhausted. Please wait a few minutes and try again."
+        )
 
     return _parse_response(reply)
 
@@ -140,10 +143,18 @@ Return ONLY one of these exact words (nothing else): formal, friendly, professio
     for model_name in models_to_try:
         try:
             response = client.models.generate_content(
-                model=model_name, contents=contents, config=config,
+                model=model_name,
+                contents=contents,
+                config=config,
             )
             tone = response.text.strip().lower()
-            valid_tones = {"formal", "friendly", "professional", "neutral", "solution-oriented"}
+            valid_tones = {
+                "formal",
+                "friendly",
+                "professional",
+                "neutral",
+                "solution-oriented",
+            }
             if tone in valid_tones:
                 return tone
             return "professional"
@@ -188,7 +199,7 @@ def _parse_response(text: str) -> dict:
     if cleaned.startswith("```"):
         first_newline = cleaned.find("\n")
         if first_newline != -1:
-            cleaned = cleaned[first_newline + 1:]
+            cleaned = cleaned[first_newline + 1 :]
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     cleaned = cleaned.strip()
@@ -204,3 +215,102 @@ def _parse_response(text: str) -> dict:
             "subject": "Service Contract Renewal",
             "body": cleaned,
         }
+
+
+def ratebot_respond(
+    message: str, contract_id: Optional[str] = None, history: Optional[list] = None
+) -> str:
+    """
+    RateBot: Contract analysis chatbot powered by Gemini.
+    Optionally fetches contract data from Supabase when contract_id is provided.
+    """
+    if not client:
+        raise RuntimeError("Gemini API is not configured. GEMINI_API_KEY is missing.")
+
+    if history is None:
+        history = []
+
+    # Fetch contract context if contract_id is provided
+    contract_context = ""
+    if contract_id:
+        try:
+            from services.supabase_client import supabase
+
+            result = (
+                supabase.table("contracts")
+                .select("*, companies!contracts_company_id_fkey(company_name)")
+                .eq("id", contract_id)
+                .limit(1)
+                .execute()
+            )
+            if result.data:
+                c = result.data[0]
+                contract_context = f"""
+ACTIVE CONTRACT CONTEXT:
+- Contract ID: {c.get("id", "")}
+- Client Company: {c.get("companies", {}).get("company_name", "N/A")}
+- Previous Amount: {c.get("previous_amount", "N/A")} {c.get("currency", "TRY")}
+- New Amount: {c.get("new_amount", "N/A")} {c.get("currency", "TRY")}
+- Applied Adjustment: {c.get("applied_adjustment", "N/A")}%
+- Inflation Rule: {c.get("inflation_base_rule", "N/A")}
+- Max Increase Limit: {c.get("max_increase_limit", "N/A")}%
+- End Date: {c.get("end_date", "N/A")}
+- Status: {c.get("status", "N/A")}
+- Contract Type: {c.get("contract_type", "N/A")}
+"""
+        except Exception as e:
+            print(f"[ratebot] Contract fetch error: {e}")
+
+    system_prompt = f"""You are RateBot, an expert AI contract analysis assistant for RateGuard — a professional contract management and pricing automation platform.
+
+Your expertise covers:
+- Contract renewal analysis and inflation-based pricing adjustments
+- Turkish economic indicators (TUFE/CPI, UFE/PPI) and their impact on contracts
+- Contract risk assessment and critical obligations
+- Best practices in contract management
+
+RESPONSE GUIDELINES:
+- Always respond in English
+- Be concise, professional, and actionable
+- Use bullet points for lists
+- When analyzing contracts, highlight key figures and dates
+- If no contract context is provided, give general guidance
+- Keep responses under 300 words unless detailed analysis is explicitly requested
+- Format currency values clearly (e.g., 125,000 TRY)
+{contract_context}"""
+
+    # Build conversation history for Gemini
+    contents = []
+    for msg in history[-10:]:  # Keep last 10 messages for context
+        role = "user" if msg.get("role") == "user" else "model"
+        contents.append(
+            types.Content(role=role, parts=[types.Part(text=msg.get("text", ""))])
+        )
+
+    # Add current message
+    contents.append(types.Content(role="user", parts=[types.Part(text=message)]))
+
+    config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        temperature=0.4,
+        max_output_tokens=600,
+    )
+
+    models_to_try = [GEMINI_MODEL, FALLBACK_MODEL]
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
+            return response.text.strip()
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                print(f"[ratebot] Quota exhausted ({model_name}), trying fallback...")
+                continue
+            print(f"[ratebot] API Error ({model_name}): {e}")
+            continue
+
+    raise RuntimeError("Gemini API quota exhausted. Please try again in a few minutes.")

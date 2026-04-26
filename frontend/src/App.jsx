@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { RateBotProvider } from "./contexts/RateBotContext";
 import MainDashboardPage from "./pages/MainDashboardPage";
 import ContractReviewPage from "./pages/ContractReviewPage";
 import ClientManagementPage from "./pages/ClientManagementPage";
@@ -41,13 +42,7 @@ function AppRoutes() {
     <Routes>
       <Route
         path="/"
-        element={
-          user ? (
-            <Navigate to="/dashboard" replace />
-          ) : (
-            <LandingPage />
-          )
-        }
+        element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />}
       />
       <Route path="/solutions" element={<SolutionsPage />} />
       <Route path="/about-us" element={<AboutUsPage />} />
@@ -132,7 +127,15 @@ function AppRoutes() {
       <Route
         path="/analytics"
         element={
-          <ProtectedRoute roles={["super_admin", "company_admin", "finance", "user", "client"]}>
+          <ProtectedRoute
+            roles={[
+              "super_admin",
+              "company_admin",
+              "finance",
+              "user",
+              "client",
+            ]}
+          >
             <Layout>
               <AnalyticsPage />
             </Layout>
@@ -188,9 +191,11 @@ function App() {
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
-          <SplashScreen>
-            <AppRoutes />
-          </SplashScreen>
+          <RateBotProvider>
+            <SplashScreen>
+              <AppRoutes />
+            </SplashScreen>
+          </RateBotProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>
