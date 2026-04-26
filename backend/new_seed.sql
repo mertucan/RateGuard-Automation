@@ -2,7 +2,7 @@
 -- 3. & 4. Seed: Companies
 -- ============================================================
 INSERT INTO public.companies (id, company_name, authorized_email, risk_score, communication_language, is_tenant) VALUES
-  ('10000000-0000-0000-0000-000000000001', 'RateGuard Demo A.Ş.', 'mertucan12@gmail.com', 10, 'profesyonel', true),
+  ('10000000-0000-0000-0000-000000000001', 'RateGuard Demo A.Ş.', 'mertucan44@gmail.com', 10, 'profesyonel', true),
   ('10000000-0000-0000-0000-000000000002', 'Emre Tech Ltd.', 'emredemirkaya8951@gmail.com', 10, 'profesyonel', true),
   ('10000000-0000-0000-0000-000000000003', 'Yıldız Holding A.Ş.', 'yildiz@yildizhd.com', 35, 'profesyonel', true),
   ('10000000-0000-0000-0000-000000000004', 'Kaya İnşaat A.Ş.', 'info@kayainsaat.com', 55, 'profesyonel', true),
@@ -23,7 +23,7 @@ INSERT INTO public.companies (id, company_name, authorized_email, risk_score, co
 -- ============================================================
 INSERT INTO public.users (id, company_id, full_name, email, role, password_hash) VALUES
   ('5216d533-671a-43e5-bcc2-2c51f1520426', NULL, 'Ferdi', 'ferdi@gmail.com', 'client', 'scrypt:32768:8:1$Ces4QUVtIl1I5yTi$408cf54f141c6b23a2c030e739fa16fe369958f593e1e481fa0602100eeeb15669bba5f705c674001e4a2da78511f5b7dbc6a57c89d0bdf83651dcd564bc8d91'),
-  ('a0000000-0000-0000-0000-000000000001', NULL, 'Mert Uçan', 'mertucan12@gmail.com', 'super_admin', 'scrypt:32768:8:1$Ces4QUVtIl1I5yTi$408cf54f141c6b23a2c030e739fa16fe369958f593e1e481fa0602100eeeb15669bba5f705c674001e4a2da78511f5b7dbc6a57c89d0bdf83651dcd564bc8d91'),
+  ('a0000000-0000-0000-0000-000000000001', NULL, 'Mert Uçan', 'mertucan44@gmail.com', 'super_admin', 'scrypt:32768:8:1$Ces4QUVtIl1I5yTi$408cf54f141c6b23a2c030e739fa16fe369958f593e1e481fa0602100eeeb15669bba5f705c674001e4a2da78511f5b7dbc6a57c89d0bdf83651dcd564bc8d91'),
   ('a0000000-0000-0000-0000-000000000002', NULL, 'Emre Demirkaya', 'emredemirkaya8951@gmail.com', 'super_admin', 'scrypt:32768:8:1$Ces4QUVtIl1I5yTi$408cf54f141c6b23a2c030e739fa16fe369958f593e1e481fa0602100eeeb15669bba5f705c674001e4a2da78511f5b7dbc6a57c89d0bdf83651dcd564bc8d91'),
   ('b0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Ahmet Yılmaz', 'ahmet@rateguard.io', 'company_admin', 'scrypt:32768:8:1$Ces4QUVtIl1I5yTi$408cf54f141c6b23a2c030e739fa16fe369958f593e1e481fa0602100eeeb15669bba5f705c674001e4a2da78511f5b7dbc6a57c89d0bdf83651dcd564bc8d91'),
   ('b0000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'Emre Demirkaya', 'emre@emretech.io', 'company_admin', 'scrypt:32768:8:1$Ces4QUVtIl1I5yTi$408cf54f141c6b23a2c030e739fa16fe369958f593e1e481fa0602100eeeb15669bba5f705c674001e4a2da78511f5b7dbc6a57c89d0bdf83651dcd564bc8d91'),

@@ -13,10 +13,10 @@ def calculate_renewal(contract_id):
         supabase.table("contracts")
         .select("*, companies!contracts_company_id_fkey(company_name, authorized_email, communication_language)")
         .eq("id", contract_id)
-        .single()
+        .limit(1)
         .execute()
     )
-    contract = result.data
+    contract = result.data[0] if result.data else None
     if not contract:
         raise ValueError(f"Contract {contract_id} not found")
 
@@ -57,11 +57,13 @@ def calculate_renewal(contract_id):
         "contract_id": contract_id,
         "company_name": company.get("company_name", ""),
         "company_email": company.get("authorized_email", ""),
-        "language": company.get("communication_language", "profesyonel"),
+        "language": company.get("communication_language", "professional"),
         "end_date": contract.get("end_date", ""),
         "inflation_base_rule": rule,
         "max_increase_limit": max_limit,
         "previous_amount": round(amount, 2),
+        "currency": contract.get("currency", "TRY"),
+        "contract_type": contract.get("contract_type", "service_contract"),
         "tufe_rate": round(tufe, 2),
         "ufe_rate": round(ufe, 2),
         "applied_adjustment": round(adjustment, 2),

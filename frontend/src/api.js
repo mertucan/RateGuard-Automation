@@ -41,14 +41,48 @@ export const registerUser = (data) =>
   request("/auth/register", { method: "POST", body: JSON.stringify(data) });
 
 export const forgotPassword = (email) =>
-  request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+  request("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 
 export const resetPassword = (data) =>
-  request("/auth/reset-password", { method: "POST", body: JSON.stringify(data) });
+  request("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 // ── Companies ──────────────────────────────────────────────
-export const getCompanies = (search = "") =>
-  request(`/companies${search ? `?search=${encodeURIComponent(search)}` : ""}`);
+export const getCompanies = (search = "", includeAll = false) => {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (includeAll) params.set("include_all", "true");
+  const qs = params.toString();
+  return request(`/companies${qs ? `?${qs}` : ""}`);
+};
+
+export const getContractCounterparties = (search = "") =>
+  request(
+    `/companies/contract-counterparties${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+  );
+
+export const getAddClientCandidates = (tenantCompanyId = "") => {
+  const qs = tenantCompanyId
+    ? `?tenant_company_id=${encodeURIComponent(tenantCompanyId)}`
+    : "";
+  return request(`/companies/add-client-candidates${qs}`);
+};
+
+export const getCompaniesAvailableToLink = (search = "") =>
+  request(
+    `/companies/available-to-link${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+  );
+
+export const linkCompanyToTenant = (companyId, data = {}) =>
+  request(`/companies/${companyId}/link-tenant`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 export const getCompany = (id) => request(`/companies/${id}`);
 
@@ -79,13 +113,40 @@ export const deleteContract = (id) =>
   request(`/contracts/${id}`, { method: "DELETE" });
 
 export const saveDraft = (id, data) =>
-  request(`/contracts/${id}/save-draft`, { method: "POST", body: JSON.stringify(data) });
+  request(`/contracts/${id}/save-draft`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 export const rejectContract = (id, notes = "") =>
-  request(`/contracts/${id}/reject`, { method: "POST", body: JSON.stringify({ rejection_notes: notes }) });
+  request(`/contracts/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ rejection_notes: notes }),
+  });
 
 export const approveContract = (id, data) =>
-  request(`/contracts/${id}/approve`, { method: "POST", body: JSON.stringify(data) });
+  request(`/contracts/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const sendContractToClient = (id, data = {}) =>
+  request(`/contracts/${id}/send-to-client`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const clientApproveContract = (id) =>
+  request(`/contracts/${id}/client-approve`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+
+export const clientRejectContract = (id, reason) =>
+  request(`/contracts/${id}/client-reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 
 // ── Financial Logs ─────────────────────────────────────────
 export const getFinancialLogs = (limit = 50) =>
@@ -117,8 +178,10 @@ export const downloadPdf = async (contractId) => {
   const a = document.createElement("a");
   a.href = url;
   a.download =
-    res.headers.get("content-disposition")?.split("filename=")[1]?.replace(/"/g, "") ||
-    `addendum_${contractId.slice(0, 8)}.pdf`;
+    res.headers
+      .get("content-disposition")
+      ?.split("filename=")[1]
+      ?.replace(/"/g, "") || `addendum_${contractId.slice(0, 8)}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -153,8 +216,7 @@ export const createUser = (data) =>
 export const updateUser = (id, data) =>
   request(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
 
-export const deleteUser = (id) =>
-  request(`/users/${id}`, { method: "DELETE" });
+export const deleteUser = (id) => request(`/users/${id}`, { method: "DELETE" });
 
 // ── Notifications ─────────────────────────────────────────
 export const getNotifications = (params = {}) => {
@@ -221,3 +283,19 @@ export const getAuditLogs = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/audit-logs${qs ? `?${qs}` : ""}`);
 };
+
+// ── Applications ──────────────────────────────────────────
+export const getApplications = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/applications${qs ? `?${qs}` : ""}`);
+};
+
+export const createApplication = (data) =>
+  request("/applications", { method: "POST", body: JSON.stringify(data) });
+
+export const reviewApplication = (id, data) =>
+  request(`/applications/${id}`, { method: "PUT", body: JSON.stringify(data) });
+
+// ── Contract: notify sales ────────────────────────────────
+export const notifySales = (contractId) =>
+  request(`/contracts/${contractId}/notify-sales`, { method: "POST" });

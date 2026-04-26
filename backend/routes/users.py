@@ -8,7 +8,7 @@ from services.email_service import send_email
 
 users_bp = Blueprint("users", __name__)
 
-VALID_ROLES = {"super_admin", "company_admin", "finance", "sales", "client"}
+VALID_ROLES = {"super_admin", "company_admin", "finance", "sales", "user", "client"}  # "client" kept for backward compat
 
 
 def _sanitize_user(user):
@@ -25,7 +25,7 @@ def register():
     full_name = (body.get("full_name") or "").strip()
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
-    role = (body.get("role") or "client").strip()
+    role = (body.get("role") or "user").strip()
     company_id = body.get("company_id")
     company_name = (body.get("company_name") or "").strip()
 
@@ -52,7 +52,7 @@ def register():
                 "company_name": company_name,
                 "authorized_email": email,
                 "is_tenant": True,
-                "communication_language": "profesyonel",
+                "communication_language": "professional",
             }
             company_result = supabase.table("companies").insert(company_data).execute()
             if company_result.data:
@@ -81,7 +81,7 @@ def login():
     password = body.get("password") or ""
 
     if not email or not password:
-        return jsonify({"error": "email ve password zorunludur."}), 400
+        return jsonify({"error": "email and password are required."}), 400
 
     try:
         result = (
@@ -92,12 +92,12 @@ def login():
             .execute()
         )
         if not result.data:
-            return jsonify({"error": "E-posta veya şifre hatalı."}), 401
+            return jsonify({"error": "Invalid email or password."}), 401
 
         user = result.data[0]
         password_hash = user.get("password_hash")
         if not password_hash or not check_password_hash(password_hash, password):
-            return jsonify({"error": "E-posta veya şifre hatalı."}), 401
+            return jsonify({"error": "Invalid email or password."}), 401
 
         return jsonify(_sanitize_user(user))
     except Exception as e:
@@ -109,6 +109,7 @@ def login():
 def list_users():
     company_id = request.args.get("company_id")
     role = request.args.get("role")
+    unassigned = request.args.get("unassigned")
 
     try:
         query = supabase.table("users").select(
@@ -118,6 +119,9 @@ def list_users():
             query = query.eq("company_id", company_id)
         if role:
             query = query.eq("role", role)
+        if unassigned == "true":
+            # Supabase'de null check için is_ kullanıyoruz
+            query = query.is_("company_id", "null")
 
         result = query.order("created_at", desc=True).execute()
         return jsonify([_sanitize_user(u) for u in result.data])
@@ -133,10 +137,10 @@ def get_user(user_id):
             supabase.table("users")
             .select("*, companies!users_company_id_fkey(id, company_name)")
             .eq("id", user_id)
-            .single()
+            .limit(1)
             .execute()
         )
-        return jsonify(_sanitize_user(result.data))
+        return jsonify(_sanitize_user(result.data[0] if result.data else None))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -146,7 +150,7 @@ def create_user():
     body = request.get_json() or {}
     role = body["role"]
     if role not in VALID_ROLES:
-        return jsonify({"error": "Geçersiz rol değeri."}), 400
+        return jsonify({"error": "Invalid role."}), 400
 
     password = body.get("password")
     data = {
@@ -157,7 +161,7 @@ def create_user():
     }
     if password:
         if len(password) < 8:
-            return jsonify({"error": "Şifre en az 8 karakter olmalıdır."}), 400
+            return jsonify({"error": "Password must be at least 8 characters."}), 400
         data["password_hash"] = generate_password_hash(password)
     try:
         result = supabase.table("users").insert(data).execute()
@@ -175,11 +179,11 @@ def update_user(user_id):
     if "email" in data and data["email"]:
         data["email"] = data["email"].strip().lower()
     if "role" in data and data["role"] not in VALID_ROLES:
-        return jsonify({"error": "Geçersiz rol değeri."}), 400
+        return jsonify({"error": "Invalid role."}), 400
     if "password" in data:
         password = data.pop("password") or ""
         if len(password) < 8:
-            return jsonify({"error": "Şifre en az 8 karakter olmalıdır."}), 400
+            return jsonify({"error": "Password must be at least 8 characters."}), 400
         data["password_hash"] = generate_password_hash(password)
     try:
         result = supabase.table("users").update(data).eq("id", user_id).execute()
@@ -191,9 +195,34 @@ def update_user(user_id):
 @users_bp.route("/api/users/<user_id>", methods=["DELETE"])
 def delete_user(user_id):
     try:
-        supabase.table("users").delete().eq("id", user_id).execute()
-        return jsonify({"ok": True})
+        # Fetch user and company details
+        user_res = supabase.table("users").select("*, companies!users_company_id_fkey(company_name)").eq("id", user_id).limit(1).execute()
+        if not user_res.data:
+            return jsonify({"error": "User not found"}), 404
+            
+        user = user_res.data[0]
+        company_name = user.get("companies", {}).get("company_name", "the company") if user.get("companies") else "the company"
+        old_role = user.get("role", "member")
+        email = user.get("email")
+        full_name = user.get("full_name") or "User"
+        
+        # Update user instead of deleting
+        supabase.table("users").update({
+            "company_id": None,
+            "role": "user"
+        }).eq("id", user_id).execute()
+        
+        # Send removal email
+        if email and user.get("company_id"):
+            try:
+                from services.email_service import send_user_removed_email
+                send_user_removed_email(email, full_name, company_name, old_role)
+            except Exception as email_err:
+                print(f"[delete_user] Email send error: {email_err}")
+                
+        return jsonify({"ok": True, "message": "User removed from company and reverted to user."})
     except Exception as e:
+        print(f"[delete_user] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

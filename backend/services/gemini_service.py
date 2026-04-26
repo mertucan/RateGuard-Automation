@@ -1,4 +1,5 @@
 import json
+import logging
 from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY
@@ -9,27 +10,24 @@ FALLBACK_MODEL = "gemini-2.0-flash-lite"
 
 if GEMINI_API_KEY:
     client = genai.Client(api_key=GEMINI_API_KEY)
-    print(f"[Enflasyon Kalkani] Gemini API ready. Model: {GEMINI_MODEL} | Fallback: {FALLBACK_MODEL}")
+    print(f"[RateGuard] Gemini API ready. Model: {GEMINI_MODEL} | Fallback: {FALLBACK_MODEL}")
 else:
-    print("[Enflasyon Kalkani] WARNING: GEMINI_API_KEY not found!")
+    print("[RateGuard] WARNING: GEMINI_API_KEY not found!")
 
 
 def generate_email_draft(calc_data: dict) -> dict:
     """
-    Sözleşme hesaplama verileri ve müşterinin iletişim tonunu kullanarak
-    Gemini ile profesyonel bir e-posta taslağı oluşturur.
-
-    Returns: {"subject": str, "body": str}
+    Generates a professional email draft using Gemini, based on contract data and the client's communication tone.
     """
     if not client:
-        raise RuntimeError("Gemini API yapılandırılmamış. GEMINI_API_KEY eksik.")
+        raise RuntimeError("Gemini API is not configured. GEMINI_API_KEY is missing.")
 
-    tone = calc_data.get("language", "profesyonel")
+    tone = calc_data.get("language", "professional")
     company_name = calc_data.get("company_name", "")
     previous_amount = calc_data.get("previous_amount", 0)
     new_amount = calc_data.get("new_amount", 0)
     applied_adjustment = calc_data.get("applied_adjustment", 0)
-    inflation_rule = calc_data.get("inflation_base_rule", "TUFE")
+    inflation_rule = calc_data.get("inflation_base_rule", "CPI")
     end_date = calc_data.get("end_date", "")
     capped = calc_data.get("capped", False)
     max_limit = calc_data.get("max_increase_limit")
@@ -41,42 +39,42 @@ def generate_email_draft(calc_data: dict) -> dict:
 
     tone_instruction = _get_tone_instruction(tone)
 
-    system_prompt = f"""Sen Enflasyon Kalkanı adlı sözleşme yönetim ve fiyat güncelleme platformunun profesyonel iş yazışma asistanısın.
+    system_prompt = f"""You are the professional business communication assistant of a contract management and pricing update platform called RateGuard.
 
-E-posta taslağını Türkçe yaz.
+Write the email draft in English.
 
-İLETİŞİM TONU:
+COMMUNICATION TONE:
 {tone_instruction}
 
-KURALLAR:
-- Yanıtı SADECE iki anahtarlı bir JSON nesnesi olarak döndür: "subject" ve "body"
-- "body" kısmında satır sonları için \\n kullan
-- Markdown, kod blokları veya ekstra biçimlendirme KULLANMA
-- JSON dışında herhangi bir açıklama YAZMA
-- Konu kısa ve profesyonel olsun
-- E-postayı "Enflasyon Kalkanı Ekibi" olarak imzala"""
+RULES:
+- ONLY return a JSON object with two keys: "subject" and "body"
+- Use \\n for line breaks in the "body"
+- DO NOT use Markdown, code blocks, or extra formatting
+- DO NOT write any explanations outside the JSON
+- Keep the subject short and professional
+- Sign the email as "The RateGuard Team\""""
 
-    user_prompt = f"""Aşağıdaki verilere dayanarak, müşteriye hizmet sözleşmesinin yenilenmesi hakkında bilgilendirme e-postası oluştur.
+    user_prompt = f"""Based on the following data, create a notification email for the client regarding the renewal of their service contract.
 
-E-posta şunları içermeli:
-1. Sözleşmenin yenileme zamanının geldiğini bildirmeli
-2. Fiyat ayarlamasını piyasa verileriyle şeffaf şekilde sunmalı
-3. Ekteki ek sözleşme PDF'ini incelemeye davet etmeli
-4. Sıcak bir kapanış içermeli
+The email should include:
+1. Notification that the contract is up for renewal
+2. A transparent presentation of the price adjustment based on market data
+3. An invitation to review the attached addendum PDF
+4. A warm closing
 
-SÖZLEŞME VERİLERİ:
-- Müşteri Şirketi: {company_name}
-- Mevcut Sözleşme Tutarı: {previous_amount:,.2f} TL
-- Yeni Teklif Edilen Tutar: {new_amount:,.2f} TL
-- Fiyat Farkı: +{difference:,.2f} TL
-- Uygulanan Artış: %{applied_adjustment:.1f}
-- Kullanılan Endeks: {inflation_rule}
-- TÜFE Oranı: %{tufe_rate:.2f}
-- ÜFE Oranı: %{ufe_rate:.2f}
-- USD/TL Kuru: {usd_rate:.4f}
-- EUR/TL Kuru: {eur_rate:.4f}
-- Sözleşme Bitiş Tarihi: {end_date}
-- Tavan Artış Uygulandı: {"Evet (%" + str(max_limit) + " ile sınırlandırıldı)" if capped else "Hayır"}"""
+CONTRACT DATA:
+- Client Company: {company_name}
+- Current Contract Amount: {previous_amount:,.2f} TL
+- Proposed New Amount: {new_amount:,.2f} TL
+- Price Difference: +{difference:,.2f} TL
+- Applied Increase: {applied_adjustment:.1f}%
+- Used Index: {inflation_rule}
+- CPI Rate (YoY): {tufe_rate:.2f}%
+- PPI Rate (YoY): {ufe_rate:.2f}%
+- USD/TL Rate: {usd_rate:.4f}
+- EUR/TL Rate: {eur_rate:.4f}
+- Contract End Date: {end_date}
+- Max Cap Applied: {"Yes (capped at " + str(max_limit) + "%)" if capped else "No"}"""
 
     contents = [types.Content(
         role="user",
@@ -104,13 +102,13 @@ SÖZLEŞME VERİLERİ:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                print(f"[Enflasyon Kalkani] Quota exhausted ({model_name}), trying fallback...")
+                print(f"[RateGuard] Quota exhausted ({model_name}), trying fallback...")
                 continue
-            print(f"[Enflasyon Kalkani] API Error ({model_name}): {e}")
+            print(f"[RateGuard] API Error ({model_name}): {e}")
             continue
 
     if not reply:
-        raise RuntimeError("Gemini API kotası doldu. Lütfen birkaç dakika bekleyip tekrar deneyin.")
+        raise RuntimeError("Gemini API quota exhausted. Please wait a few minutes and try again.")
 
     return _parse_response(reply)
 
@@ -118,10 +116,10 @@ SÖZLEŞME VERİLERİ:
 def analyze_communication_tone(messages: list) -> str:
     """
     Analyze a list of communication message texts and detect the overall tone.
-    Returns one of: resmi, samimi, profesyonel, notr, cozumcu
+    Returns one of: formal, friendly, professional, neutral, solution-oriented
     """
     if not client:
-        return "profesyonel"
+        return "professional"
 
     combined = "\n---\n".join(messages[:20])
 
@@ -130,7 +128,7 @@ def analyze_communication_tone(messages: list) -> str:
 Messages:
 {combined}
 
-Return ONLY one of these exact words (nothing else): resmi, samimi, profesyonel, notr, cozumcu"""
+Return ONLY one of these exact words (nothing else): formal, friendly, professional, neutral, solution-oriented"""
 
     config = types.GenerateContentConfig(
         temperature=0.3,
@@ -145,51 +143,52 @@ Return ONLY one of these exact words (nothing else): resmi, samimi, profesyonel,
                 model=model_name, contents=contents, config=config,
             )
             tone = response.text.strip().lower()
-            valid_tones = {"resmi", "samimi", "profesyonel", "notr", "cozumcu"}
+            valid_tones = {"formal", "friendly", "professional", "neutral", "solution-oriented"}
             if tone in valid_tones:
                 return tone
-            return "profesyonel"
+            return "professional"
         except Exception as e:
             print(f"[Tone Analysis] Error ({model_name}): {e}")
             continue
 
-    return "profesyonel"
+    return "professional"
 
 
 def _get_tone_instruction(tone: str) -> str:
     tones = {
-        "resmi": (
-            "RESMİ ton kullan. Kurumsal ve ciddi bir dil ile yaz. "
-            "'Sayın' hitabı, 'arz ederiz' gibi resmi kapanışlar kullan. "
-            "Kısa ve kesin cümleler tercih et."
+        "formal": (
+            "Use a FORMAL tone. Write in a corporate and serious language. "
+            "Use formal greetings like 'Dear' and closings like 'Respectfully'. "
+            "Prefer short and precise sentences."
         ),
-        "samimi": (
-            "SAMİMİ ton kullan. Sıcak, yakın ve dostça bir dil ile yaz. "
-            "Müşteriyle iyi bir ilişki hissettir. 'Merhaba' ile başla, "
-            "'iyi dileklerimizle' gibi samimi kapanışlar kullan."
+        "friendly": (
+            "Use a FRIENDLY tone. Write in a warm, close, and friendly language. "
+            "Make the client feel a good relationship. Start with 'Hello' and use "
+            "friendly closings like 'Best wishes'."
         ),
-        "profesyonel": (
-            "PROFESYONEL ton kullan. İş dünyasına uygun, dengeli ve güven veren bir dil ile yaz. "
-            "Net, açık ve saygılı ol. Gereksiz abartıdan kaçın."
+        "professional": (
+            "Use a PROFESSIONAL tone. Write in a balanced and reassuring language suitable for the business world. "
+            "Be clear, open, and respectful. Avoid unnecessary exaggeration."
         ),
-        "notr": (
-            "NÖTR ton kullan. Tarafsız, sade ve bilgilendirici bir dil ile yaz. "
-            "Duygusal ifadelerden kaçın, sadece gerçekleri ve verileri sun."
+        "neutral": (
+            "Use a NEUTRAL tone. Write in an impartial, plain, and informative language. "
+            "Avoid emotional expressions, just present the facts and data."
         ),
-        "cozumcu": (
-            "ÇÖZÜMCÜ ton kullan. Müşterinin endişelerini önceden anlayan, "
-            "fiyat artışının nedenlerini empatiyle açıklayan ve çözüm odaklı bir dil kullan. "
-            "'Birlikte değerlendirmek isteriz' gibi işbirlikçi ifadeler ekle."
+        "solution-oriented": (
+            "Use a SOLUTION-ORIENTED tone. Use a language that anticipates the client's concerns, "
+            "empathetically explains the reasons for the price increase, and focuses on solutions. "
+            "Add collaborative expressions like 'We would like to evaluate together'."
         ),
     }
-    return tones.get(tone, tones["profesyonel"])
+    return tones.get(tone, tones["professional"])
 
 
 def _parse_response(text: str) -> dict:
     cleaned = text.strip()
     if cleaned.startswith("```"):
-        first_newline = cleaned.index("\n")
-        cleaned = cleaned[first_newline + 1:]
+        first_newline = cleaned.find("\n")
+        if first_newline != -1:
+            cleaned = cleaned[first_newline + 1:]
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     cleaned = cleaned.strip()
@@ -202,6 +201,6 @@ def _parse_response(text: str) -> dict:
         }
     except json.JSONDecodeError:
         return {
-            "subject": "Hizmet Sözleşmesi Yenileme",
+            "subject": "Service Contract Renewal",
             "body": cleaned,
         }

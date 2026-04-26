@@ -28,8 +28,7 @@ export function ToastProvider({ children }) {
   const toast = useCallback(
     (message, type = 'info', duration) => {
       const id = _nextId++
-      // errors & warnings stay until manually closed; success/info auto-dismiss in 4s
-      const autoDismiss = duration !== undefined ? duration : (type === 'success' || type === 'info' ? 4000 : false)
+      const autoDismiss = duration !== undefined ? duration : 3000
 
       setToasts((prev) => [...prev, { id, message, type }])
 

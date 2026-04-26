@@ -119,7 +119,7 @@ export default function MainDashboardPage() {
             <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
               <p className="text-sm font-medium text-text-muted">Avg Inflation Adjustment</p>
               <p className="mt-1 text-2xl font-bold sm:text-3xl">{avgAdj}%</p>
-              <p className="mt-2 text-xs text-text-muted">Based on TUFE/UFE blended rates</p>
+              <p className="mt-2 text-xs text-text-muted">Based on TUFE (CPI) and UFE (PPI) rates from TCMB</p>
             </div>
           </div>
 
@@ -128,7 +128,7 @@ export default function MainDashboardPage() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 sm:gap-8">
               <section className="rounded-xl border border-border bg-surface p-4 sm:p-6 lg:col-span-2">
                 <h3 className="text-lg font-bold">Market Snapshot</h3>
-                <p className="text-sm text-text-muted">Live data from TCMB EVDS</p>
+                <p className="text-sm text-text-muted">Live data from TCMB (Central Bank of Turkey) EVDS API. Rates are updated daily.</p>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 md:grid-cols-4">
                   <div className="rounded-lg border border-border bg-surface-alt p-3 text-center sm:p-4">
                     <p className="text-xs font-medium text-text-muted">USD/TRY</p>
@@ -164,7 +164,7 @@ export default function MainDashboardPage() {
                     <div className="rounded-lg border border-border bg-surface p-4">
                       <p className="text-sm font-semibold">High CPI Alert</p>
                       <p className="mt-1 text-xs text-text-muted">
-                        TUFE is at %{tufe.toFixed(1)} \u2013 contract adjustments may be significant.
+                        TUFE is at %{tufe.toFixed(1)} - contract adjustments may be significant.
                       </p>
                     </div>
                   )}
@@ -172,7 +172,7 @@ export default function MainDashboardPage() {
                     <div className="rounded-lg border border-border bg-surface p-4">
                       <p className="text-sm font-semibold">Exchange Rate Warning</p>
                       <p className="mt-1 text-xs text-text-muted">
-                        USD/TRY is at {stats.usd.toFixed(2)} \u2013 review FX-linked contracts.
+                        USD/TRY is at {stats.usd.toFixed(2)} - review FX-linked contracts.
                       </p>
                     </div>
                   )}

@@ -198,4 +198,4 @@ if __name__ == "__main__":
         eski = 100000
         yeni = eski * (1 + (data["tufe"] / 100))
         print(f"Ornek Hesaplama (100 Bin TL'lik Sozlesme):")
-        print(f"Yeni Tutar: {yeni:,.2f} TL (Fark: +{yeni - eski:,.2f} TL)")
+        print(f"Yeni Amount: {yeni:,.2f} TL (Difference: +{yeni - eski:,.2f} TL)")
