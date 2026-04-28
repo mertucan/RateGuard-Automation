@@ -299,3 +299,29 @@ export const reviewApplication = (id, data) =>
 // ── Contract: notify sales ────────────────────────────────
 export const notifySales = (contractId) =>
   request(`/contracts/${contractId}/notify-sales`, { method: "POST" });
+
+// ── Approved Agreements ───────────────────────────────────
+export const getApprovedAgreements = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/contracts/approved-agreements${qs ? `?${qs}` : ""}`);
+};
+
+export const downloadApprovedPdf = async (contractId, filename) => {
+  const res = await fetch(`${BASE}/contracts/${contractId}/approved-pdf`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`PDF download failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || `contract_${contractId.slice(0, 8)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+// ── RateBot ───────────────────────────────────────────────
+export const ratebotChat = (data) =>
+  request("/ratebot/chat", { method: "POST", body: JSON.stringify(data) });

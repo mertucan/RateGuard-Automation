@@ -4,6 +4,7 @@ import { PageLoader } from "../components/Spinner";
 import ChatPanel from "../components/ChatPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
+import { useRateBot } from "../contexts/RateBotContext";
 import {
   getContracts,
   getContract,
@@ -22,6 +23,8 @@ import {
   clientApproveContract,
   clientRejectContract,
   notifySales,
+  getApprovedAgreements,
+  downloadApprovedPdf,
 } from "../api";
 
 const STATUS_MAP = {
@@ -143,7 +146,9 @@ function FinanceNotifySalesButton({ contractId, contract }) {
     try {
       const res = await notifySales(contractId);
       if (res.notified > 0) {
-        toastSuccess(`Sales team notified (${res.notified} member${res.notified > 1 ? "s" : ""})!`);
+        toastSuccess(
+          `Sales team notified (${res.notified} member${res.notified > 1 ? "s" : ""})!`,
+        );
       } else {
         toastSuccess(res.message || "Notification sent.");
       }
@@ -156,7 +161,8 @@ function FinanceNotifySalesButton({ contractId, contract }) {
   };
 
   const contractStatus = contract?.status || "active";
-  const disabled = loading || ["pending_client", "client_approved"].includes(contractStatus);
+  const disabled =
+    loading || ["pending_client", "client_approved"].includes(contractStatus);
 
   return (
     <button
@@ -173,7 +179,11 @@ function FinanceNotifySalesButton({ contractId, contract }) {
       <span className="material-symbols-outlined text-[18px]">
         {sent ? "check_circle" : "forward_to_inbox"}
       </span>
-      {loading ? "Notifying..." : sent ? "Sales Notified ✓" : "Notify Sales Team"}
+      {loading
+        ? "Notifying..."
+        : sent
+          ? "Sales Notified ✓"
+          : "Notify Sales Team"}
     </button>
   );
 }
@@ -273,16 +283,34 @@ function ContractList() {
   };
 
   const handleCreate = async () => {
-    if (!form.company_id) { toastError("Please select a company."); return; }
-    if (!form.previous_amount || Number(form.previous_amount) <= 0) { toastError("Please enter a valid contract amount."); return; }
-    if (!form.end_date) { toastError("Please select a contract end date."); return; }
-    if (form.inflation_base_rule === "CUSTOM" && (!form.max_increase_limit || Number(form.max_increase_limit) <= 0)) {
-      toastError("Please enter a max increase value for the custom inflation rule."); return;
+    if (!form.company_id) {
+      toastError("Please select a company.");
+      return;
+    }
+    if (!form.previous_amount || Number(form.previous_amount) <= 0) {
+      toastError("Please enter a valid contract amount.");
+      return;
+    }
+    if (!form.end_date) {
+      toastError("Please select a contract end date.");
+      return;
+    }
+    if (
+      form.inflation_base_rule === "CUSTOM" &&
+      (!form.max_increase_limit || Number(form.max_increase_limit) <= 0)
+    ) {
+      toastError(
+        "Please enter a max increase value for the custom inflation rule.",
+      );
+      return;
     }
     setSaving(true);
     try {
       // Store CUSTOM as a plain numeric rule in DB, actual rule label stored separately
-      const inflationRule = form.inflation_base_rule === "CUSTOM" ? "CUSTOM" : form.inflation_base_rule;
+      const inflationRule =
+        form.inflation_base_rule === "CUSTOM"
+          ? "CUSTOM"
+          : form.inflation_base_rule;
       await createContract({
         ...form,
         inflation_base_rule: inflationRule,
@@ -459,13 +487,15 @@ function ContractList() {
               </span>
               Export
             </button>
-            {["company_admin", "finance", "super_admin"].includes(user?.role) && (
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
-            >
-              {showForm ? "Cancel" : "New Contract"}
-            </button>
+            {["company_admin", "finance", "super_admin"].includes(
+              user?.role,
+            ) && (
+              <button
+                onClick={() => setShowForm(!showForm)}
+                className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
+              >
+                {showForm ? "Cancel" : "New Contract"}
+              </button>
             )}
           </div>
         )}
@@ -503,11 +533,13 @@ function ContractList() {
                       </option>
                     ))}
                   </select>
-                  {companies.length === 0 && !["client", "user"].includes(user?.role) && (
-                    <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                      No companies available in the directory. Please contact a Super Admin.
-                    </p>
-                  )}
+                  {companies.length === 0 &&
+                    !["client", "user"].includes(user?.role) && (
+                      <p className="mt-2 text-xs leading-relaxed text-text-muted">
+                        No companies available in the directory. Please contact
+                        a Super Admin.
+                      </p>
+                    )}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
@@ -577,13 +609,20 @@ function ContractList() {
                     onChange={(e) => handleRuleChange(e.target.value)}
                   >
                     <option value="TUFE">
-                      TUFE{marketRates.tufe != null ? ` (${parseFloat(marketRates.tufe).toFixed(1)}%)` : ""}
+                      TUFE
+                      {marketRates.tufe != null
+                        ? ` (${parseFloat(marketRates.tufe).toFixed(1)}%)`
+                        : ""}
                     </option>
                     <option value="UFE">
-                      UFE{marketRates.ufe != null ? ` (${parseFloat(marketRates.ufe).toFixed(1)}%)` : ""}
+                      UFE
+                      {marketRates.ufe != null
+                        ? ` (${parseFloat(marketRates.ufe).toFixed(1)}%)`
+                        : ""}
                     </option>
                     <option value="TUFE+UFE">
-                      TUFE + UFE — Average{marketRates.tufe != null && marketRates.ufe != null
+                      TUFE + UFE — Average
+                      {marketRates.tufe != null && marketRates.ufe != null
                         ? ` (${((parseFloat(marketRates.tufe) + parseFloat(marketRates.ufe)) / 2).toFixed(1)}%)`
                         : ""}
                     </option>
@@ -593,12 +632,15 @@ function ContractList() {
                 <div>
                   <label className="mb-1 flex items-center justify-between text-xs font-semibold uppercase text-text-muted">
                     <span>Max Increase (%)</span>
-                    {form.inflation_base_rule !== "CUSTOM" && form.max_increase_limit && (
-                      <span className="normal-case font-normal text-amber-500 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px]">lock</span>
-                        Auto from {form.inflation_base_rule}
-                      </span>
-                    )}
+                    {form.inflation_base_rule !== "CUSTOM" &&
+                      form.max_increase_limit && (
+                        <span className="normal-case font-normal text-amber-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">
+                            lock
+                          </span>
+                          Auto from {form.inflation_base_rule}
+                        </span>
+                      )}
                   </label>
                   <input
                     className={`${inputCls} ${form.inflation_base_rule !== "CUSTOM" ? "cursor-not-allowed opacity-70" : ""}`}
@@ -607,7 +649,11 @@ function ContractList() {
                     min="0"
                     max="200"
                     value={form.max_increase_limit}
-                    placeholder={form.inflation_base_rule === "CUSTOM" ? "Enter custom % limit" : "Auto-filled"}
+                    placeholder={
+                      form.inflation_base_rule === "CUSTOM"
+                        ? "Enter custom % limit"
+                        : "Auto-filled"
+                    }
                     readOnly={form.inflation_base_rule !== "CUSTOM"}
                     onChange={(e) =>
                       form.inflation_base_rule === "CUSTOM" &&
@@ -1613,6 +1659,8 @@ function ContractDetail() {
   const [clientActing, setClientActing] = useState(false);
   const [showSendToClientModal, setShowSendToClientModal] = useState(false);
 
+  const { setActiveContractId } = useRateBot();
+
   const load = useCallback(async () => {
     try {
       const [c, k] = await Promise.all([getContract(id), getCalculation(id)]);
@@ -1632,6 +1680,12 @@ function ContractDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Set active contract context for RateBot
+  useEffect(() => {
+    setActiveContractId(id);
+    return () => setActiveContractId(null);
+  }, [id, setActiveContractId]);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -2128,8 +2182,10 @@ function ContractDetail() {
           <div className="grid grid-cols-1 gap-6 sm:gap-8 xl:grid-cols-12">
             {/* ── Left Column ── */}
             <div className="space-y-6 sm:space-y-8 xl:col-span-7">
-              {/* Client Decision Panel — only visible to client/user when pending */}
-              {["client", "user"].includes(user?.role) &&
+              {/* Client Decision Panel — visible to client/user and admins when pending */}
+              {["client", "user", "super_admin", "company_admin"].includes(
+                user?.role,
+              ) &&
                 contractStatus === "pending_client" && (
                   <section className="rounded-xl border-2 border-violet-500/30 bg-violet-500/5 p-4 sm:p-6">
                     <div className="mb-4 flex items-center gap-3">
@@ -2140,13 +2196,26 @@ function ContractDetail() {
                       </div>
                       <div>
                         <h3 className="text-lg font-bold">
-                          Contract Awaiting Your Decision
+                          {["super_admin", "company_admin"].includes(user?.role)
+                            ? "Approve on Behalf of Client"
+                            : "Contract Awaiting Your Decision"}
                         </h3>
                         <p className="text-sm text-text-muted">
-                          Please review the terms and accept or reject.
+                          {["super_admin", "company_admin"].includes(user?.role)
+                            ? `Approving as admin on behalf of ${companyName}.`
+                            : "Please review the terms and accept or reject."}
                         </p>
                       </div>
                     </div>
+                    {["super_admin", "company_admin"].includes(user?.role) && (
+                      <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">
+                        <span className="material-symbols-outlined text-[16px]">
+                          admin_panel_settings
+                        </span>
+                        You are acting as an administrator. This action will be
+                        recorded in the audit log.
+                      </div>
+                    )}
                     <div className="mb-4 rounded-lg border border-border bg-surface p-4 text-sm space-y-2">
                       <div className="flex justify-between">
                         <span className="text-text-muted">
@@ -2209,129 +2278,158 @@ function ContractDetail() {
                 )}
 
               {/* Editable Calculation */}
-              {!["client", "user"].includes(user?.role) && (() => {
-                const isSalesReadonly = user?.role === "sales";
-                return (
-                <section className="overflow-hidden rounded-xl border border-border bg-surface">
-                  <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
-                    <h3 className="text-lg font-bold">Calculation Logic</h3>
-                    {isSalesReadonly ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-text-muted">
-                        <span className="material-symbols-outlined text-[14px]">lock</span>
-                        Read-only for Sales
-                      </span>
-                    ) : dirty && (
-                      <span className="text-xs font-medium text-amber-500">
-                        Unsaved changes
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-5 p-4 text-sm sm:p-6">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-text-muted">Base Rate (TRY)</span>
-                      <input
-                        type="number"
-                        className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
-                        value={editAmount}
-                        readOnly={isSalesReadonly}
-                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditAmount)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-text-muted">End Date</span>
-                      <input
-                        type="date"
-                        className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
-                        value={editEndDate}
-                        readOnly={isSalesReadonly}
-                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditEndDate)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-text-muted">Inflation Rule</span>
-                      <select
-                        className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
-                        value={editRule}
-                        disabled={isSalesReadonly}
-                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditRule)}
-                      >
-                        <option value="TUFE">TUFE</option>
-                        <option value="UFE">UFE</option>
-                        <option value="TUFE+UFE">TUFE + UFE (Avg)</option>
-                        <option value="CUSTOM">Custom</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-text-muted">
-                        Max Increase Limit (%)
-                      </span>
-                      <input
-                        type="number"
-                        className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
-                        placeholder="No limit"
-                        value={editMaxLimit}
-                        readOnly={isSalesReadonly}
-                        onChange={isSalesReadonly ? undefined : handleFieldChange(setEditMaxLimit)}
-                      />
-                    </div>
-                    <div className="h-px bg-border" />
-                    <div className="flex justify-between py-1">
-                      <span
-                        className="text-text-muted"
-                        title="Consumer Price Index (TCMB)"
-                      >
-                        TUFE (CPI)
-                      </span>
-                      <span className="font-medium">+{tufe.toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span
-                        className="text-text-muted"
-                        title="Producer Price Index (TCMB)"
-                      >
-                        UFE (PPI)
-                      </span>
-                      <span className="font-medium">+{ufe.toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span
-                        className="text-text-muted"
-                        title="TCMB Official Exchange Rate"
-                      >
-                        USD/TRY
-                      </span>
-                      <span className="font-medium">
-                        {calc.usd_rate.toFixed(4)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span
-                        className="text-text-muted"
-                        title="TCMB Official Exchange Rate"
-                      >
-                        EUR/TRY
-                      </span>
-                      <span className="font-medium">
-                        {calc.eur_rate.toFixed(4)}
-                      </span>
-                    </div>
-                    <div className="h-px bg-border" />
-                    <div className="flex justify-between">
-                      <span className="font-bold">Total Adjustment</span>
-                      <span className="font-bold text-primary">
-                        {liveAdjustment.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-bold">New Price</span>
-                      <span className="font-bold text-primary">
-                        {formatCurrency(liveNewPrice)}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-                );
-              })()}
+              {!["client", "user"].includes(user?.role) &&
+                (() => {
+                  const isSalesReadonly = user?.role === "sales";
+                  return (
+                    <section className="overflow-hidden rounded-xl border border-border bg-surface">
+                      <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
+                        <h3 className="text-lg font-bold">Calculation Logic</h3>
+                        {isSalesReadonly ? (
+                          <span className="flex items-center gap-1 text-xs font-medium text-text-muted">
+                            <span className="material-symbols-outlined text-[14px]">
+                              lock
+                            </span>
+                            Read-only for Sales
+                          </span>
+                        ) : (
+                          dirty && (
+                            <span className="text-xs font-medium text-amber-500">
+                              Unsaved changes
+                            </span>
+                          )
+                        )}
+                      </div>
+                      <div className="space-y-5 p-4 text-sm sm:p-6">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-text-muted">
+                            Base Rate (TRY)
+                          </span>
+                          <input
+                            type="number"
+                            className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            value={editAmount}
+                            readOnly={isSalesReadonly}
+                            onChange={
+                              isSalesReadonly
+                                ? undefined
+                                : handleFieldChange(setEditAmount)
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-text-muted">End Date</span>
+                          <input
+                            type="date"
+                            className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            value={editEndDate}
+                            readOnly={isSalesReadonly}
+                            onChange={
+                              isSalesReadonly
+                                ? undefined
+                                : handleFieldChange(setEditEndDate)
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-text-muted">
+                            Inflation Rule
+                          </span>
+                          <select
+                            className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            value={editRule}
+                            disabled={isSalesReadonly}
+                            onChange={
+                              isSalesReadonly
+                                ? undefined
+                                : handleFieldChange(setEditRule)
+                            }
+                          >
+                            <option value="TUFE">TUFE</option>
+                            <option value="UFE">UFE</option>
+                            <option value="TUFE+UFE">TUFE + UFE (Avg)</option>
+                            <option value="CUSTOM">Custom</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-text-muted">
+                            Max Increase Limit (%)
+                          </span>
+                          <input
+                            type="number"
+                            className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            placeholder="No limit"
+                            value={editMaxLimit}
+                            readOnly={isSalesReadonly}
+                            onChange={
+                              isSalesReadonly
+                                ? undefined
+                                : handleFieldChange(setEditMaxLimit)
+                            }
+                          />
+                        </div>
+                        <div className="h-px bg-border" />
+                        <div className="flex justify-between py-1">
+                          <span
+                            className="text-text-muted"
+                            title="Consumer Price Index (TCMB)"
+                          >
+                            TUFE (CPI)
+                          </span>
+                          <span className="font-medium">
+                            +{tufe.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span
+                            className="text-text-muted"
+                            title="Producer Price Index (TCMB)"
+                          >
+                            UFE (PPI)
+                          </span>
+                          <span className="font-medium">
+                            +{ufe.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span
+                            className="text-text-muted"
+                            title="TCMB Official Exchange Rate"
+                          >
+                            USD/TRY
+                          </span>
+                          <span className="font-medium">
+                            {calc.usd_rate.toFixed(4)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span
+                            className="text-text-muted"
+                            title="TCMB Official Exchange Rate"
+                          >
+                            EUR/TRY
+                          </span>
+                          <span className="font-medium">
+                            {calc.eur_rate.toFixed(4)}
+                          </span>
+                        </div>
+                        <div className="h-px bg-border" />
+                        <div className="flex justify-between">
+                          <span className="font-bold">Total Adjustment</span>
+                          <span className="font-bold text-primary">
+                            {liveAdjustment.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-bold">New Price</span>
+                          <span className="font-bold text-primary">
+                            {formatCurrency(liveNewPrice)}
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
 
               {/* Addendum Preview */}
               <section className="rounded-xl border border-border bg-surface">
@@ -2375,7 +2473,9 @@ function ContractDetail() {
 
               {/* Create New Version — shown to staff when client has rejected */}
               {contractStatus === "client_rejected" &&
-                ["finance", "company_admin", "super_admin", "sales"].includes(user?.role) && (
+                ["finance", "company_admin", "super_admin", "sales"].includes(
+                  user?.role,
+                ) && (
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-6">
                     <div>
                       <p className="font-semibold text-amber-600">
@@ -2445,15 +2545,16 @@ function ContractDetail() {
 
                   {/* Finance: Notify Sales (instead of send-to-client) */}
                   {user?.role === "finance" && (
-                    <FinanceNotifySalesButton contractId={id} contract={contract} />
+                    <FinanceNotifySalesButton
+                      contractId={id}
+                      contract={contract}
+                    />
                   )}
 
                   {/* Sales + Admin: Send to Client */}
-                  {[
-                    "company_admin",
-                    "super_admin",
-                    "sales",
-                  ].includes(user?.role) && (
+                  {["company_admin", "super_admin", "sales"].includes(
+                    user?.role,
+                  ) && (
                     <button
                       onClick={() => setShowSendToClientModal(true)}
                       disabled={
@@ -2517,141 +2618,151 @@ function ContractDetail() {
               <ChatPanel contractId={id} />
 
               {/* AI Email Composer — only for Sales and Admin roles */}
-              {["sales", "company_admin", "super_admin"].includes(user?.role) && <section className="rounded-xl border border-border bg-surface">
-                <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
-                  <h3 className="text-lg font-bold text-primary">
-                    AI Email Composer
-                  </h3>
-                  <span
-                    className={`rounded px-2 py-1 text-xs font-bold uppercase tracking-wider ${aiGenerated ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary"}`}
-                  >
-                    {aiGenerated ? "AI Generated" : "Draft"}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-4 p-4 sm:p-6">
-                  {!aiGenerated && !emailBody ? (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-border p-8 text-center">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft">
-                        <span className="material-symbols-outlined text-3xl text-primary">
-                          auto_awesome
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-text">
-                          Generate Email with AI
-                        </p>
-                        <p className="mt-1 text-xs text-text-muted">
-                          Gemini AI drafts a professional email based on the
-                          client's communication tone
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleGenerateEmail}
-                        disabled={aiLoading || isFinalized}
-                        className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-primary-dark hover:shadow-lg disabled:opacity-50"
-                      >
-                        {aiLoading ? (
-                          <>
-                            <svg
-                              className="h-4 w-4 animate-spin"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                            >
-                              <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                              />
-                              <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                              />
-                            </svg>
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined text-[18px]">
-                              auto_awesome
-                            </span>
-                            Generate with Gemini AI
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                          Subject:
-                        </label>
+              {["sales", "company_admin", "super_admin"].includes(
+                user?.role,
+              ) && (
+                <section className="rounded-xl border border-border bg-surface">
+                  <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
+                    <h3 className="text-lg font-bold text-primary">
+                      AI Email Composer
+                    </h3>
+                    <span
+                      className={`rounded px-2 py-1 text-xs font-bold uppercase tracking-wider ${aiGenerated ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary"}`}
+                    >
+                      {aiGenerated ? "AI Generated" : "Draft"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-4 p-4 sm:p-6">
+                    {!aiGenerated && !emailBody ? (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-border p-8 text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft">
+                          <span className="material-symbols-outlined text-3xl text-primary">
+                            auto_awesome
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text">
+                            Generate Email with AI
+                          </p>
+                          <p className="mt-1 text-xs text-text-muted">
+                            Gemini AI drafts a professional email based on the
+                            client's communication tone
+                          </p>
+                        </div>
                         <button
                           onClick={handleGenerateEmail}
-                          disabled={aiLoading}
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:opacity-50"
-                          title="Regenerate with AI"
+                          disabled={aiLoading || isFinalized}
+                          className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-primary-dark hover:shadow-lg disabled:opacity-50"
                         >
                           {aiLoading ? (
-                            <svg
-                              className="h-3.5 w-3.5 animate-spin"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                            >
-                              <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                              />
-                              <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                              />
-                            </svg>
+                            <>
+                              <svg
+                                className="h-4 w-4 animate-spin"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                />
+                              </svg>
+                              Generating...
+                            </>
                           ) : (
-                            <span className="material-symbols-outlined text-[16px]">
-                              refresh
-                            </span>
+                            <>
+                              <span className="material-symbols-outlined text-[18px]">
+                                auto_awesome
+                              </span>
+                              Generate with Gemini AI
+                            </>
                           )}
-                          Regenerate
                         </button>
                       </div>
-                      <input
-                        className="rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                        value={emailSubject}
-                        onChange={(e) => setEmailSubject(e.target.value)}
-                        type="text"
-                      />
-                      <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                        Message Body:
-                      </label>
-                      <textarea
-                        className="h-64 resize-none rounded-lg border border-border bg-surface-alt p-4 text-sm leading-relaxed text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                        value={emailBody}
-                        onChange={(e) => setEmailBody(e.target.value)}
-                      />
-                    </>
-                  )}
-                </div>
-              </section>}
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                            Subject:
+                          </label>
+                          <button
+                            onClick={handleGenerateEmail}
+                            disabled={aiLoading}
+                            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:opacity-50"
+                            title="Regenerate with AI"
+                          >
+                            {aiLoading ? (
+                              <svg
+                                className="h-3.5 w-3.5 animate-spin"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                />
+                              </svg>
+                            ) : (
+                              <span className="material-symbols-outlined text-[16px]">
+                                refresh
+                              </span>
+                            )}
+                            Regenerate
+                          </button>
+                        </div>
+                        <input
+                          className="rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                          value={emailSubject}
+                          onChange={(e) => setEmailSubject(e.target.value)}
+                          type="text"
+                        />
+                        <label className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                          Message Body:
+                        </label>
+                        <textarea
+                          className="h-64 resize-none rounded-lg border border-border bg-surface-alt p-4 text-sm leading-relaxed text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                          value={emailBody}
+                          onChange={(e) => setEmailBody(e.target.value)}
+                        />
+                      </>
+                    )}
+                  </div>
+                </section>
+              )}
 
               {/* Finance: Internal Notes reminder */}
               {user?.role === "finance" && (
                 <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-6">
                   <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-amber-500 mt-0.5">info</span>
+                    <span className="material-symbols-outlined text-amber-500 mt-0.5">
+                      info
+                    </span>
                     <div>
-                      <p className="text-sm font-semibold text-amber-600">Finance Workflow</p>
+                      <p className="text-sm font-semibold text-amber-600">
+                        Finance Workflow
+                      </p>
                       <p className="mt-1 text-xs text-text-muted leading-relaxed">
-                        Once you finish preparing this contract, click <strong>Notify Sales Team</strong> above.
-                        Sales will handle communication with the counterparty and send the contract for their review.
+                        Once you finish preparing this contract, click{" "}
+                        <strong>Notify Sales Team</strong> above. Sales will
+                        handle communication with the counterparty and send the
+                        contract for their review.
                       </p>
                     </div>
                   </div>
@@ -2665,7 +2776,447 @@ function ContractDetail() {
   );
 }
 
+/* ─── APPROVED AGREEMENTS ─── */
+function ApprovedAgreements() {
+  const { error: toastError } = useToast();
+  const [agreements, setAgreements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [pdfLoadingId, setPdfLoadingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getApprovedAgreements();
+      setAgreements(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Approved agreements load error:", err);
+      toastError("Failed to load approved agreements.");
+    } finally {
+      setLoading(false);
+    }
+  }, [toastError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleDownloadPdf = async (contractId, tenantName, clientName) => {
+    setPdfLoadingId(contractId);
+    try {
+      const filename =
+        `Sozlesme_${tenantName}_${clientName}_${contractId.slice(0, 8)}.pdf`
+          .replace(/\s+/g, "_")
+          .replace(/[^a-zA-Z0-9_.-]/g, "");
+      await downloadApprovedPdf(contractId, filename);
+    } catch (err) {
+      toastError("PDF could not be downloaded: " + err.message);
+    } finally {
+      setPdfLoadingId(null);
+    }
+  };
+
+  const formatCurrency = (n, curr = "TRY") =>
+    new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: curr || "TRY",
+    }).format(n || 0);
+
+  const CONTRACT_TYPE_LABELS = {
+    service_contract: "Service Contract",
+    lease_agreement: "Lease Agreement",
+    maintenance_agreement: "Maintenance Agreement",
+    supply_agreement: "Supply Agreement",
+  };
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return agreements;
+    const q = search.toLowerCase();
+    return agreements.filter(
+      (a) =>
+        (a.tenant_company?.company_name || "").toLowerCase().includes(q) ||
+        (a.client_company?.company_name || "").toLowerCase().includes(q),
+    );
+  }, [agreements, search]);
+
+  if (loading)
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+      </div>
+    );
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-bold sm:text-2xl">
+            Approved Agreements
+          </h2>
+          <p className="mt-1 hidden text-sm text-text-muted sm:block">
+            Mutually approved contracts between companies.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-text-muted">
+          <span className="material-symbols-outlined text-emerald-500 text-[18px]">
+            verified
+          </span>
+          <span className="font-medium">
+            {filtered.length} agreement{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+        <div className="mx-auto max-w-6xl space-y-5">
+          {/* Search */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[18px]">
+                search
+              </span>
+              <input
+                type="text"
+                placeholder="Search by company name..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface pl-9 pr-3 py-2 text-sm text-text outline-none placeholder:text-text-muted focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {/* List */}
+          {filtered.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-16 text-center">
+              <span className="material-symbols-outlined mb-3 text-5xl text-text-muted">
+                handshake
+              </span>
+              <p className="text-sm font-semibold text-text">
+                No approved agreements yet
+              </p>
+              <p className="mt-1 text-xs text-text-muted">
+                Agreements that have been mutually approved by both parties will
+                appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((a) => {
+                const tenantName = a.tenant_company?.company_name || "—";
+                const clientName = a.client_company?.company_name || "—";
+                const isExpanded = expandedId === a.id;
+                const approvedDate = a.approved_at
+                  ? new Date(a.approved_at).toLocaleDateString("tr-TR", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : "—";
+
+                return (
+                  <div
+                    key={a.id}
+                    className="overflow-hidden rounded-xl border border-border bg-surface transition-shadow hover:shadow-md"
+                  >
+                    {/* Main row */}
+                    <div className="flex items-center gap-4 px-5 py-4">
+                      {/* Companies */}
+                      <div className="flex flex-1 min-w-0 items-center gap-3 flex-wrap">
+                        {/* Tenant company */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-bold text-primary">
+                            {tenantName[0]?.toUpperCase() || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold">
+                              Service Provider
+                            </p>
+                            <p className="truncate text-sm font-semibold text-text">
+                              {tenantName}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Arrow */}
+                        <div className="flex items-center gap-1 shrink-0 px-1">
+                          <span className="material-symbols-outlined text-emerald-500 text-[22px]">
+                            sync_alt
+                          </span>
+                        </div>
+
+                        {/* Client company */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-600">
+                            {clientName[0]?.toUpperCase() || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold">
+                              Client
+                            </p>
+                            <p className="truncate text-sm font-semibold text-text">
+                              {clientName}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Meta info */}
+                      <div className="hidden sm:flex items-center gap-6 shrink-0 text-sm">
+                        <div className="text-center">
+                          <p className="text-xs text-text-muted">Amount</p>
+                          <p className="font-semibold text-text">
+                            {formatCurrency(
+                              a.new_amount || a.previous_amount,
+                              a.currency,
+                            )}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-text-muted">Approved</p>
+                          <p className="font-semibold text-text">
+                            {approvedDate}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-text-muted">End Date</p>
+                          <p className="font-semibold text-text">
+                            {a.end_date || "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Approved badge */}
+                      <div className="shrink-0 hidden sm:flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600">
+                        <span className="material-symbols-outlined text-[14px]">
+                          verified
+                        </span>
+                        Approved
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() =>
+                            handleDownloadPdf(a.id, tenantName, clientName)
+                          }
+                          disabled={pdfLoadingId === a.id}
+                          className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-50"
+                          title="Download PDF"
+                        >
+                          {pdfLoadingId === a.id ? (
+                            <>
+                              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                              <span className="hidden sm:inline">
+                                Generating…
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-[16px]">
+                                picture_as_pdf
+                              </span>
+                              <span className="hidden sm:inline">PDF</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() =>
+                            setExpandedId(isExpanded ? null : a.id)
+                          }
+                          className="flex items-center justify-center rounded-lg border border-border p-1.5 text-text-muted transition-colors hover:bg-hover hover:text-text"
+                          title={isExpanded ? "Collapse" : "Show details"}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            {isExpanded ? "expand_less" : "expand_more"}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="border-t border-border bg-surface-alt px-5 py-4">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Contract Type
+                            </p>
+                            <p className="text-sm text-text font-medium">
+                              {CONTRACT_TYPE_LABELS[a.contract_type] ||
+                                a.contract_type ||
+                                "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Inflation Rule
+                            </p>
+                            <p className="text-sm text-text font-medium">
+                              {a.inflation_base_rule || "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Max Increase
+                            </p>
+                            <p className="text-sm text-text font-medium">
+                              {a.max_increase_limit != null
+                                ? `${a.max_increase_limit}%`
+                                : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Applied Adjustment
+                            </p>
+                            <p className="text-sm text-text font-medium">
+                              {a.applied_adjustment != null
+                                ? `${a.applied_adjustment}%`
+                                : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Previous Amount
+                            </p>
+                            <p className="text-sm text-text font-medium">
+                              {formatCurrency(a.previous_amount, a.currency)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              New Amount
+                            </p>
+                            <p className="text-sm font-bold text-emerald-600">
+                              {formatCurrency(a.new_amount, a.currency)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Currency
+                            </p>
+                            <p className="text-sm text-text font-medium">
+                              {a.currency || "TRY"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">
+                              Contract ID
+                            </p>
+                            <p className="text-xs text-text-muted font-mono">
+                              {a.id.slice(0, 18)}…
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Mobile meta */}
+                        <div className="mt-4 flex flex-wrap gap-4 sm:hidden text-sm">
+                          <div>
+                            <p className="text-xs text-text-muted">
+                              Approved On
+                            </p>
+                            <p className="font-semibold">{approvedDate}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-text-muted">End Date</p>
+                            <p className="font-semibold">{a.end_date || "—"}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            onClick={() =>
+                              handleDownloadPdf(a.id, tenantName, clientName)
+                            }
+                            disabled={pdfLoadingId === a.id}
+                            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+                          >
+                            {pdfLoadingId === a.id ? (
+                              <>
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                Generating PDF…
+                              </>
+                            ) : (
+                              <>
+                                <span className="material-symbols-outlined text-[18px]">
+                                  picture_as_pdf
+                                </span>
+                                Download Full Contract PDF
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ContractReviewPage() {
   const { id } = useParams();
-  return id ? <ContractDetail /> : <ContractList />;
+  const [activeTab, setActiveTab] = useState("renewals");
+
+  // If viewing a specific contract detail, skip tabs entirely
+  if (id) return <ContractDetail />;
+
+  return (
+    <ContractReviewTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+  );
+}
+
+function ContractReviewTabs({ activeTab, setActiveTab }) {
+  const { user } = useAuth();
+
+  // Only company_admin (and super_admin) see the Approved Agreements tab
+  const showAgreementsTab =
+    user?.role === "company_admin" || user?.role === "super_admin";
+
+  if (!showAgreementsTab) return <ContractList />;
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
+      {/* Tab bar */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-border bg-surface px-4 sm:px-8">
+        <button
+          onClick={() => setActiveTab("renewals")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+            activeTab === "renewals"
+              ? "border-primary text-primary"
+              : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            description
+          </span>
+          Renewal Review
+        </button>
+        <button
+          onClick={() => setActiveTab("agreements")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+            activeTab === "agreements"
+              ? "border-primary text-primary"
+              : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            handshake
+          </span>
+          Approved Agreements
+        </button>
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === "renewals" ? <ContractList /> : <ApprovedAgreements />}
+      </div>
+    </div>
+  );
 }
