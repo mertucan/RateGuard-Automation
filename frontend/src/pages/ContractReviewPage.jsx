@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { PageLoader } from "../components/Spinner";
+import ContractExpiryCalendar from "../components/ContractExpiryCalendar";
 import ChatPanel from "../components/ChatPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
@@ -200,6 +201,9 @@ function ContractList() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [ruleFilter, setRuleFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [endDateFrom, setEndDateFrom] = useState("");
+  const [endDateTo, setEndDateTo] = useState("");
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState(null);
   const [marketRates, setMarketRates] = useState({ tufe: null, ufe: null });
   const [form, setForm] = useState({
     company_id: "",
@@ -410,7 +414,7 @@ function ContractList() {
       currency: curr || "TRY",
     }).format(n || 0);
 
-  const filtered = useMemo(() => {
+  const listAfterTextFilters = useMemo(() => {
     let list = contracts;
     if (statusFilter !== "all") {
       list = list.filter((c) => (c.status || "active") === statusFilter);
@@ -426,6 +430,33 @@ function ContractList() {
     }
     return list;
   }, [contracts, statusFilter, ruleFilter, search]);
+
+  const calendarEvents = useMemo(() => {
+    return listAfterTextFilters
+      .filter((c) => c.end_date)
+      .map((c) => ({
+        id: c.id,
+        end_date: c.end_date,
+        company_name: c.companies?.company_name,
+        days_until: daysUntil(c.end_date),
+      }));
+  }, [listAfterTextFilters]);
+
+  const filtered = useMemo(() => {
+    let list = listAfterTextFilters;
+    if (endDateFrom) {
+      list = list.filter((c) => c.end_date && c.end_date >= endDateFrom);
+    }
+    if (endDateTo) {
+      list = list.filter((c) => c.end_date && c.end_date <= endDateTo);
+    }
+    if (calendarSelectedDay) {
+      list = list.filter(
+        (c) => (c.end_date || "").slice(0, 10) === calendarSelectedDay,
+      );
+    }
+    return list;
+  }, [listAfterTextFilters, endDateFrom, endDateTo, calendarSelectedDay]);
 
   const statusCounts = useMemo(() => {
     const counts = {
@@ -736,6 +767,46 @@ function ContractList() {
             </span>
           </div>
 
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-3 sm:p-4">
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                End date from
+              </label>
+              <input
+                type="date"
+                value={endDateFrom}
+                onChange={(e) => setEndDateFrom(e.target.value)}
+                className={`${inputCls} w-auto min-w-[10.5rem]`}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                End date through
+              </label>
+              <input
+                type="date"
+                value={endDateTo}
+                onChange={(e) => setEndDateTo(e.target.value)}
+                className={`${inputCls} w-auto min-w-[10.5rem]`}
+              />
+            </div>
+            {(endDateFrom || endDateTo || calendarSelectedDay) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEndDateFrom("");
+                  setEndDateTo("");
+                  setCalendarSelectedDay(null);
+                }}
+                className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-muted transition-colors hover:bg-hover hover:text-text"
+              >
+                Clear dates
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_290px] xl:items-start">
+            <div>
           {/* Contract Table */}
           {filtered.length === 0 ? (
             <div className="rounded-xl border border-border bg-surface p-12 text-center">
@@ -856,6 +927,22 @@ function ContractList() {
               </div>
             </div>
           )}
+            </div>
+
+            <div className="space-y-3 xl:sticky xl:top-4 xl:self-start">
+              <ContractExpiryCalendar
+                events={calendarEvents}
+                selectedDay={calendarSelectedDay}
+                onDaySelect={setCalendarSelectedDay}
+                compact
+              />
+              <p className="text-xs leading-relaxed text-text-muted">
+                Dots show contract end dates after your status, rule, and
+                search filters. Choose a day or use the date range above to
+                narrow the table.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2802,14 +2889,10 @@ function ApprovedAgreements() {
     load();
   }, [load]);
 
-  const handleDownloadPdf = async (contractId, tenantName, clientName) => {
+  const handleDownloadPdf = async (contractId) => {
     setPdfLoadingId(contractId);
     try {
-      const filename =
-        `Sozlesme_${tenantName}_${clientName}_${contractId.slice(0, 8)}.pdf`
-          .replace(/\s+/g, "_")
-          .replace(/[^a-zA-Z0-9_.-]/g, "");
-      await downloadApprovedPdf(contractId, filename);
+      await downloadApprovedPdf(contractId);
     } catch (err) {
       toastError("PDF could not be downloaded: " + err.message);
     } finally {
@@ -2998,7 +3081,7 @@ function ApprovedAgreements() {
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() =>
-                            handleDownloadPdf(a.id, tenantName, clientName)
+                            handleDownloadPdf(a.id)
                           }
                           disabled={pdfLoadingId === a.id}
                           className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-50"
@@ -3127,7 +3210,7 @@ function ApprovedAgreements() {
                         <div className="mt-4 flex justify-end">
                           <button
                             onClick={() =>
-                              handleDownloadPdf(a.id, tenantName, clientName)
+                              handleDownloadPdf(a.id)
                             }
                             disabled={pdfLoadingId === a.id}
                             className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"

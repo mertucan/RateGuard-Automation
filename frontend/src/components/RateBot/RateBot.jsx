@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ratebotChat } from "../../api";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
@@ -13,6 +13,16 @@ export default function RateBot({ contractId = null }) {
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const historyRef = useRef([]);
+
+  useEffect(() => {
+    // Reset bot session whenever user leaves/changes contract detail.
+    setMessages([]);
+    historyRef.current = [];
+    setIsTyping(false);
+
+    // Keep it closed by default; user opens from FAB.
+    setOpen(false);
+  }, [contractId]);
 
   const sendMessage = useCallback(
     async (text) => {
@@ -61,6 +71,10 @@ export default function RateBot({ contractId = null }) {
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
+  if (!contractId) {
+    return null;
+  }
+
   return (
     <>
       {/* ── Chat Window ── */}
@@ -101,7 +115,7 @@ export default function RateBot({ contractId = null }) {
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         ) : (
-          /* Chat icon */
+          /* Robot icon */
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -111,8 +125,11 @@ export default function RateBot({ contractId = null }) {
             strokeLinejoin="round"
             className="w-5 h-5"
           >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            <path d="M8 10h8M8 14h5" />
+            <rect x="4" y="7" width="16" height="12" rx="3" />
+            <path d="M12 3v4" />
+            <circle cx="9" cy="12" r="1.2" />
+            <circle cx="15" cy="12" r="1.2" />
+            <path d="M9 16h6" />
           </svg>
         )}
       </button>

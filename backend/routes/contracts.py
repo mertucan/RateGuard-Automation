@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request, send_file
 from services.auth_middleware import login_required, role_required
+from services.pdf_naming import addendum_download_name
 from services.supabase_client import supabase
 
 contracts_bp = Blueprint("contracts", __name__)
@@ -15,6 +16,8 @@ def list_contracts():
     company_id = request.args.get("company_id")
     tenant_company_id = request.args.get("tenant_company_id")
     pending = request.args.get("pending")
+    end_date_from = request.args.get("end_date_from")
+    end_date_to = request.args.get("end_date_to")
 
     try:
         query = supabase.table("contracts").select(
@@ -36,6 +39,11 @@ def list_contracts():
         if pending == "true":
             cutoff = (date.today() + timedelta(days=60)).isoformat()
             query = query.lte("end_date", cutoff)
+
+        if end_date_from:
+            query = query.gte("end_date", end_date_from)
+        if end_date_to:
+            query = query.lte("end_date", end_date_to)
 
         result = query.order("end_date", desc=False).execute()
         return jsonify(result.data)
@@ -428,7 +436,7 @@ def client_approve(contract_id):
             calc = calculate_renewal(contract_id)
             pdf_buf = generate_addendum_pdf(calc)
             pdf_bytes = pdf_buf.read()
-            filename = f"EkSozlesme_{client_company.replace(' ', '_')}.pdf"
+            filename = addendum_download_name(contract_id)
             if client_email:
                 send_mutual_approval_email(
                     client_email,
@@ -615,7 +623,7 @@ def get_approved_pdf(contract_id):
             pdf_buf,
             mimetype="application/pdf",
             as_attachment=True,
-            download_name=f"contract_{contract_id[:8]}.pdf",
+            download_name=addendum_download_name(contract_id),
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getDashboardStats, getContracts } from '../api'
 import { PageLoader } from '../components/Spinner'
+import ContractExpiryCalendar from '../components/ContractExpiryCalendar'
 
 export default function MainDashboardPage() {
   const navigate = useNavigate()
@@ -10,6 +11,7 @@ export default function MainDashboardPage() {
   const [stats, setStats] = useState(null)
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [calendarDay, setCalendarDay] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -56,6 +58,12 @@ export default function MainDashboardPage() {
     else adj = (tufe + ufe) / 2
     return amount * (1 + adj / 100)
   }
+
+  const upcomingFiltered = useMemo(() => {
+    const list = [...(stats?.expiring_calendar || [])]
+    if (!calendarDay) return list.slice(0, 12)
+    return list.filter((r) => (r.end_date || '').slice(0, 10) === calendarDay)
+  }, [stats, calendarDay])
 
   if (loading) return <PageLoader />
 
@@ -122,6 +130,82 @@ export default function MainDashboardPage() {
               <p className="mt-2 text-xs text-text-muted">Based on TUFE (CPI) and UFE (PPI) rates from TCMB</p>
             </div>
           </div>
+
+          {/* Contract expiry calendar (next 120 days) */}
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
+            <ContractExpiryCalendar
+              events={stats?.expiring_calendar || []}
+              selectedDay={calendarDay}
+              onDaySelect={setCalendarDay}
+            />
+            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-bold">Upcoming expirations</h3>
+                  <p className="mt-1 text-sm text-text-muted">
+                    {calendarDay
+                      ? `Ending on ${calendarDay}`
+                      : 'Next due dates in the following 120 days.'}
+                  </p>
+                </div>
+                {calendarDay && (
+                  <button
+                    type="button"
+                    onClick={() => setCalendarDay(null)}
+                    className="shrink-0 rounded-lg border border-border px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:bg-hover hover:text-text"
+                  >
+                    Clear day
+                  </button>
+                )}
+              </div>
+              <ul className="max-h-64 space-y-2 overflow-y-auto sm:max-h-80">
+                {upcomingFiltered.length === 0 ? (
+                  <li className="rounded-lg border border-border bg-surface-alt px-4 py-6 text-center text-sm text-text-muted">
+                    No contracts in this view.
+                  </li>
+                ) : (
+                  upcomingFiltered.map((item) => {
+                    const d = item.days_until
+                    const cls =
+                      d != null && d <= 7
+                        ? 'border-red-500/30 bg-red-500/5'
+                        : d != null && d <= 30
+                          ? 'border-amber-500/30 bg-amber-500/5'
+                          : 'border-border bg-surface-alt'
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/renewal-review/${item.id}`)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-hover ${cls}`}
+                        >
+                          <span className="min-w-0 truncate text-sm font-medium">
+                            {item.company_name}
+                          </span>
+                          <span className="shrink-0 text-xs text-text-muted">
+                            {item.end_date}
+                            {d != null ? (
+                              <span
+                                className={
+                                  d < 0
+                                    ? 'ml-1 font-semibold text-red-500'
+                                    : d <= 30
+                                      ? 'ml-1 font-semibold text-amber-600'
+                                      : 'ml-1 text-emerald-600'
+                                }
+                              >
+                                ({d}d)
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })
+                )}
+              </ul>
+            </div>
+          </section>
 
           {/* Market Data + Alerts (visible to admin/finance roles) */}
           {showMarket && (

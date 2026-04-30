@@ -48,12 +48,15 @@ def dashboard_stats():
     tenant_company_id = request.args.get("tenant_company_id")
 
     try:
-        query = supabase.table("contracts").select("id, end_date, previous_amount, status")
+        query = supabase.table("contracts").select(
+            "id, end_date, previous_amount, status, "
+            "companies!contracts_company_id_fkey(company_name)"
+        )
         
         # Enforce security filtering based on user role
         if user["role"] in ["company_admin", "finance", "sales"]:
             query = query.eq("tenant_company_id", user["company_id"])
-        elif user["role"] == "client":
+        elif user["role"] in ("client", "user"):
             query = query.eq("company_id", user["company_id"])
             
         if tenant_company_id:
@@ -71,6 +74,27 @@ def dashboard_stats():
     expiring_30 = [c for c in active_contracts if c.get("end_date") and today_s <= c["end_date"] <= t30]
     pending = [c for c in active_contracts if c.get("end_date") and today_s <= c["end_date"] <= t60]
 
+    t120 = (today + timedelta(days=120)).isoformat()
+    calendar_rows = []
+    for c in active_contracts:
+        ed = c.get("end_date")
+        if not ed or ed < today_s or ed > t120:
+            continue
+        try:
+            days_u = (date.fromisoformat(ed[:10]) - today).days
+        except ValueError:
+            days_u = None
+        co = c.get("companies") or {}
+        calendar_rows.append(
+            {
+                "id": c["id"],
+                "end_date": ed,
+                "company_name": co.get("company_name") or "—",
+                "days_until": days_u,
+            }
+        )
+    calendar_rows.sort(key=lambda x: x["end_date"])
+
     market = get_cached_market_data()
     tufe = market.get("tufe", 0)
     ufe = market.get("ufe", 0)
@@ -84,4 +108,5 @@ def dashboard_stats():
         "ufe": round(ufe, 2),
         "usd": market.get("usd", 0),
         "eur": market.get("eur", 0),
+        "expiring_calendar": calendar_rows,
     })

@@ -18,7 +18,6 @@ const ALL_NAV_ITEMS = [
       "finance",
       "sales",
       "client",
-      "user",
     ],
   },
   {

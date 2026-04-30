@@ -19,6 +19,7 @@ import LandingPage from "./pages/LandingPage";
 import SolutionsPage from "./pages/SolutionsPage";
 import AboutUsPage from "./pages/AboutUsPage";
 import KeyBenefitsPage from "./pages/KeyBenefitsPage";
+import UserWelcomePage from "./pages/UserWelcomePage";
 import { PageLoader } from "./components/Spinner";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -67,7 +68,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Layout>
-              <MainDashboardPage />
+              {user?.role === "user" ? <UserWelcomePage /> : <MainDashboardPage />}
             </Layout>
           </ProtectedRoute>
         }
@@ -82,7 +83,6 @@ function AppRoutes() {
               "finance",
               "sales",
               "client",
-              "user",
             ]}
           >
             <Layout>
@@ -103,7 +103,6 @@ function AppRoutes() {
               "finance",
               "sales",
               "client",
-              "user",
             ]}
           >
             <Layout>

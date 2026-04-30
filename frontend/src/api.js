@@ -10,6 +10,22 @@ function getAuthHeaders() {
   return {};
 }
 
+function parseFilenameFromContentDisposition(header) {
+  if (!header || typeof header !== "string") return null;
+  const star = header.match(/filename\*=(?:UTF-8'')?([^;\n]+)/i);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].trim().replace(/^"+|"+$/g, ""));
+    } catch {
+      return star[1].trim().replace(/^"+|"+$/g, "");
+    }
+  }
+  const q = header.match(/filename="([^"]+)"/i);
+  if (q) return q[1];
+  const u = header.match(/filename=([^;\s]+)/i);
+  return u ? u[1].replace(/^"+|"+$/g, "") : null;
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -177,11 +193,10 @@ export const downloadPdf = async (contractId) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download =
-    res.headers
-      .get("content-disposition")
-      ?.split("filename=")[1]
-      ?.replace(/"/g, "") || `addendum_${contractId.slice(0, 8)}.pdf`;
+  const fromHeader = parseFilenameFromContentDisposition(
+    res.headers.get("content-disposition"),
+  );
+  a.download = fromHeader || `RG_Addendum_${contractId.replace(/-/g, "").slice(0, 8).toUpperCase()}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -315,7 +330,13 @@ export const downloadApprovedPdf = async (contractId, filename) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename || `contract_${contractId.slice(0, 8)}.pdf`;
+  const fromHeader = parseFilenameFromContentDisposition(
+    res.headers.get("content-disposition"),
+  );
+  a.download =
+    filename ||
+    fromHeader ||
+    `RG_Addendum_${contractId.replace(/-/g, "").slice(0, 8).toUpperCase()}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, send_file
 from services.calculation import calculate_renewal
 from services.pdf_generator import generate_addendum_pdf
+from services.pdf_naming import addendum_download_name
 
 calculations_bp = Blueprint("calculations", __name__)
 
@@ -23,8 +24,7 @@ def download_pdf(contract_id):
         calc = calculate_renewal(contract_id)
         pdf_buf = generate_addendum_pdf(calc)
 
-        company = calc["company_name"].replace(" ", "_") or "contract"
-        filename = f"EkSozlesme_{company}_{calc['calculation_date']}.pdf"
+        filename = addendum_download_name(contract_id)
 
         return send_file(
             pdf_buf,

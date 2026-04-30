@@ -1,4 +1,6 @@
 from datetime import date
+from xml.sax.saxutils import escape
+
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -15,7 +17,7 @@ import os
 def _register_fonts():
     font_dirs = []
     if sys.platform == "win32":
-        font_dirs.append(os.path.join(os.environ.get("WINDIR", "C:\Windows"), "Fonts"))
+        font_dirs.append(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
     elif sys.platform == "darwin":
         font_dirs.extend(["/Library/Fonts", "/System/Library/Fonts/Supplemental"])
     else:
@@ -100,6 +102,39 @@ def bl(n=20):
     return "_" * n
 
 
+def _pxml(text):
+    """Escape for ReportLab Paragraph mini-HTML."""
+    if text is None:
+        return ""
+    return escape(str(text), entities={'"': "&quot;", "'": "&apos;"})
+
+
+def _money_line(calc):
+    amt = calc.get("new_amount")
+    cur = (calc.get("currency") or "TRY").strip() or "TRY"
+    if amt is None:
+        return "—"
+    try:
+        a = float(amt)
+    except (TypeError, ValueError):
+        return f"{amt} {cur}"
+    return f"{a:,.2f} {cur}"
+
+
+def _agreement_today():
+    return date.today().strftime("%d %b, %Y")
+
+
+def _end_pretty(calc):
+    ed = calc.get("end_date") or ""
+    if not ed:
+        return ""
+    try:
+        return date.fromisoformat(ed[:10]).strftime("%d %b, %Y")
+    except ValueError:
+        return str(ed)
+
+
 def cb():
     return "[ ]"
 
@@ -124,12 +159,12 @@ def lease_agreement(styles, calc):
     story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
     story.append(Spacer(1, 10))
     
-    tenant_name = calc.get('company_name', bl(20))
-    rent_amt = str(calc.get('new_amount', bl(10))) + ' ' + calc.get('currency', '')
-    end_date = calc.get('end_date', bl(15))
+    tenant_name = _pxml(calc.get("company_name") or "Client")
+    rent_amt = _pxml(_money_line(calc))
+    end_date = _pxml(_end_pretty(calc) or (calc.get("end_date") or "—"))
 
     story.append(Paragraph(
-        f'<b>I. The Parties.</b> This Lease Agreement ("Agreement") made {date.today().strftime("%d %b, %Y")}, '
+        f'<b>I. The Parties.</b> This Lease Agreement ("Agreement") made {_pxml(_agreement_today())}, '
         f'is by and between:', s['body']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
@@ -205,8 +240,8 @@ def lease_agreement(styles, calc):
 
     story.append(Paragraph("XI. Governing Law.", s['section']))
     story.append(Paragraph(
-        f'This Agreement shall be governed by and construed in accordance with the laws of the '
-        f'State of {bl(20)}.', s['body']))
+        'This Agreement shall be governed by and construed in accordance with the laws of the '
+        'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XII. Additional Terms & Conditions.", s['section']))
     story.append(Paragraph(f'{bl(70)}', s['body']))
@@ -224,11 +259,11 @@ def lease_agreement(styles, calc):
     story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        f"<b>Landlord's Signature</b> RateGuard     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+        f"<b>Landlord&apos;s Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
     story.append(Spacer(1, 10))
     story.append(Paragraph(
-        f"<b>Tenant's Signature</b> {tenant_name}     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+        f"<b>Tenant&apos;s Signature</b> {tenant_name}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {tenant_name}', s['sign_sub']))
 
     return story
@@ -245,16 +280,22 @@ def maintenance_agreement(styles, calc):
     story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
     story.append(Spacer(1, 10))
 
+    made = _pxml(_agreement_today())
+    client_name = _pxml(calc.get("company_name") or "Client")
+    provider_addr = "Istanbul, Turkey"
+    pay = _pxml(_money_line(calc))
+    end_disp = _pxml(_end_pretty(calc) or (calc.get("end_date") or "—"))
+
     story.append(Paragraph(
-        f'<b>I. The Parties.</b> This Maintenance Agreement ("Agreement") made {bl(15)}, 20{bl(4)}, '
+        f'<b>I. The Parties.</b> This Maintenance Agreement ("Agreement") made {made}, '
         f'is by and between:', s['body']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f'<u>Service Provider:</u> {bl(20)}, with a mailing address of {bl(30)} ("Service Provider"), and',
+        f'<u>Service Provider:</u> RateGuard, with a mailing address of {provider_addr} ("Service Provider"), and',
         s['indent']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f'<u>Client:</u> {bl(20)}, with a mailing address of {bl(30)} ("Client").',
+        f'<u>Client:</u> {client_name}, with a mailing address as per company records ("Client").',
         s['indent']))
     story.append(Spacer(1, 8))
     story.append(Paragraph(
@@ -267,9 +308,9 @@ def maintenance_agreement(styles, calc):
 
     story.append(Paragraph("II. Term.", s['section']))
     story.append(Paragraph(
-        f'This Agreement shall commence on {bl(15)}, 20{bl(4)}, and terminate: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least {bl(6)} days.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - End Date. On {bl(15)}, 20{bl(4)}.', s['checkbox']))
+        f'This Agreement shall commence on {made}, and terminate: (check one)', s['body']))
+    story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least thirty (30) days.', s['checkbox']))
+    story.append(Paragraph(f'[X] - End Date. On {end_disp}.', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
 
     story.append(Paragraph("III. Maintenance Services.", s['section']))
@@ -295,7 +336,7 @@ def maintenance_agreement(styles, calc):
         'The Client agrees to pay the Service Provider the following compensation: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - ${bl(10)} / Hour', s['checkbox']))
     story.append(Paragraph(f'{cb()} - ${bl(10)} / Visit', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / Month (flat fee)', s['checkbox']))
+    story.append(Paragraph(f'[X] - {pay} / Month (flat fee)', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Payment Amount".', s['body']))
 
@@ -332,8 +373,8 @@ def maintenance_agreement(styles, calc):
 
     story.append(Paragraph("XI. Governing Law.", s['section']))
     story.append(Paragraph(
-        f'This Agreement shall be governed by and construed in accordance with the laws of the '
-        f'State of {bl(20)}.', s['body']))
+        'This Agreement shall be governed by and construed in accordance with the laws of the '
+        'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XII. Additional Terms & Conditions.", s['section']))
     story.append(Paragraph(f'{bl(70)}', s['body']))
@@ -348,12 +389,12 @@ def maintenance_agreement(styles, calc):
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.black))
     story.append(Spacer(1, 10))
 
-    
-    client_name = calc.get('company_name', 'Client')
-    story.append(Paragraph(f"<b>Client's Signature</b> {client_name}     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+    story.append(Paragraph(
+        f"<b>Client&apos;s Signature</b> {client_name}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {client_name}', s['sign_sub']))
     story.append(Spacer(1, 10))
-    story.append(Paragraph(f"<b>Service Provider Signature</b> RateGuard     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+    story.append(Paragraph(
+        f"<b>Service Provider Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
 
     return story
@@ -370,16 +411,22 @@ def service_contract(styles, calc):
     story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
     story.append(Spacer(1, 10))
 
+    made = _pxml(_agreement_today())
+    client_name = _pxml(calc.get("company_name") or "Client")
+    provider_addr = "Istanbul, Turkey"
+    pay = _pxml(_money_line(calc))
+    end_disp = _pxml(_end_pretty(calc) or (calc.get("end_date") or "—"))
+
     story.append(Paragraph(
-        f'<b>I. The Parties.</b> This Service Contract ("Agreement") made {bl(15)}, 20{bl(4)}, '
+        f'<b>I. The Parties.</b> This Service Contract ("Agreement") made {made}, '
         f'is by and between:', s['body']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f'<u>Service Provider:</u> {bl(20)}, with a mailing address of {bl(30)} ("Service Provider"), and',
+        f'<u>Service Provider:</u> RateGuard, with a mailing address of {provider_addr} ("Service Provider"), and',
         s['indent']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f'<u>Client:</u> {bl(20)}, with a mailing address of {bl(30)} ("Client").',
+        f'<u>Client:</u> {client_name}, with a mailing address as per company records ("Client").',
         s['indent']))
     story.append(Spacer(1, 8))
     story.append(Paragraph(
@@ -392,9 +439,9 @@ def service_contract(styles, calc):
 
     story.append(Paragraph("II. Term.", s['section']))
     story.append(Paragraph(
-        f'The term of this Agreement shall commence on {bl(15)}, 20{bl(4)}, and terminate: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least {bl(6)} days.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - End Date. On {bl(15)}, 20{bl(4)}.', s['checkbox']))
+        f'The term of this Agreement shall commence on {made}, and terminate: (check one)', s['body']))
+    story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least thirty (30) days.', s['checkbox']))
+    story.append(Paragraph(f'[X] - End Date. On {end_disp}.', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
 
     story.append(Paragraph("III. The Service.", s['section']))
@@ -413,7 +460,10 @@ def service_contract(styles, calc):
         'The Client agrees to pay the Service Provider the following compensation for the Service '
         'performed under this Agreement: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - ${bl(10)} / Hour', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / per Job. A "Job" is {bl(25)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - ${bl(10)} / per Job.', s['checkbox']))
+    story.append(Paragraph(
+        f'[X] - Fixed renewal amount: {pay} for the contract period (inclusive of applicable adjustment).',
+        s['checkbox']))
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Payment Amount".', s['body']))
 
@@ -483,8 +533,8 @@ def service_contract(styles, calc):
 
     story.append(Paragraph("XIV. Governing Law.", s['section']))
     story.append(Paragraph(
-        f'This Agreement shall be governed by and construed in accordance with the laws of the '
-        f'State of {bl(20)}.', s['body']))
+        'This Agreement shall be governed by and construed in accordance with the laws of the '
+        'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XV. Additional Terms & Conditions.", s['section']))
     story.append(Paragraph(f'{bl(70)}', s['body']))
@@ -500,12 +550,12 @@ def service_contract(styles, calc):
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.black))
     story.append(Spacer(1, 10))
 
-    
-    client_name = calc.get('company_name', 'Client')
-    story.append(Paragraph(f"<b>Client's Signature</b> {client_name}     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+    story.append(Paragraph(
+        f"<b>Client&apos;s Signature</b> {client_name}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {client_name}', s['sign_sub']))
     story.append(Spacer(1, 10))
-    story.append(Paragraph(f"<b>Service Provider Signature</b> RateGuard     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+    story.append(Paragraph(
+        f"<b>Service Provider Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
 
     return story
@@ -522,16 +572,22 @@ def supply_agreement(styles, calc):
     story.append(HRFlowable(width="100%", thickness=1, color=colors.black))
     story.append(Spacer(1, 10))
 
+    made = _pxml(_agreement_today())
+    buyer_name = _pxml(calc.get("company_name") or "Buyer")
+    supplier_addr = "Istanbul, Turkey"
+    pay = _pxml(_money_line(calc))
+    end_disp = _pxml(_end_pretty(calc) or (calc.get("end_date") or "—"))
+
     story.append(Paragraph(
-        f'<b>I. The Parties.</b> This Supply Agreement ("Agreement") made {bl(15)}, 20{bl(4)}, '
+        f'<b>I. The Parties.</b> This Supply Agreement ("Agreement") made {made}, '
         f'is by and between:', s['body']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f'<u>Supplier:</u> {bl(20)}, with a mailing address of {bl(30)} ("Supplier"), and',
+        f'<u>Supplier:</u> RateGuard, with a mailing address of {supplier_addr} ("Supplier"), and',
         s['indent']))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        f'<u>Buyer:</u> {bl(20)}, with a mailing address of {bl(30)} ("Buyer").',
+        f'<u>Buyer:</u> {buyer_name}, with a mailing address as per company records ("Buyer").',
         s['indent']))
     story.append(Spacer(1, 8))
     story.append(Paragraph(
@@ -544,9 +600,9 @@ def supply_agreement(styles, calc):
 
     story.append(Paragraph("II. Term.", s['section']))
     story.append(Paragraph(
-        f'This Agreement shall commence on {bl(15)}, 20{bl(4)}, and terminate: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least {bl(6)} days.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - End Date. On {bl(15)}, 20{bl(4)}.', s['checkbox']))
+        f'This Agreement shall commence on {made}, and terminate: (check one)', s['body']))
+    story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least thirty (30) days.', s['checkbox']))
+    story.append(Paragraph(f'[X] - End Date. On {end_disp}.', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
 
     story.append(Paragraph("III. Scope of Supply.", s['section']))
@@ -562,8 +618,8 @@ def supply_agreement(styles, calc):
 
     story.append(Paragraph("IV. Price.", s['section']))
     story.append(Paragraph('The Buyer agrees to pay the Supplier the following: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - Unit Price: ${bl(10)} per {bl(15)}', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Lump Sum: ${bl(10)} for the entire Supply', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Unit Price: per agreed unit', s['checkbox']))
+    story.append(Paragraph(f'[X] - Lump Sum: {pay} for the entire Supply (renewal-adjusted total).', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Contract Price".', s['body']))
 
@@ -575,8 +631,9 @@ def supply_agreement(styles, calc):
     story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
 
     story.append(Paragraph("VI. Delivery.", s['section']))
-    story.append(Paragraph(f'Delivery address: {bl(50)}', s['body']))
-    story.append(Paragraph(f'Estimated delivery date: {bl(25)}', s['body']))
+    story.append(Paragraph(
+        f'Delivery address: As agreed in writing between the Parties.', s['body']))
+    story.append(Paragraph(f'Estimated completion / delivery by end of term: {end_disp}', s['body']))
     story.append(Paragraph('Delivery method: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - Delivered by Supplier (shipping included)', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Collected by Buyer', s['checkbox']))
@@ -617,8 +674,8 @@ def supply_agreement(styles, calc):
 
     story.append(Paragraph("XII. Governing Law.", s['section']))
     story.append(Paragraph(
-        f'This Agreement shall be governed by and construed in accordance with the laws of the '
-        f'State of {bl(20)}.', s['body']))
+        'This Agreement shall be governed by and construed in accordance with the laws of the '
+        'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XIII. Additional Terms & Conditions.", s['section']))
     story.append(Paragraph(f'{bl(70)}', s['body']))
@@ -634,12 +691,12 @@ def supply_agreement(styles, calc):
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.black))
     story.append(Spacer(1, 10))
 
-    
-    client_name = calc.get('company_name', 'Client')
-    story.append(Paragraph(f"<b>Buyer's Signature</b> {client_name}     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
-    story.append(Paragraph(f'Print Name {client_name}', s['sign_sub']))
+    story.append(Paragraph(
+        f"<b>Buyer&apos;s Signature</b> {buyer_name}     Date {_pxml(_agreement_today())}", s['sign']))
+    story.append(Paragraph(f'Print Name {buyer_name}', s['sign_sub']))
     story.append(Spacer(1, 10))
-    story.append(Paragraph(f"<b>Supplier's Signature</b> RateGuard     Date {date.today().strftime('%d %b, %Y')}", s['sign']))
+    story.append(Paragraph(
+        f"<b>Supplier&apos;s Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
 
     return story
