@@ -86,14 +86,14 @@ export default function MainDashboardPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+      <header className="flex shrink-0 items-center justify-between border-b border-border bg-gradient-to-r from-surface via-surface to-primary/5 px-4 py-4 sm:px-8 sm:py-5">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-bold sm:text-2xl">
-            {role === 'client' ? 'My Contracts' : 'Dashboard Overview'}
+            {role === 'client' ? 'My Contracts' : 'Dashboard'}
           </h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">
-            Welcome, {user?.full_name || 'User'}
-            <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
+            Welcome back, {user?.full_name || 'User'}
+            <span className="ml-2 inline-flex items-center rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
               {ROLE_LABEL[role] || role}
             </span>
           </p>
@@ -101,44 +101,101 @@ export default function MainDashboardPage() {
         {canCreateContract && (
           <button
             onClick={() => navigate('/renewal-review')}
-            className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary-dark sm:px-4 sm:text-sm"
+            className="shrink-0 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md shadow-primary/25 transition-colors hover:bg-primary-dark sm:text-sm"
           >
-            New Contract
+            New contract
           </button>
         )}
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="space-y-6 sm:space-y-8">
+        <div className="mx-auto w-full max-w-6xl space-y-6 sm:space-y-8">
+          {/* Quick links */}
+          {(showRenewals || role === 'client') && (
+            <nav className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/renewal-review')}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
+              >
+                <span className="material-symbols-outlined text-primary text-[20px]">description</span>
+                Contracts
+              </button>
+              {['super_admin', 'company_admin'].includes(role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/clients')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                >
+                  <span className="material-symbols-outlined text-primary text-[20px]">group</span>
+                  Clients
+                </button>
+              )}
+              {['super_admin', 'company_admin', 'finance', 'user', 'client'].includes(role) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/analytics')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                >
+                  <span className="material-symbols-outlined text-primary text-[20px]">monitoring</span>
+                  Analytics
+                </button>
+              )}
+            </nav>
+          )}
+
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 sm:gap-6">
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
-              <p className="text-sm font-medium text-text-muted">Expiring in 30 Days</p>
-              <p className="mt-1 text-2xl font-bold sm:text-3xl">{stats?.expiring_30 ?? '\u2014'}</p>
-              <p className="mt-2 text-xs text-text-muted">Contracts need urgent review</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-text-muted">Expiring (30d)</p>
+                <span className="material-symbols-outlined rounded-lg bg-amber-500/15 p-1.5 text-amber-600 text-[22px]">event_upcoming</span>
+              </div>
+              <p className="mt-2 text-2xl font-bold tabular-nums sm:text-3xl">{stats?.expiring_30 ?? '\u2014'}</p>
+              <p className="mt-2 text-xs text-text-muted">Needs review soon</p>
             </div>
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
-              <p className="text-sm font-medium text-text-muted">Pending Approvals</p>
-              <p className="mt-1 text-2xl font-bold sm:text-3xl">
-                {stats?.pending_approvals ?? '\u2014'}
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-text-muted">Pending approvals</p>
+                <span className="material-symbols-outlined rounded-lg bg-primary/15 p-1.5 text-primary text-[22px]">pending_actions</span>
+              </div>
+              <p className="mt-2 text-2xl font-bold tabular-nums sm:text-3xl">{stats?.pending_approvals ?? '\u2014'}</p>
+              <p className="mt-2 text-xs text-text-muted">Due within 60 days</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-text-muted">Portfolio (active)</p>
+                <span className="material-symbols-outlined rounded-lg bg-emerald-500/15 p-1.5 text-emerald-600 text-[22px]">account_balance</span>
+              </div>
+              <p className="mt-2 text-lg font-bold tabular-nums sm:text-2xl">
+                {stats?.total_portfolio_value_try != null
+                  ? formatCurrency(stats.total_portfolio_value_try)
+                  : '\u2014'}
               </p>
-              <p className="mt-2 text-xs text-text-muted">Expiring within 60 days</p>
+              <p className="mt-2 text-xs text-text-muted">
+                {stats?.active_contracts_count != null
+                  ? `${stats.active_contracts_count} open contracts`
+                  : 'Booked value excl. finalized'}
+              </p>
             </div>
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
-              <p className="text-sm font-medium text-text-muted">Avg Inflation Adjustment</p>
-              <p className="mt-1 text-2xl font-bold sm:text-3xl">{avgAdj}%</p>
-              <p className="mt-2 text-xs text-text-muted">Based on TUFE (CPI) and UFE (PPI) rates from TCMB</p>
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-text-muted">Avg. adjustment</p>
+                <span className="material-symbols-outlined rounded-lg bg-violet-500/15 p-1.5 text-violet-600 text-[22px]">percent</span>
+              </div>
+              <p className="mt-2 text-2xl font-bold tabular-nums sm:text-3xl">{avgAdj}%</p>
+              <p className="mt-2 text-xs text-text-muted">Blended TUFE / UFE (TCMB)</p>
             </div>
           </div>
 
           {/* Contract expiry calendar (next 120 days) */}
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
             <ContractExpiryCalendar
               events={stats?.expiring_calendar || []}
               selectedDay={calendarDay}
               onDaySelect={setCalendarDay}
             />
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="text-lg font-bold">Upcoming expirations</h3>
@@ -209,8 +266,8 @@ export default function MainDashboardPage() {
 
           {/* Market Data + Alerts (visible to admin/finance roles) */}
           {showMarket && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 sm:gap-8">
-              <section className="rounded-xl border border-border bg-surface p-4 sm:p-6 lg:col-span-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:gap-6">
+              <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6 lg:col-span-2">
                 <h3 className="text-lg font-bold">Market Snapshot</h3>
                 <p className="text-sm text-text-muted">Live data from TCMB (Central Bank of Turkey) EVDS API. Rates are updated daily.</p>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 md:grid-cols-4">
@@ -241,7 +298,7 @@ export default function MainDashboardPage() {
                 </div>
               </section>
 
-              <section className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
+              <section className="rounded-2xl border border-primary/25 bg-gradient-to-b from-primary-soft to-surface p-4 shadow-sm sm:p-6">
                 <h3 className="text-lg font-bold text-primary">Market Alerts</h3>
                 <div className="mt-4 space-y-3">
                   {tufe > 40 && (
@@ -275,7 +332,7 @@ export default function MainDashboardPage() {
 
           {/* Pending Renewals Table */}
           {showRenewals && (
-            <section className="overflow-hidden rounded-xl border border-border bg-surface">
+            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
               <div className="border-b border-border p-4 sm:p-6">
                 <h3 className="text-lg font-bold">Pending Renewals</h3>
                 <p className="mt-1 text-sm text-text-muted">
@@ -366,7 +423,7 @@ export default function MainDashboardPage() {
 
           {/* Client role: simplified view */}
           {role === 'client' && (
-            <section className="overflow-hidden rounded-xl border border-border bg-surface">
+            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
               <div className="border-b border-border p-4 sm:p-6">
                 <h3 className="text-lg font-bold">Your Contracts</h3>
                 <p className="mt-1 text-sm text-text-muted">

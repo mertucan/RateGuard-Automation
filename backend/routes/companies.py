@@ -1,7 +1,8 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from flask import Blueprint, request, jsonify, g
 from services.supabase_client import supabase
 from services.auth_middleware import login_required
+from services.market_cache import get_cached_market_data
 
 companies_bp = Blueprint("companies", __name__)
 
@@ -356,6 +357,175 @@ def link_company_to_tenant(company_id):
     except Exception as e:
         print(f"[companies] link-tenant error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@companies_bp.route("/api/companies/revenue-analysis", methods=["GET"])
+@login_required
+def revenue_analysis():
+    """
+    Monthly / quarterly revenue-style snapshot for the Clients area:
+    portfolio value, estimated renewal uplift from EVDS rules, activity in period.
+    """
+    user = g.current_user
+    if user.get("role") not in ("super_admin", "company_admin"):
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    period = (request.args.get("period") or "month").lower()
+    if period not in ("month", "quarter"):
+        period = "month"
+
+    tenant_q = request.args.get("tenant_company_id", "").strip()
+    today = date.today()
+    if period == "quarter":
+        q0 = ((today.month - 1) // 3) * 3 + 1
+        period_start = date(today.year, q0, 1)
+        quarter_n = (q0 - 1) // 3 + 1
+        period_label = f"Q{quarter_n} {today.year}"
+    else:
+        period_start = date(today.year, today.month, 1)
+        period_label = today.strftime("%B %Y")
+
+    try:
+        query = supabase.table("contracts").select(
+            "id, company_id, tenant_company_id, previous_amount, new_amount, applied_adjustment, "
+            "status, created_at, end_date, inflation_base_rule, max_increase_limit, approved_at, "
+            "companies!contracts_company_id_fkey(company_name)"
+        )
+
+        if user.get("role") == "company_admin":
+            tid = user.get("company_id")
+            if not tid:
+                return jsonify({"error": "No tenant context."}), 400
+            query = query.eq("tenant_company_id", tid)
+        elif tenant_q:
+            query = query.eq("tenant_company_id", tenant_q)
+
+        rows = query.execute().data or []
+    except Exception as e:
+        print(f"[companies] revenue-analysis error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    market = get_cached_market_data()
+    tufe = float(market.get("tufe") or 0)
+    ufe = float(market.get("ufe") or 0)
+
+    def nominal_adj_pct(rule: str) -> float:
+        if rule == "UFE":
+            return ufe
+        if rule == "TUFE":
+            return tufe
+        return (tufe + ufe) / 2 if (tufe or ufe) else 0.0
+
+    def effective_new_amount(prev: float, rule: str, max_limit) -> float:
+        adj = nominal_adj_pct(rule)
+        if max_limit is not None and str(max_limit).strip() != "":
+            try:
+                adj = min(adj, float(max_limit))
+            except (TypeError, ValueError):
+                pass
+        return (prev or 0) * (1 + adj / 100)
+
+    non_rejected = [r for r in rows if r.get("status") != "rejected"]
+    active_like = [
+        r
+        for r in non_rejected
+        if r.get("status", "active") not in ("approved", "rejected")
+    ]
+
+    total_portfolio_value = sum(float(r.get("previous_amount") or 0) for r in non_rejected)
+    active_contracts = len(active_like)
+
+    uplift_numerator = 0.0
+    pct_sum = 0.0
+    pct_n = 0
+    for r in non_rejected:
+        prev = float(r.get("previous_amount") or 0)
+        if prev <= 0:
+            continue
+        na = r.get("new_amount")
+        if na is not None and str(na).strip() != "":
+            try:
+                nv = float(na)
+                pct = ((nv - prev) / prev) * 100
+            except (TypeError, ValueError):
+                nv = effective_new_amount(prev, r.get("inflation_base_rule") or "TUFE", r.get("max_increase_limit"))
+                pct = ((nv - prev) / prev) * 100
+        else:
+            nv = effective_new_amount(prev, r.get("inflation_base_rule") or "TUFE", r.get("max_increase_limit"))
+            pct = ((nv - prev) / prev) * 100
+        uplift_numerator += max(0, nv - prev)
+        pct_sum += pct
+        pct_n += 1
+
+    avg_increase_pct = round(pct_sum / pct_n, 2) if pct_n else 0.0
+    portfolio_uplift_estimate = round(uplift_numerator, 2)
+
+    def _in_period(ts) -> bool:
+        if not ts:
+            return False
+        try:
+            s = str(ts).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s[:19])
+            d = dt.date()
+        except ValueError:
+            return False
+        return period_start <= d <= today
+
+    new_in_period = sum(1 for r in rows if _in_period(r.get("created_at")))
+    approved_in_period = sum(
+        1
+        for r in rows
+        if r.get("status") == "client_approved" and _in_period(r.get("approved_at"))
+    )
+
+    expiring_in_period = 0
+    for r in non_rejected:
+        ed = r.get("end_date")
+        if not ed:
+            continue
+        try:
+            ed_d = date.fromisoformat(str(ed)[:10])
+        except ValueError:
+            continue
+        if period_start <= ed_d <= today:
+            expiring_in_period += 1
+
+    by_client = {}
+    for r in non_rejected:
+        cid = r.get("company_id")
+        co = r.get("companies") or {}
+        name = co.get("company_name") or "—"
+        key = str(cid) if cid else name
+        if key not in by_client:
+            by_client[key] = {"company_id": cid, "company_name": name, "contract_count": 0, "value": 0.0}
+        by_client[key]["contract_count"] += 1
+        by_client[key]["value"] += float(r.get("previous_amount") or 0)
+
+    top_clients = sorted(by_client.values(), key=lambda x: x["value"], reverse=True)[:8]
+
+    return jsonify(
+        {
+            "period": period,
+            "period_label": period_label,
+            "period_start": period_start.isoformat(),
+            "period_end": today.isoformat(),
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "market": {"tufe": round(tufe, 2), "ufe": round(ufe, 2)},
+            "portfolio": {
+                "total_contracts": len(non_rejected),
+                "active_pipeline_contracts": active_contracts,
+                "total_value_try": round(total_portfolio_value, 2),
+                "avg_estimated_increase_pct": avg_increase_pct,
+                "estimated_renewal_uplift_try": portfolio_uplift_estimate,
+            },
+            "period_activity": {
+                "new_contracts": new_in_period,
+                "client_approved": approved_in_period,
+                "expirations_in_range": expiring_in_period,
+            },
+            "top_clients_by_value": top_clients,
+        }
+    )
 
 
 @companies_bp.route("/api/companies/<company_id>", methods=["GET"])

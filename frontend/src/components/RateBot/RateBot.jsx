@@ -4,6 +4,7 @@ import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import QuickReplies from "./QuickReplies";
 import MessageInput from "./MessageInput";
+import RateBotAvatar from "./RateBotAvatar";
 
 let msgCounter = 0;
 const newId = () => `msg-${++msgCounter}`;
@@ -12,6 +13,7 @@ export default function RateBot({ contractId = null }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [quickRepliesOpen, setQuickRepliesOpen] = useState(true);
   const historyRef = useRef([]);
 
   useEffect(() => {
@@ -19,6 +21,7 @@ export default function RateBot({ contractId = null }) {
     setMessages([]);
     historyRef.current = [];
     setIsTyping(false);
+    setQuickRepliesOpen(true);
 
     // Keep it closed by default; user opens from FAB.
     setOpen(false);
@@ -27,6 +30,8 @@ export default function RateBot({ contractId = null }) {
   const sendMessage = useCallback(
     async (text) => {
       if (!text.trim() || isTyping) return;
+
+      setQuickRepliesOpen(false);
 
       // Add user message
       const userMsg = { id: newId(), role: "user", text };
@@ -80,57 +85,50 @@ export default function RateBot({ contractId = null }) {
       {/* ── Chat Window ── */}
       {open && (
         <div
-          className="fixed bottom-20 right-5 z-50 flex flex-col w-[360px] bg-surface border border-border rounded-2xl overflow-hidden"
+          className="fixed bottom-20 right-5 z-50 flex w-[min(100vw-1.5rem,380px)] flex-col overflow-hidden rounded-2xl border border-border/90 bg-surface shadow-2xl shadow-black/20 ring-1 ring-black/5 dark:bg-surface dark:ring-white/10"
           style={{
-            height: "520px",
+            height: "min(78vh, 540px)",
             animation: "ratebotSlideUp 0.22s cubic-bezier(0.16,1,0.3,1) both",
           }}
         >
           <ChatHeader onClose={handleClose} />
           <MessageList messages={messages} isTyping={isTyping} />
-          <QuickReplies onSelect={sendMessage} disabled={isTyping} />
-          <MessageInput onSend={sendMessage} disabled={isTyping} />
+          {quickRepliesOpen && (
+            <QuickReplies
+              onSelect={sendMessage}
+              disabled={isTyping}
+              onDismiss={() => setQuickRepliesOpen(false)}
+            />
+          )}
+          <MessageInput
+            onSend={sendMessage}
+            disabled={isTyping}
+            promptsAvailable={!quickRepliesOpen}
+            onOpenPrompts={() => setQuickRepliesOpen(true)}
+          />
         </div>
       )}
 
       {/* ── FAB Button ── */}
       <button
+        type="button"
         onClick={open ? handleClose : handleOpen}
         aria-label={open ? "Close RateBot" : "Open RateBot"}
-        className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary-dark transition-all active:scale-95"
-        style={{
-          boxShadow: "0 4px 24px rgba(19,109,236,0.35)",
-        }}
+        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-lg shadow-primary/40 transition-all hover:bg-primary-dark active:scale-95"
       >
         {open ? (
-          /* X icon */
           <svg
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.2"
             strokeLinecap="round"
-            className="w-5 h-5"
+            className="h-5 w-5"
           >
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         ) : (
-          /* Robot icon */
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-5 h-5"
-          >
-            <rect x="4" y="7" width="16" height="12" rx="3" />
-            <path d="M12 3v4" />
-            <circle cx="9" cy="12" r="1.2" />
-            <circle cx="15" cy="12" r="1.2" />
-            <path d="M9 16h6" />
-          </svg>
+          <RateBotAvatar size={26} variant="onBrand" className="text-white" />
         )}
       </button>
 

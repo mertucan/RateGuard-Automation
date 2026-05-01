@@ -1,6 +1,11 @@
 import { useState } from "react";
 
-export default function MessageInput({ onSend, disabled }) {
+export default function MessageInput({
+  onSend,
+  disabled,
+  onOpenPrompts,
+  promptsAvailable,
+}) {
   const [value, setValue] = useState("");
 
   const handleSubmit = (e) => {
@@ -14,9 +19,22 @@ export default function MessageInput({ onSend, disabled }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="px-4 pb-4 pt-2 border-t border-border bg-surface rounded-b-2xl"
+      className="rounded-b-2xl border-t border-border bg-surface px-4 pb-4 pt-2"
     >
-      <div className="flex items-center gap-2 bg-bg border border-border rounded-xl px-3 py-2 focus-within:border-primary transition-colors">
+      {promptsAvailable && onOpenPrompts && (
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            onClick={onOpenPrompts}
+            disabled={disabled}
+            className="inline-flex items-center gap-1 rounded-full border border-border/90 bg-surface-alt/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-40"
+          >
+            <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+            Prompts
+          </button>
+        </div>
+      )}
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-bg px-3 py-2 transition-colors focus-within:border-primary">
         <input
           type="text"
           value={value}

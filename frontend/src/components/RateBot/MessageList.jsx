@@ -1,14 +1,18 @@
 import { useEffect, useRef } from "react";
+import RateBotAvatar from "./RateBotAvatar";
+
+function BotGlyphBubble() {
+  return (
+    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/12 ring-1 ring-primary/15">
+      <RateBotAvatar size={16} variant="soft" className="text-primary" />
+    </div>
+  );
+}
 
 function TypingIndicator() {
   return (
     <div className="flex items-end gap-2">
-      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 text-primary" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a5 5 0 1 1 0 10A5 5 0 0 1 12 2z" />
-          <path d="M3 20c0-4 4-7 9-7s9 3 9 7" />
-        </svg>
-      </div>
+      <BotGlyphBubble />
       <div className="bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-3">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
@@ -35,12 +39,7 @@ function BotMessage({ text }) {
   const lines = text.split("\n");
   return (
     <div className="flex items-end gap-2">
-      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 text-primary" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a5 5 0 1 1 0 10A5 5 0 0 1 12 2z" />
-          <path d="M3 20c0-4 4-7 9-7s9 3 9 7" />
-        </svg>
-      </div>
+      <BotGlyphBubble />
       <div className="max-w-[78%] bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm text-text leading-relaxed">
         {lines.map((line, i) => {
           if (!line.trim()) return <div key={i} className="h-1" />;
@@ -65,18 +64,13 @@ function BotMessage({ text }) {
 function WelcomeMessage() {
   return (
     <div className="flex items-end gap-2">
-      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 text-primary" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a5 5 0 1 1 0 10A5 5 0 0 1 12 2z" />
-          <path d="M3 20c0-4 4-7 9-7s9 3 9 7" />
-        </svg>
-      </div>
-      <div className="max-w-[78%] bg-surface border border-border rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm text-text leading-relaxed">
+      <BotGlyphBubble />
+      <div className="max-w-[78%] rounded-2xl rounded-bl-sm border border-border/90 bg-surface px-4 py-2.5 text-sm leading-relaxed text-text shadow-sm">
         <p>
           Hi! I&apos;m <span className="font-semibold text-primary">RateBot</span> — your contract analysis assistant.
         </p>
-        <p className="mt-1 text-text-muted text-[12px]">
-          Ask me anything about contracts, inflation adjustments, or use a quick question below.
+        <p className="mt-1 text-[12px] text-text-muted">
+          Ask about this contract or open suggested prompts below — they hide once you start chatting to keep the view clean.
         </p>
       </div>
     </div>
@@ -91,7 +85,7 @@ export default function MessageList({ messages, isTyping }) {
   }, [messages, isTyping]);
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-thin">
+    <div className="flex-1 space-y-3 overflow-y-auto bg-bg/30 px-4 py-4 scrollbar-thin">
       <WelcomeMessage />
       {messages.map((msg) =>
         msg.role === "user" ? (

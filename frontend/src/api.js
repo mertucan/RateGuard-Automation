@@ -111,6 +111,11 @@ export const updateCompany = (id, data) =>
 export const deleteCompany = (id) =>
   request(`/companies/${id}`, { method: "DELETE" });
 
+export const getRevenueAnalysis = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/companies/revenue-analysis${qs ? `?${qs}` : ""}`);
+};
+
 // ── Contracts ──────────────────────────────────────────────
 export const getContracts = (params = {}) => {
   const qs = new URLSearchParams(params).toString();

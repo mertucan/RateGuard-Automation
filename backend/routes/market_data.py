@@ -100,6 +100,10 @@ def dashboard_stats():
     ufe = market.get("ufe", 0)
     avg_adjustment = round((tufe + ufe) / 2, 1) if (tufe or ufe) else 0
 
+    total_portfolio_value = sum(
+        float(c.get("previous_amount") or 0) for c in active_contracts
+    )
+
     return jsonify({
         "expiring_30": len(expiring_30),
         "pending_approvals": len(pending),
@@ -109,4 +113,6 @@ def dashboard_stats():
         "usd": market.get("usd", 0),
         "eur": market.get("eur", 0),
         "expiring_calendar": calendar_rows,
+        "active_contracts_count": len(active_contracts),
+        "total_portfolio_value_try": round(total_portfolio_value, 2),
     })
