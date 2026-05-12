@@ -40,6 +40,9 @@ def generate_email_draft(calc_data: dict) -> dict:
     usd_rate = calc_data.get("usd_rate", 0)
     eur_rate = calc_data.get("eur_rate", 0)
     difference = calc_data.get("difference", 0)
+    source_name = calc_data.get("inflation_source_name", "TCMB EVDS")
+    source_institution = calc_data.get("inflation_source_institution", "Central Bank of the Republic of Turkiye (TCMB)")
+    source_method = calc_data.get("inflation_source_method", "Official EVDS API")
 
     tone_instruction = _get_tone_instruction(tone)
 
@@ -73,6 +76,7 @@ CONTRACT DATA:
 - Price Difference: +{difference:,.2f} TL
 - Applied Increase: {applied_adjustment:.1f}%
 - Used Index: {inflation_rule}
+- Inflation Data Source: {source_name} ({source_institution}) via {source_method}
 - CPI Rate (YoY): {tufe_rate:.2f}%
 - PPI Rate (YoY): {ufe_rate:.2f}%
 - USD/TL Rate: {usd_rate:.4f}

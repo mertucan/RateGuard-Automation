@@ -21,13 +21,20 @@ def calculate_renewal(contract_id):
         raise ValueError(f"Contract {contract_id} not found")
 
     company = contract.get("companies", {}) or {}
-    market = get_cached_market_data()
+    source_key = contract.get("inflation_data_source") or "tcmb_evds"
+    try:
+        market = get_cached_market_data(source_key)
+    except Exception as exc:
+        print(f"[calculation] Market source {source_key} failed: {exc}. Falling back to TCMB EVDS.")
+        source_key = "tcmb_evds"
+        market = get_cached_market_data(source_key)
 
-    amount = contract.get("previous_amount", 0) or 0
-    tufe = market.get("tufe", 0)
-    ufe = market.get("ufe", 0)
+    amount = _to_float(contract.get("previous_amount"), 0)
+    tufe = _to_float(market.get("tufe"), 0)
+    ufe = _to_float(market.get("ufe"), 0)
     rule = contract.get("inflation_base_rule", "TUFE")
     max_limit = contract.get("max_increase_limit")
+    max_limit_num = _to_float(max_limit, None)
     status = contract.get("status", "active")
 
     has_saved = status in ("draft", "approved") and contract.get("new_amount") is not None
@@ -38,7 +45,9 @@ def calculate_renewal(contract_id):
         difference = new_amount - amount
         capped = max_limit is not None and adjustment < _raw_adjustment(tufe, ufe, rule)
     else:
-        if rule == "TUFE":
+        if rule == "CUSTOM":
+            adjustment = max_limit_num or 0
+        elif rule == "TUFE":
             adjustment = tufe
         elif rule == "UFE":
             adjustment = ufe
@@ -46,8 +55,8 @@ def calculate_renewal(contract_id):
             adjustment = (tufe + ufe) / 2
 
         capped = False
-        if max_limit and adjustment > max_limit:
-            adjustment = max_limit
+        if rule != "CUSTOM" and max_limit_num is not None and adjustment > max_limit_num:
+            adjustment = max_limit_num
             capped = True
 
         new_amount = amount * (1 + adjustment / 100)
@@ -61,6 +70,10 @@ def calculate_renewal(contract_id):
         "end_date": contract.get("end_date", ""),
         "inflation_base_rule": rule,
         "max_increase_limit": max_limit,
+        "inflation_data_source": source_key,
+        "inflation_source_name": contract.get("inflation_source_name") or market.get("source_name", "TCMB EVDS"),
+        "inflation_source_institution": contract.get("inflation_source_institution") or market.get("source_institution", ""),
+        "inflation_source_method": contract.get("inflation_source_method") or market.get("source_method", ""),
         "previous_amount": round(amount, 2),
         "currency": contract.get("currency", "TRY"),
         "contract_type": contract.get("contract_type", "service_contract"),
@@ -78,8 +91,19 @@ def calculate_renewal(contract_id):
 
 
 def _raw_adjustment(tufe, ufe, rule):
+    if rule == "CUSTOM":
+        return 0
     if rule == "TUFE":
         return tufe
     elif rule == "UFE":
         return ufe
     return (tufe + ufe) / 2
+
+
+def _to_float(value, default=0):
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

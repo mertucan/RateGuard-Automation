@@ -51,11 +51,14 @@ export default function MainDashboardPage() {
   const formatCurrency = (n) =>
     new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n)
 
-  const calcNewPrice = (amount, rule, tufe, ufe) => {
+  const calcNewPrice = (amount, rule, tufe, ufe, maxLimit) => {
     let adj = 0
-    if (rule === 'TUFE') adj = tufe
+    const maxLimitNum = maxLimit !== null && maxLimit !== undefined && maxLimit !== '' ? Number(maxLimit) : null
+    if (rule === 'CUSTOM') adj = maxLimitNum || 0
+    else if (rule === 'TUFE') adj = tufe
     else if (rule === 'UFE') adj = ufe
     else adj = (tufe + ufe) / 2
+    if (rule !== 'CUSTOM' && maxLimitNum !== null && adj > maxLimitNum) adj = maxLimitNum
     return amount * (1 + adj / 100)
   }
 
@@ -375,7 +378,7 @@ export default function MainDashboardPage() {
                       const companyName = row.companies?.company_name || '\u2014'
                       const amount = row.previous_amount || 0
                       const rule = row.inflation_base_rule || 'TUFE'
-                      const newPrice = calcNewPrice(amount, rule, tufe, ufe)
+                      const newPrice = calcNewPrice(amount, rule, tufe, ufe, row.max_increase_limit)
                       const adjPct =
                         amount > 0 ? (((newPrice - amount) / amount) * 100).toFixed(1) : '0'
 

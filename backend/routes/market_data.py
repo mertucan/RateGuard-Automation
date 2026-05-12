@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request, g
 from services.supabase_client import supabase
 from services.auth_middleware import login_required
 from services.market_cache import get_cached_market_data, get_cached_history
+from services.market_sources import available_sources
 from veri_cekme_tcmb import get_guaranteed_market_data
 
 market_data_bp = Blueprint("market_data", __name__)
@@ -10,7 +11,17 @@ market_data_bp = Blueprint("market_data", __name__)
 
 @market_data_bp.route("/api/market-data", methods=["GET"])
 def get_market_data():
-    return jsonify(get_cached_market_data())
+    source = request.args.get("source")
+    try:
+        return jsonify(get_cached_market_data(source))
+    except Exception as e:
+        print(f"[market-data] Error: {e}")
+        return jsonify({"error": str(e)}), 400
+
+
+@market_data_bp.route("/api/market-data/sources", methods=["GET"])
+def get_market_sources():
+    return jsonify(available_sources())
 
 
 @market_data_bp.route("/api/market-data/history", methods=["GET"])

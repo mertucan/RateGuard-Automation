@@ -14,6 +14,7 @@ import {
   getContractCounterparties,
   getCalculation,
   getMarketData,
+  getMarketDataSources,
   downloadPdf,
   saveDraft,
   rejectContract,
@@ -52,6 +53,13 @@ const STATUS_MAP = {
 };
 
 const RULE_OPTIONS = ["All", "TUFE", "UFE", "TUFE+UFE", "CUSTOM"];
+
+const DEFAULT_MARKET_SOURCE = {
+  key: "tcmb_evds",
+  name: "TCMB EVDS",
+  institution: "Central Bank of the Republic of Turkiye (TCMB)",
+  method: "Official EVDS API",
+};
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -204,7 +212,12 @@ function ContractList() {
   const [endDateFrom, setEndDateFrom] = useState("");
   const [endDateTo, setEndDateTo] = useState("");
   const [calendarSelectedDay, setCalendarSelectedDay] = useState(null);
-  const [marketRates, setMarketRates] = useState({ tufe: null, ufe: null });
+  const [marketRates, setMarketRates] = useState({
+    tufe: null,
+    ufe: null,
+    source: DEFAULT_MARKET_SOURCE,
+  });
+  const [marketSources, setMarketSources] = useState([DEFAULT_MARKET_SOURCE]);
   const [form, setForm] = useState({
     company_id: "",
     previous_amount: "",
@@ -213,6 +226,7 @@ function ContractList() {
     end_date: "",
     inflation_base_rule: "TUFE",
     max_increase_limit: "",
+    inflation_data_source: DEFAULT_MARKET_SOURCE.key,
   });
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -226,18 +240,19 @@ function ContractList() {
           : user?.role === "client" && user?.company_id
             ? { company_id: user.company_id }
             : {};
-      const [c, co, md] = await Promise.all([
+      const [c, co, md, sources] = await Promise.all([
         getContracts(contractParams),
         getContractCounterparties(),
-        getMarketData().catch(() => null),
+        getMarketData({ source: form.inflation_data_source }).catch(() => null),
+        getMarketDataSources().catch(() => []),
       ]);
       setContracts(c);
       setCompanies(Array.isArray(co) ? co : []);
+      if (Array.isArray(sources) && sources.length) {
+        setMarketSources(sources);
+      }
       if (md) {
-        setMarketRates({
-          tufe: md.tufe ?? md.tufe_yoy,
-          ufe: md.ufe ?? md.ufe_yoy,
-        });
+        applyMarketData(md);
         // Seed the initial value for TUFE since it is the default selected rule
         if (md.tufe != null || md.tufe_yoy != null) {
           setForm((prev) => ({
@@ -253,7 +268,7 @@ function ContractList() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, form.inflation_data_source]);
 
   useEffect(() => {
     load();
@@ -284,6 +299,56 @@ function ContractList() {
       inflation_base_rule: rule,
       max_increase_limit: rule === "CUSTOM" ? "" : suggested,
     }));
+  };
+
+  const applyMarketData = (md) => {
+    setMarketRates({
+      tufe: md.tufe ?? md.tufe_yoy,
+      ufe: md.ufe ?? md.ufe_yoy,
+      source: {
+        key: md.source_key || md.data_source?.key || DEFAULT_MARKET_SOURCE.key,
+        name: md.source_name || md.data_source?.name || DEFAULT_MARKET_SOURCE.name,
+        institution:
+          md.source_institution ||
+          md.data_source?.institution ||
+          DEFAULT_MARKET_SOURCE.institution,
+        method: md.source_method || md.data_source?.method || DEFAULT_MARKET_SOURCE.method,
+      },
+    });
+  };
+
+  const handleSourceChange = async (sourceKey) => {
+    setForm((prev) => ({
+      ...prev,
+      inflation_data_source: sourceKey,
+      max_increase_limit: prev.inflation_base_rule === "CUSTOM" ? prev.max_increase_limit : "",
+    }));
+    try {
+      const md = await getMarketData({ source: sourceKey });
+      applyMarketData(md);
+      const nextTufe = md.tufe ?? md.tufe_yoy;
+      const nextUfe = md.ufe ?? md.ufe_yoy;
+      setForm((prev) => {
+        if (prev.inflation_base_rule === "CUSTOM") return prev;
+        let suggested = "";
+        if (prev.inflation_base_rule === "TUFE" && nextTufe != null) {
+          suggested = String(parseFloat(nextTufe).toFixed(1));
+        } else if (prev.inflation_base_rule === "UFE" && nextUfe != null) {
+          suggested = String(parseFloat(nextUfe).toFixed(1));
+        } else if (
+          prev.inflation_base_rule === "TUFE+UFE" &&
+          nextTufe != null &&
+          nextUfe != null
+        ) {
+          suggested = String(
+            ((parseFloat(nextTufe) + parseFloat(nextUfe)) / 2).toFixed(1),
+          );
+        }
+        return { ...prev, max_increase_limit: suggested };
+      });
+    } catch (err) {
+      toastError("Failed to load inflation source: " + err.message);
+    }
   };
 
   const handleCreate = async () => {
@@ -320,6 +385,10 @@ function ContractList() {
         inflation_base_rule: inflationRule,
         previous_amount: Number(form.previous_amount),
         currency: form.currency,
+        inflation_data_source: form.inflation_data_source,
+        inflation_source_name: marketRates.source?.name,
+        inflation_source_institution: marketRates.source?.institution,
+        inflation_source_method: marketRates.source?.method,
         max_increase_limit: form.max_increase_limit
           ? Number(form.max_increase_limit)
           : null,
@@ -334,6 +403,7 @@ function ContractList() {
         end_date: "",
         inflation_base_rule: "TUFE",
         max_increase_limit: "",
+        inflation_data_source: DEFAULT_MARKET_SOURCE.key,
       });
       // Reseed the limit on reset
       if (marketRates.tufe != null) {
@@ -538,7 +608,8 @@ function ContractList() {
           {showForm && (
             <div className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
               <h3 className="mb-4 text-lg font-bold">Create New Contract</h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
                     Company
@@ -617,8 +688,11 @@ function ContractList() {
                     <option value="supply_agreement">Supply Agreement</option>
                   </select>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  <div>
+                  <label className="mb-1 flex h-5 items-center text-xs font-semibold uppercase text-text-muted">
                     End Date
                   </label>
                   <input
@@ -629,9 +703,29 @@ function ContractList() {
                       setForm({ ...form, end_date: e.target.value })
                     }
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">
+                  </div>
+                  <div>
+                  <label className="mb-1 flex h-5 items-center text-xs font-semibold uppercase text-text-muted">
+                    Inflation Data Source
+                  </label>
+                  <select
+                    className={inputCls}
+                    value={form.inflation_data_source}
+                    onChange={(e) => handleSourceChange(e.target.value)}
+                  >
+                    {marketSources.map((source) => (
+                      <option key={source.key} value={source.key}>
+                        {source.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] leading-snug text-text-muted">
+                    {marketRates.source?.name || "TCMB EVDS"} via{" "}
+                    {marketRates.source?.method || "Official API"}.
+                  </p>
+                  </div>
+                  <div>
+                  <label className="mb-1 flex h-5 items-center text-xs font-semibold uppercase text-text-muted">
                     Inflation Rule
                   </label>
                   <select
@@ -659,17 +753,17 @@ function ContractList() {
                     </option>
                     <option value="CUSTOM">Custom</option>
                   </select>
-                </div>
-                <div>
-                  <label className="mb-1 flex items-center justify-between text-xs font-semibold uppercase text-text-muted">
+                  </div>
+                  <div>
+                  <label className="mb-1 flex h-5 items-center justify-between gap-2 text-xs font-semibold uppercase text-text-muted">
                     <span>Max Increase (%)</span>
                     {form.inflation_base_rule !== "CUSTOM" &&
                       form.max_increase_limit && (
-                        <span className="normal-case font-normal text-amber-500 flex items-center gap-1">
+                        <span className="flex shrink-0 items-center gap-1 text-[10px] font-normal normal-case text-amber-500">
                           <span className="material-symbols-outlined text-[12px]">
                             lock
                           </span>
-                          Auto from {form.inflation_base_rule}
+                          Auto
                         </span>
                       )}
                   </label>
@@ -696,14 +790,14 @@ function ContractList() {
                       Select <strong>Custom</strong> to enter a manual value.
                     </p>
                   )}
+                  </div>
                 </div>
-                <div className="flex items-end">
+
+                <div className="flex justify-center">
                   <button
                     onClick={handleCreate}
-                    disabled={
-                      saving || !form.company_id || !form.previous_amount
-                    }
-                    className="w-full rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+                    disabled={saving || !form.company_id || !form.previous_amount}
+                    className="w-full max-w-sm rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                   >
                     {saving ? "Creating..." : "Create Contract"}
                   </button>
@@ -868,14 +962,21 @@ function ContractList() {
                             {formatCurrency(c.previous_amount, c.currency)}
                           </td>
                           <td className="px-4 py-3 text-sm sm:px-6 sm:py-4">
-                            <span className="font-medium">
-                              {c.inflation_base_rule || "—"}
-                            </span>
-                            {c.max_increase_limit && (
-                              <span className="ml-1 text-xs text-text-muted">
-                                (max {c.max_increase_limit}%)
-                              </span>
-                            )}
+                            <div className="space-y-0.5">
+                              <p>
+                                <span className="font-medium">
+                                  {c.inflation_base_rule || "—"}
+                                </span>
+                                {c.max_increase_limit && (
+                                  <span className="ml-1 text-xs text-text-muted">
+                                    (max {c.max_increase_limit}%)
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[11px] text-text-muted">
+                                {c.inflation_source_name || "TCMB EVDS"}
+                              </p>
+                            </div>
                           </td>
                           <td className="hidden px-4 py-3 text-sm sm:table-cell sm:px-6 sm:py-4">
                             {c.end_date || "—"}
@@ -959,15 +1060,27 @@ function ContractDocumentPreview({
   liveAdjustment,
   liveDifference,
   editRule,
+  inflationSourceName,
+  inflationSourceInstitution,
+  inflationSourceMethod,
   contractId,
   formatCurrency,
 }) {
-  const bl = (n = 20) => "_".repeat(n);
+  const sigBlank = "____________________";
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+  const endDateText = editEndDate || "the current contract end date";
+  const renewalTerms = `Renewal pricing is calculated using the ${editRule} rule with an applied adjustment of ${liveAdjustment.toFixed(1)}%. The previous contract value was ${formatCurrency(amount)}, the renewal difference is ${formatCurrency(liveDifference)}, and the renewed contract value is ${formatCurrency(liveNewPrice)}.`;
+  const sourceDisclosure = `Inflation data source used for this contract: ${inflationSourceName || "TCMB EVDS"} (${inflationSourceInstitution || "Central Bank of the Republic of Turkiye (TCMB)"}), via ${inflationSourceMethod || "Official EVDS API"}.`;
+  const standardServices =
+    "Recurring operational service, account support, reporting, renewal administration, and related assistance reasonably required for the contract period.";
+  const maintenanceServices =
+    "Preventive maintenance, corrective support, response coordination, documentation, and renewal administration for the covered equipment or service area.";
+  const supplyScope =
+    "Supply, delivery coordination, account support, renewal administration, and related goods or services agreed between the Parties for the contract period.";
 
   const Title = ({ children }) => (
     <p className="mb-1 text-center text-[13px] font-bold uppercase tracking-wide text-gray-900">
@@ -1012,11 +1125,13 @@ function ContractDocumentPreview({
           made {today}, is by and between:
         </Body>
         <Indent>
-          <u>Landlord:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+          <u>Landlord:</u> RateGuard, with a mailing address of Istanbul,
+          Turkey{" "}
           ("Landlord"), and
         </Indent>
         <Indent>
-          <u>Tenant:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+          <u>Tenant:</u> {companyName}, with a mailing address as per company
+          records{" "}
           ("Tenant").
         </Indent>
         <Body>
@@ -1030,8 +1145,10 @@ function ContractDocumentPreview({
         </Body>
 
         <Section>II. Leased Property.</Section>
-        <Body>The address of the leased property is: {bl(40)}</Body>
-        <Body>{bl(65)}</Body>
+        <Body>
+          The address of the leased property is: As agreed in writing between
+          the Parties and recorded in the applicable company records.
+        </Body>
         <Body>Hereinafter known as the "Property".</Body>
 
         <Section>III. Term.</Section>
@@ -1039,13 +1156,13 @@ function ContractDocumentPreview({
           This Agreement shall commence on {today}, and terminate: (check one)
         </Body>
         <Indent>
-          <CB /> - Fixed Term. On {editEndDate || bl(15)}.
+          <CB /> - Fixed Term. On {endDateText}.
         </Indent>
         <Indent>
-          <CB /> - Month-to-Month. Written notice of at least {bl(6)} days.
+          <CB /> - Month-to-Month. Written notice of at least thirty (30) days.
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>IV. Rent.</Section>
@@ -1056,17 +1173,17 @@ function ContractDocumentPreview({
           <CB /> - {formatCurrency(liveNewPrice)} / Month
         </Indent>
         <Indent>
-          <CB /> - {bl(10)} / Year
+          <CB /> - Annual rent is not selected for this renewal.
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
         <Body>Hereinafter known as the "Rent".</Body>
 
         <Section>V. Payment Method.</Section>
         <Body>The Rent shall be paid as follows: (check one)</Body>
         <Indent>
-          <CB /> - On the {bl(6)} day of each month
+          <CB /> - On the first business day of each month
         </Indent>
         <Indent>
           <CB /> - Bank transfer / wire
@@ -1075,14 +1192,14 @@ function ContractDocumentPreview({
           <CB /> - Cash
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>VI. Security Deposit.</Section>
         <Body>This Agreement requires: (check one)</Body>
         <Indent>
-          <CB /> - A Security Deposit. Tenant agrees to pay {bl(10)} as a
-          security deposit.
+          <CB /> - A Security Deposit. Tenant agrees to pay the mutually agreed
+          deposit amount as a security deposit.
         </Indent>
         <DblIndent>
           <CB /> - Deposit is refundable.
@@ -1106,15 +1223,16 @@ function ContractDocumentPreview({
         <Body>
           Routine maintenance and minor repairs are the responsibility of the
           Tenant; major structural repairs are the responsibility of the
-          Landlord. The maximum repair cost borne by the Tenant shall not exceed{" "}
-          {bl(10)} per occurrence.
+          Landlord. The maximum repair cost borne by the Tenant shall not
+          exceed the written amount mutually approved by the Parties per
+          occurrence.
         </Body>
 
         <Section>IX. Termination.</Section>
         <Body>
           This Agreement may be terminated by either Party upon written notice
-          of at least {bl(6)} days. In the event of Tenant default, the Landlord
-          may pursue legal eviction proceedings.
+          of at least thirty (30) days. In the event of Tenant default, the
+          Landlord may pursue legal eviction proceedings.
         </Body>
 
         <Section>X. Confidentiality.</Section>
@@ -1127,13 +1245,20 @@ function ContractDocumentPreview({
         <Section>XI. Governing Law.</Section>
         <Body>
           This Agreement shall be governed by and construed in accordance with
-          the laws of the State of {bl(20)}.
+          the laws of the Republic of Turkey.
         </Body>
 
         <Section>XII. Additional Terms &amp; Conditions.</Section>
-        <Body>{bl(70)}</Body>
-        <Body>{bl(70)}</Body>
-        <Body>{bl(70)}</Body>
+        <Body>{renewalTerms}</Body>
+        <Body>{sourceDisclosure}</Body>
+        <Body>
+          All prior commercial terms remain in effect unless expressly modified
+          by this renewal document.
+        </Body>
+        <Body>
+          Any service, billing, or operational changes must be confirmed in
+          writing by both Parties.
+        </Body>
 
         <Section>XIII. Entire Agreement.</Section>
         <Body>
@@ -1145,15 +1270,15 @@ function ContractDocumentPreview({
 
         <ThinHR />
         <p className="mb-2 text-[9px] text-gray-800">
-          <strong>Landlord's Signature</strong> {bl(22)}&nbsp;&nbsp;&nbsp;Date{" "}
-          {bl(12)}
+          <strong>Landlord's Signature</strong> {sigBlank}
+          &nbsp;&nbsp;&nbsp;Date {today}
         </p>
-        <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="mb-4 text-[9px] text-gray-800">Print Name RateGuard</p>
         <p className="mb-2 text-[9px] text-gray-800">
-          <strong>Tenant's Signature</strong> {bl(24)}&nbsp;&nbsp;&nbsp;Date{" "}
-          {bl(12)}
+          <strong>Tenant's Signature</strong> {sigBlank}
+          &nbsp;&nbsp;&nbsp;Date {today}
         </p>
-        <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="text-[9px] text-gray-800">Print Name {companyName}</p>
       </>
     );
   }
@@ -1168,11 +1293,13 @@ function ContractDocumentPreview({
           ("Agreement") made {today}, is by and between:
         </Body>
         <Indent>
-          <u>Service Provider:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+          <u>Service Provider:</u> RateGuard, with a mailing address of
+          Istanbul, Turkey{" "}
           ("Service Provider"), and
         </Indent>
         <Indent>
-          <u>Client:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+          <u>Client:</u> {companyName}, with a mailing address as per company
+          records{" "}
           ("Client").
         </Indent>
         <Body>
@@ -1190,13 +1317,13 @@ function ContractDocumentPreview({
           This Agreement shall commence on {today}, and terminate: (check one)
         </Body>
         <Indent>
-          <CB /> - At-Will. Written notice of at least {bl(6)} days.
+          <CB /> - At-Will. Written notice of at least thirty (30) days.
         </Indent>
         <Indent>
-          <CB /> - End Date. On {editEndDate || bl(15)}.
+          <CB /> - End Date. On {endDateText}.
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>III. Maintenance Services.</Section>
@@ -1204,8 +1331,8 @@ function ContractDocumentPreview({
           The Service Provider agrees to perform the following maintenance
           services:
         </Body>
-        <Body>{bl(70)}</Body>
-        <Body>{bl(70)}</Body>
+        <Body>{maintenanceServices}</Body>
+        <Body>{renewalTerms}</Body>
         <Body>Hereinafter known as the "Services".</Body>
         <Body>
           The Service Provider shall comply with the policies, standards, and
@@ -1225,7 +1352,7 @@ function ContractDocumentPreview({
           <CB /> - Full coverage (scheduled + corrective)
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>V. Payment Amount.</Section>
@@ -1237,13 +1364,13 @@ function ContractDocumentPreview({
           <CB /> - {formatCurrency(liveNewPrice)} / Month (flat fee)
         </Indent>
         <Indent>
-          <CB /> - {bl(10)} / Hour
+          <CB /> - Hourly billing is not selected for this renewal.
         </Indent>
         <Indent>
-          <CB /> - {bl(10)} / Visit
+          <CB /> - Per-visit billing is not selected for this renewal.
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
         <Body>Hereinafter known as the "Payment Amount".</Body>
 
@@ -1259,7 +1386,7 @@ function ContractDocumentPreview({
           <CB /> - Monthly
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>VII. Inspection of Services.</Section>
@@ -1304,12 +1431,16 @@ function ContractDocumentPreview({
         <Section>XI. Governing Law.</Section>
         <Body>
           This Agreement shall be governed by and construed in accordance with
-          the laws of the State of {bl(20)}.
+          the laws of the Republic of Turkey.
         </Body>
 
         <Section>XII. Additional Terms &amp; Conditions.</Section>
-        <Body>{bl(70)}</Body>
-        <Body>{bl(70)}</Body>
+        <Body>{renewalTerms}</Body>
+        <Body>{sourceDisclosure}</Body>
+        <Body>
+          All operational terms not modified here remain governed by the
+          original agreement and applicable service records.
+        </Body>
 
         <Section>XIII. Entire Agreement.</Section>
         <Body>
@@ -1320,15 +1451,15 @@ function ContractDocumentPreview({
 
         <ThinHR />
         <p className="mb-2 text-[9px] text-gray-800">
-          <strong>Client's Signature</strong> {bl(25)}&nbsp;&nbsp;&nbsp;Date{" "}
-          {bl(12)}
+          <strong>Client's Signature</strong> {sigBlank}
+          &nbsp;&nbsp;&nbsp;Date {today}
         </p>
-        <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="mb-4 text-[9px] text-gray-800">Print Name {companyName}</p>
         <p className="mb-2 text-[9px] text-gray-800">
-          <strong>Service Provider's Signature</strong> {bl(18)}
-          &nbsp;&nbsp;&nbsp;Date {bl(12)}
+          <strong>Service Provider's Signature</strong> {sigBlank}
+          &nbsp;&nbsp;&nbsp;Date {today}
         </p>
-        <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="text-[9px] text-gray-800">Print Name RateGuard</p>
       </>
     );
   }
@@ -1343,11 +1474,13 @@ function ContractDocumentPreview({
           made {today}, is by and between:
         </Body>
         <Indent>
-          <u>Supplier:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+          <u>Supplier:</u> RateGuard, with a mailing address of Istanbul,
+          Turkey{" "}
           ("Supplier"), and
         </Indent>
         <Indent>
-          <u>Buyer:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+          <u>Buyer:</u> {companyName}, with a mailing address as per company
+          records{" "}
           ("Buyer").
         </Indent>
         <Body>
@@ -1365,21 +1498,21 @@ function ContractDocumentPreview({
           This Agreement shall commence on {today}, and terminate: (check one)
         </Body>
         <Indent>
-          <CB /> - At-Will. Written notice of at least {bl(6)} days.
+          <CB /> - At-Will. Written notice of at least thirty (30) days.
         </Indent>
         <Indent>
-          <CB /> - End Date. On {editEndDate || bl(15)}.
+          <CB /> - End Date. On {endDateText}.
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>III. Scope of Supply.</Section>
         <Body>
           The Supplier agrees to supply the following goods and/or services:
         </Body>
-        <Body>{bl(70)}</Body>
-        <Body>{bl(70)}</Body>
+        <Body>{supplyScope}</Body>
+        <Body>{renewalTerms}</Body>
         <Body>Hereinafter known as the "Supply".</Body>
         <Body>
           The Supplier shall, while providing the Supply, comply with the
@@ -1396,10 +1529,10 @@ function ContractDocumentPreview({
           Supply
         </Indent>
         <Indent>
-          <CB /> - Unit Price: {bl(10)} per {bl(15)}
+          <CB /> - Unit price is governed by the applicable order records.
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
         <Body>Hereinafter known as the "Contract Price".</Body>
 
@@ -1414,15 +1547,17 @@ function ContractDocumentPreview({
           <CB /> - Upon delivery
         </Indent>
         <Indent>
-          <CB /> - Within {bl(6)} days of invoice date
+          <CB /> - Within thirty (30) days of invoice date
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>VI. Delivery.</Section>
-        <Body>Delivery address: {bl(50)}</Body>
-        <Body>Estimated delivery date: {editEndDate || bl(25)}</Body>
+        <Body>
+          Delivery address: As agreed in writing between the Parties.
+        </Body>
+        <Body>Estimated delivery date: By the end of the contract term.</Body>
         <Body>Delivery method: (check one)</Body>
         <Indent>
           <CB /> - Delivered by Supplier (shipping included)
@@ -1431,12 +1566,12 @@ function ContractDocumentPreview({
           <CB /> - Collected by Buyer
         </Indent>
         <Indent>
-          <CB /> - Third-party carrier: {bl(25)}
+          <CB /> - Third-party carrier: Not selected.
         </Indent>
 
         <Section>VII. Inspection and Acceptance.</Section>
         <Body>
-          The Buyer shall inspect all delivered goods within {bl(6)} business
+          The Buyer shall inspect all delivered goods within five (5) business
           days of receipt. If any goods fail to conform to the agreed
           specifications or quality standards, the Buyer shall notify the
           Supplier in writing, and the Supplier shall remedy the non-conformance
@@ -1446,7 +1581,7 @@ function ContractDocumentPreview({
         <Section>VIII. Warranty.</Section>
         <Body>The Supplier offers the following warranty: (check one)</Body>
         <Indent>
-          <CB /> - {bl(6)}-month warranty from date of delivery
+          <CB /> - Twelve (12)-month warranty from date of delivery
         </Indent>
         <Indent>
           <CB /> - Manufacturer's warranty applies
@@ -1455,7 +1590,7 @@ function ContractDocumentPreview({
           <CB /> - No warranty provided
         </Indent>
         <Indent>
-          <CB /> - Other: {bl(30)}.
+          <CB /> - Other: Not applicable.
         </Indent>
 
         <Section>IX. Confidentiality.</Section>
@@ -1485,12 +1620,16 @@ function ContractDocumentPreview({
         <Section>XII. Governing Law.</Section>
         <Body>
           This Agreement shall be governed by and construed in accordance with
-          the laws of the State of {bl(20)}.
+          the laws of the Republic of Turkey.
         </Body>
 
         <Section>XIII. Additional Terms &amp; Conditions.</Section>
-        <Body>{bl(70)}</Body>
-        <Body>{bl(70)}</Body>
+        <Body>{renewalTerms}</Body>
+        <Body>{sourceDisclosure}</Body>
+        <Body>
+          All supply, delivery, warranty, and billing terms not modified here
+          remain governed by the original agreement.
+        </Body>
 
         <Section>XIV. Entire Agreement.</Section>
         <Body>
@@ -1502,15 +1641,15 @@ function ContractDocumentPreview({
 
         <ThinHR />
         <p className="mb-2 text-[9px] text-gray-800">
-          <strong>Buyer's Signature</strong> {bl(26)}&nbsp;&nbsp;&nbsp;Date{" "}
-          {bl(12)}
+          <strong>Buyer's Signature</strong> {sigBlank}
+          &nbsp;&nbsp;&nbsp;Date {today}
         </p>
-        <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="mb-4 text-[9px] text-gray-800">Print Name {companyName}</p>
         <p className="mb-2 text-[9px] text-gray-800">
-          <strong>Supplier's Signature</strong> {bl(24)}&nbsp;&nbsp;&nbsp;Date{" "}
-          {bl(12)}
+          <strong>Supplier's Signature</strong> {sigBlank}
+          &nbsp;&nbsp;&nbsp;Date {today}
         </p>
-        <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+        <p className="text-[9px] text-gray-800">Print Name RateGuard</p>
       </>
     );
   }
@@ -1525,11 +1664,13 @@ function ContractDocumentPreview({
         made {today}, is by and between:
       </Body>
       <Indent>
-        <u>Service Provider:</u> RateGuard, with a mailing address of {bl(30)}{" "}
+        <u>Service Provider:</u> RateGuard, with a mailing address of Istanbul,
+        Turkey{" "}
         ("Service Provider"), and
       </Indent>
       <Indent>
-        <u>Client:</u> {companyName}, with a mailing address of {bl(30)}{" "}
+        <u>Client:</u> {companyName}, with a mailing address as per company
+        records{" "}
         ("Client").
       </Indent>
       <Body>
@@ -1548,19 +1689,19 @@ function ContractDocumentPreview({
         (check one)
       </Body>
       <Indent>
-        <CB /> - At-Will. Written notice of at least {bl(6)} days.
+        <CB /> - At-Will. Written notice of at least thirty (30) days.
       </Indent>
       <Indent>
-        <CB /> - End Date. On {editEndDate || bl(15)}.
+        <CB /> - End Date. On {endDateText}.
       </Indent>
       <Indent>
-        <CB /> - Other: {bl(30)}.
+        <CB /> - Other: Not applicable.
       </Indent>
 
       <Section>III. The Service.</Section>
       <Body>The Service Provider agrees to provide the following:</Body>
-      <Body>{bl(70)}</Body>
-      <Body>{bl(70)}</Body>
+      <Body>{standardServices}</Body>
+      <Body>{renewalTerms}</Body>
       <Body>Hereinafter known as the "Service".</Body>
       <Body>
         The Service Provider shall, while performing the Service, comply with
@@ -1577,10 +1718,10 @@ function ContractDocumentPreview({
         <CB /> - {formatCurrency(liveNewPrice)} / Month
       </Indent>
       <Indent>
-        <CB /> - {bl(10)} / Hour
+        <CB /> - Hourly billing is not selected for this renewal.
       </Indent>
       <Indent>
-        <CB /> - Other: {bl(30)}.
+        <CB /> - Other: Not applicable.
       </Indent>
       <Body>Hereinafter known as the "Payment Amount".</Body>
 
@@ -1602,7 +1743,7 @@ function ContractDocumentPreview({
         <CB /> - Monthly
       </Indent>
       <Indent>
-        <CB /> - Other: {bl(30)}.
+        <CB /> - Other: Not applicable.
       </Indent>
       <Body>
         The Payment Amount and Payment Method collectively shall be referred to
@@ -1612,8 +1753,8 @@ function ContractDocumentPreview({
       <Section>VI. Retainer.</Section>
       <Body>This Agreement requires: (check one)</Body>
       <Indent>
-        <CB /> - A Retainer. Client agrees to pay a retainer of {bl(10)} as an
-        advance on future Services.
+        <CB /> - A Retainer. Client agrees to pay the mutually agreed retainer
+        amount as an advance on future Services.
       </Indent>
       <DblIndent>
         <CB /> - Retainer is refundable.
@@ -1684,12 +1825,16 @@ function ContractDocumentPreview({
       <Section>XIV. Governing Law.</Section>
       <Body>
         This Agreement shall be governed by and construed in accordance with the
-        laws of the State of {bl(20)}.
+        laws of the Republic of Turkey.
       </Body>
 
       <Section>XV. Additional Terms &amp; Conditions.</Section>
-      <Body>{bl(70)}</Body>
-      <Body>{bl(70)}</Body>
+      <Body>{renewalTerms}</Body>
+      <Body>{sourceDisclosure}</Body>
+      <Body>
+        All original service terms remain effective unless expressly amended in
+        this renewal document.
+      </Body>
 
       <Section>XVI. Entire Agreement.</Section>
       <Body>
@@ -1701,15 +1846,15 @@ function ContractDocumentPreview({
 
       <ThinHR />
       <p className="mb-2 text-[9px] text-gray-800">
-        <strong>Client's Signature</strong> {bl(25)}&nbsp;&nbsp;&nbsp;Date{" "}
-        {bl(12)}
+        <strong>Client's Signature</strong> {sigBlank}
+        &nbsp;&nbsp;&nbsp;Date {today}
       </p>
-      <p className="mb-4 text-[9px] text-gray-800">Print Name {bl(25)}</p>
+      <p className="mb-4 text-[9px] text-gray-800">Print Name {companyName}</p>
       <p className="mb-2 text-[9px] text-gray-800">
-        <strong>Service Provider's Signature</strong> {bl(18)}
-        &nbsp;&nbsp;&nbsp;Date {bl(12)}
+        <strong>Service Provider's Signature</strong> {sigBlank}
+        &nbsp;&nbsp;&nbsp;Date {today}
       </p>
-      <p className="text-[9px] text-gray-800">Print Name {bl(25)}</p>
+      <p className="text-[9px] text-gray-800">Print Name RateGuard</p>
     </>
   );
 }
@@ -1789,13 +1934,14 @@ function ContractDetail() {
   const ufe = calc?.ufe_rate || 0;
 
   let liveAdjustment = 0;
-  if (editRule === "TUFE") liveAdjustment = tufe;
+  const maxLimitNum = editMaxLimit !== "" ? Number(editMaxLimit) : null;
+  if (editRule === "CUSTOM") liveAdjustment = maxLimitNum || 0;
+  else if (editRule === "TUFE") liveAdjustment = tufe;
   else if (editRule === "UFE") liveAdjustment = ufe;
   else liveAdjustment = (tufe + ufe) / 2;
 
   let liveCapped = false;
-  const maxLimitNum = editMaxLimit !== "" ? Number(editMaxLimit) : null;
-  if (maxLimitNum && liveAdjustment > maxLimitNum) {
+  if (editRule !== "CUSTOM" && maxLimitNum != null && liveAdjustment > maxLimitNum) {
     liveAdjustment = maxLimitNum;
     liveCapped = true;
   }
@@ -1804,6 +1950,18 @@ function ContractDetail() {
   const liveDifference = liveNewPrice - amount;
 
   const companyName = calc?.company_name || "—";
+  const inflationSourceName =
+    calc?.inflation_source_name || contract?.inflation_source_name || "TCMB EVDS";
+  const inflationSourceInstitution =
+    calc?.inflation_source_institution ||
+    contract?.inflation_source_institution ||
+    "Central Bank of the Republic of Turkiye (TCMB)";
+  const inflationSourceMethod =
+    calc?.inflation_source_method ||
+    contract?.inflation_source_method ||
+    "Official EVDS API";
+  const inflationDataSource =
+    calc?.inflation_data_source || contract?.inflation_data_source || "tcmb_evds";
 
   const formatCurrency = useCallback(
     (n, curr = "TRY") =>
@@ -1821,6 +1979,11 @@ function ContractDetail() {
         new_amount: Math.round(liveNewPrice * 100) / 100,
         applied_adjustment: Math.round(liveAdjustment * 100) / 100,
         inflation_base_rule: editRule,
+        max_increase_limit: maxLimitNum,
+        inflation_data_source: inflationDataSource,
+        inflation_source_name: inflationSourceName,
+        inflation_source_institution: inflationSourceInstitution,
+        inflation_source_method: inflationSourceMethod,
       });
       setEmailSubject(result.subject || "");
       setEmailBody(result.body || "");
@@ -1854,6 +2017,10 @@ function ContractDetail() {
         end_date: editEndDate || null,
         new_amount: Math.round(liveNewPrice * 100) / 100,
         applied_adjustment: Math.round(liveAdjustment * 100) / 100,
+        inflation_data_source: inflationDataSource,
+        inflation_source_name: inflationSourceName,
+        inflation_source_institution: inflationSourceInstitution,
+        inflation_source_method: inflationSourceMethod,
       });
       setDirty(false);
       showToast("Draft saved");
@@ -1884,6 +2051,12 @@ function ContractDetail() {
       await approveContract(id, {
         new_amount: Math.round(liveNewPrice * 100) / 100,
         applied_adjustment: Math.round(liveAdjustment * 100) / 100,
+        inflation_base_rule: editRule,
+        max_increase_limit: maxLimitNum,
+        inflation_data_source: inflationDataSource,
+        inflation_source_name: inflationSourceName,
+        inflation_source_institution: inflationSourceInstitution,
+        inflation_source_method: inflationSourceMethod,
       });
       setShowApproveModal(false);
       showToast("Contract approved!");
@@ -1901,6 +2074,12 @@ function ContractDetail() {
       await sendContractToClient(id, {
         new_amount: Math.round(liveNewPrice * 100) / 100,
         applied_adjustment: Math.round(liveAdjustment * 100) / 100,
+        inflation_base_rule: editRule,
+        max_increase_limit: maxLimitNum,
+        inflation_data_source: inflationDataSource,
+        inflation_source_name: inflationSourceName,
+        inflation_source_institution: inflationSourceInstitution,
+        inflation_source_method: inflationSourceMethod,
         email_subject: emailSubject,
         email_body: emailBody,
       });
@@ -2225,20 +2404,20 @@ function ContractDetail() {
           </div>
 
           {/* Stats Row */}
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:mb-8 sm:gap-6 md:grid-cols-4">
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:mb-8 md:grid-cols-4">
+            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-border bg-surface p-4 sm:p-5">
               <p className="text-xs font-medium text-text-muted sm:text-sm">
                 Current Contract Value
               </p>
-              <p className="mt-2 text-xl font-bold sm:text-3xl">
+              <p className="mt-3 text-xl font-bold leading-tight sm:text-3xl">
                 {formatCurrency(amount)}
               </p>
             </div>
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-border bg-surface p-4 sm:p-5">
               <p className="text-xs font-medium text-text-muted sm:text-sm">
                 Inflation Adjustment ({editRule})
               </p>
-              <p className="mt-2 text-xl font-bold text-amber-500 sm:text-3xl">
+              <p className="mt-3 text-xl font-bold leading-tight text-amber-500 sm:text-3xl">
                 +{liveAdjustment.toFixed(1)}%
               </p>
               {liveCapped && (
@@ -2247,21 +2426,29 @@ function ContractDetail() {
                 </p>
               )}
             </div>
-            <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-border bg-surface p-4 sm:p-5">
               <p className="text-xs font-medium text-text-muted sm:text-sm">
                 Price Difference
               </p>
-              <p className="mt-2 text-xl font-bold text-amber-500 sm:text-3xl">
+              <p className="mt-3 text-xl font-bold leading-tight text-amber-500 sm:text-3xl">
                 +{formatCurrency(liveDifference)}
               </p>
             </div>
-            <div className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
+            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-5">
               <p className="text-xs font-bold text-primary sm:text-sm">
                 Calculated New Price
               </p>
-              <p className="mt-2 text-2xl font-black text-primary sm:text-4xl">
+              <p className="mt-3 text-2xl font-black leading-tight text-primary sm:text-4xl">
                 {formatCurrency(liveNewPrice)}
               </p>
+              {liveAdjustment > 60 && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-red-600">
+                  <span className="material-symbols-outlined text-[18px]">warning</span>
+                  <p className="mt-0.5 text-[11px] font-semibold leading-snug">
+                    Excessive increase ({liveAdjustment.toFixed(1)}%). Review before sending.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2269,7 +2456,7 @@ function ContractDetail() {
           <div className="grid grid-cols-1 gap-6 sm:gap-8 xl:grid-cols-12">
             {/* ── Left Column ── */}
             <div className="space-y-6 sm:space-y-8 xl:col-span-7">
-              {/* Client Decision Panel — visible to client/user and admins when pending */}
+              {/* Client Decision Panel - visible to client/user and admins when pending */}
               {["client", "user", "super_admin", "company_admin"].includes(
                 user?.role,
               ) &&
@@ -2388,13 +2575,13 @@ function ContractDetail() {
                         )}
                       </div>
                       <div className="space-y-5 p-4 text-sm sm:p-6">
-                        <div className="flex items-center justify-between gap-4">
+                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
                           <span className="text-text-muted">
                             Base Rate (TRY)
                           </span>
                           <input
                             type="number"
-                            className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            className={`w-full text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                             value={editAmount}
                             readOnly={isSalesReadonly}
                             onChange={
@@ -2404,11 +2591,11 @@ function ContractDetail() {
                             }
                           />
                         </div>
-                        <div className="flex items-center justify-between gap-4">
+                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
                           <span className="text-text-muted">End Date</span>
                           <input
                             type="date"
-                            className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            className={`w-full ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                             value={editEndDate}
                             readOnly={isSalesReadonly}
                             onChange={
@@ -2418,12 +2605,12 @@ function ContractDetail() {
                             }
                           />
                         </div>
-                        <div className="flex items-center justify-between gap-4">
+                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
                           <span className="text-text-muted">
                             Inflation Rule
                           </span>
                           <select
-                            className={`max-w-[200px] ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            className={`w-full ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                             value={editRule}
                             disabled={isSalesReadonly}
                             onChange={
@@ -2438,13 +2625,13 @@ function ContractDetail() {
                             <option value="CUSTOM">Custom</option>
                           </select>
                         </div>
-                        <div className="flex items-center justify-between gap-4">
+                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
                           <span className="text-text-muted">
                             Max Increase Limit (%)
                           </span>
                           <input
                             type="number"
-                            className={`max-w-[200px] text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            className={`w-full text-right ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                             placeholder="No limit"
                             value={editMaxLimit}
                             readOnly={isSalesReadonly}
@@ -2454,6 +2641,17 @@ function ContractDetail() {
                                 : handleFieldChange(setEditMaxLimit)
                             }
                           />
+                        </div>
+                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-start gap-4">
+                          <span className="text-text-muted">Data Source</span>
+                          <div className="rounded-md border border-border bg-surface-alt px-3 py-2 text-right">
+                            <p className="text-sm font-semibold text-text">
+                              {inflationSourceName}
+                            </p>
+                            <p className="mt-1 text-[11px] leading-snug text-text-muted">
+                              {inflationSourceInstitution} · {inflationSourceMethod}
+                            </p>
+                          </div>
                         </div>
                         <div className="h-px bg-border" />
                         <div className="flex justify-between py-1">
@@ -2551,6 +2749,9 @@ function ContractDetail() {
                       liveAdjustment={liveAdjustment}
                       liveDifference={liveDifference}
                       editRule={editRule}
+                      inflationSourceName={inflationSourceName}
+                      inflationSourceInstitution={inflationSourceInstitution}
+                      inflationSourceMethod={inflationSourceMethod}
                       contractId={contract.id}
                       formatCurrency={formatCurrency}
                     />

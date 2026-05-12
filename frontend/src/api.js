@@ -209,7 +209,12 @@ export const downloadPdf = async (contractId) => {
 };
 
 // ── Market Data & Dashboard ────────────────────────────────
-export const getMarketData = () => request("/market-data");
+export const getMarketData = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/market-data${qs ? `?${qs}` : ""}`);
+};
+
+export const getMarketDataSources = () => request("/market-data/sources");
 
 export const getMarketHistory = (period = 90) =>
   request(`/market-data/history?period=${period}`);
@@ -303,6 +308,25 @@ export const getAuditLogs = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/audit-logs${qs ? `?${qs}` : ""}`);
 };
+
+// ── Automation / Approval ─────────────────────────────────
+export const getAutomationSettings = (companyId = "") =>
+  request(`/automation/settings${companyId ? `?company_id=${encodeURIComponent(companyId)}` : ""}`);
+
+export const updateAutomationSettings = (data) =>
+  request("/automation/settings", { method: "PUT", body: JSON.stringify(data) });
+
+export const runRenewalAutomation = () =>
+  request("/automation/run-renewal-check", { method: "POST", body: JSON.stringify({}) });
+
+export const getContractApprovalLogs = (contractId) =>
+  request(`/contracts/${contractId}/approval-logs`);
+
+export const reviewRenewalApproval = (contractId, data) =>
+  request(`/contracts/${contractId}/approval-decision`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 // ── Applications ──────────────────────────────────────────
 export const getApplications = (params = {}) => {

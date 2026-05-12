@@ -363,7 +363,7 @@ def link_company_to_tenant(company_id):
 @login_required
 def revenue_analysis():
     """
-    Monthly / quarterly revenue-style snapshot for the Clients area:
+    All-time / monthly / quarterly revenue-style snapshot for the Clients area:
     portfolio value, estimated renewal uplift from EVDS rules, activity in period.
     """
     user = g.current_user
@@ -371,18 +371,38 @@ def revenue_analysis():
         return jsonify({"error": "Insufficient permissions"}), 403
 
     period = (request.args.get("period") or "month").lower()
-    if period not in ("month", "quarter"):
+    if period not in ("all", "month", "quarter"):
         period = "month"
 
     tenant_q = request.args.get("tenant_company_id", "").strip()
     today = date.today()
-    if period == "quarter":
-        q0 = ((today.month - 1) // 3) * 3 + 1
-        period_start = date(today.year, q0, 1)
-        quarter_n = (q0 - 1) // 3 + 1
-        period_label = f"Q{quarter_n} {today.year}"
+    selected_year = today.year
+    selected_quarter = None
+    try:
+        selected_year = int(request.args.get("year") or today.year)
+    except (TypeError, ValueError):
+        selected_year = today.year
+
+    if period == "all":
+        period_start = None
+        period_end = today
+        period_label = "All time"
+    elif period == "quarter":
+        try:
+            selected_quarter = int(request.args.get("quarter") or (((today.month - 1) // 3) + 1))
+        except (TypeError, ValueError):
+            selected_quarter = ((today.month - 1) // 3) + 1
+        selected_quarter = min(max(selected_quarter, 1), 4)
+        q0 = (selected_quarter - 1) * 3 + 1
+        period_start = date(selected_year, q0, 1)
+        if selected_quarter == 4:
+            period_end = date(selected_year, 12, 31)
+        else:
+            period_end = date(selected_year, q0 + 3, 1) - timedelta(days=1)
+        period_label = f"Q{selected_quarter} {selected_year}"
     else:
         period_start = date(today.year, today.month, 1)
+        period_end = today
         period_label = today.strftime("%B %Y")
 
     try:
@@ -414,9 +434,18 @@ def revenue_analysis():
             return ufe
         if rule == "TUFE":
             return tufe
+        if rule == "CUSTOM":
+            return 0.0
         return (tufe + ufe) / 2 if (tufe or ufe) else 0.0
 
     def effective_new_amount(prev: float, rule: str, max_limit) -> float:
+        if rule == "CUSTOM":
+            try:
+                adj = float(max_limit)
+            except (TypeError, ValueError):
+                adj = 0.0
+            return (prev or 0) * (1 + adj / 100)
+
         adj = nominal_adj_pct(rule)
         if max_limit is not None and str(max_limit).strip() != "":
             try:
@@ -425,7 +454,26 @@ def revenue_analysis():
                 pass
         return (prev or 0) * (1 + adj / 100)
 
-    non_rejected = [r for r in rows if r.get("status") != "rejected"]
+    def _date_from_value(value):
+        if not value:
+            return None
+        try:
+            s = str(value).replace("Z", "+00:00")
+            if "T" in s or " " in s:
+                return datetime.fromisoformat(s[:19]).date()
+            return date.fromisoformat(s[:10])
+        except (TypeError, ValueError):
+            return None
+
+    def _in_period(value, include_missing_for_all=False) -> bool:
+        if period == "all":
+            return include_missing_for_all or bool(value)
+        d = _date_from_value(value)
+        return bool(d and period_start <= d <= period_end)
+
+    non_rejected_all = [r for r in rows if r.get("status") != "rejected"]
+    period_rows = [r for r in rows if _in_period(r.get("created_at"), include_missing_for_all=True)]
+    non_rejected = [r for r in period_rows if r.get("status") != "rejected"]
     active_like = [
         r
         for r in non_rejected
@@ -460,34 +508,16 @@ def revenue_analysis():
     avg_increase_pct = round(pct_sum / pct_n, 2) if pct_n else 0.0
     portfolio_uplift_estimate = round(uplift_numerator, 2)
 
-    def _in_period(ts) -> bool:
-        if not ts:
-            return False
-        try:
-            s = str(ts).replace("Z", "+00:00")
-            dt = datetime.fromisoformat(s[:19])
-            d = dt.date()
-        except ValueError:
-            return False
-        return period_start <= d <= today
-
-    new_in_period = sum(1 for r in rows if _in_period(r.get("created_at")))
+    new_in_period = len(period_rows)
     approved_in_period = sum(
         1
         for r in rows
-        if r.get("status") == "client_approved" and _in_period(r.get("approved_at"))
+        if r.get("status") == "client_approved" and _in_period(r.get("approved_at"), include_missing_for_all=True)
     )
 
     expiring_in_period = 0
-    for r in non_rejected:
-        ed = r.get("end_date")
-        if not ed:
-            continue
-        try:
-            ed_d = date.fromisoformat(str(ed)[:10])
-        except ValueError:
-            continue
-        if period_start <= ed_d <= today:
+    for r in non_rejected_all:
+        if _in_period(r.get("end_date")):
             expiring_in_period += 1
 
     by_client = {}
@@ -507,8 +537,10 @@ def revenue_analysis():
         {
             "period": period,
             "period_label": period_label,
-            "period_start": period_start.isoformat(),
-            "period_end": today.isoformat(),
+            "period_start": period_start.isoformat() if period_start else None,
+            "period_end": period_end.isoformat(),
+            "year": selected_year if period == "quarter" else today.year,
+            "quarter": selected_quarter,
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "market": {"tufe": round(tufe, 2), "ufe": round(ufe, 2)},
             "portfolio": {

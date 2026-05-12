@@ -2,9 +2,10 @@ import json
 import os
 import time
 from pathlib import Path
-from veri_cekme_tcmb import get_guaranteed_market_data, get_historical_data
+from services.market_sources import get_market_data_from_source, normalize_source
+from veri_cekme_tcmb import get_historical_data
 
-_cache = {"data": None, "ts": 0}
+_cache = {}
 CACHE_TTL = 300  # 5 minutes
 
 _history_cache = {}
@@ -42,21 +43,21 @@ def _write_file_cache(name, data, ttl):
         pass
 
 
-def get_cached_market_data():
+def get_cached_market_data(source=None):
+    source = normalize_source(source)
     now = time.time()
-    if _cache["data"] and (now - _cache["ts"]) < CACHE_TTL:
-        return _cache["data"]
+    entry = _cache.get(source)
+    if entry and (now - entry["ts"]) < CACHE_TTL:
+        return entry["data"]
 
-    file_data = _read_file_cache("market")
+    file_data = _read_file_cache(f"market_{source}")
     if file_data:
-        _cache["data"] = file_data
-        _cache["ts"] = now
+        _cache[source] = {"data": file_data, "ts": now}
         return file_data
 
-    data = get_guaranteed_market_data()
-    _cache["data"] = data
-    _cache["ts"] = now
-    _write_file_cache("market", data, CACHE_TTL)
+    data = get_market_data_from_source(source)
+    _cache[source] = {"data": data, "ts": now}
+    _write_file_cache(f"market_{source}", data, CACHE_TTL)
     return data
 
 

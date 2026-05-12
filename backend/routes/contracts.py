@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime, timedelta
+import re
 
 from flask import Blueprint, g, jsonify, request, send_file
 from services.auth_middleware import login_required, role_required
@@ -7,6 +8,61 @@ from services.pdf_naming import addendum_download_name
 from services.supabase_client import supabase
 
 contracts_bp = Blueprint("contracts", __name__)
+
+
+def _drop_missing_column(payload, error_text):
+    """Drop the missing column mentioned in a PostgREST PGRST204 error.
+
+    Example message:
+      Could not find the 'inflation_data_source' column of 'contracts' in the schema cache
+    """
+    if not payload or not error_text:
+        return False
+    if "PGRST204" not in error_text:
+        return False
+    m = re.search(r"Could not find the '([^']+)' column", error_text)
+    if not m:
+        return False
+    col = m.group(1)
+    if col in payload:
+        payload.pop(col, None)
+        return True
+    return False
+
+
+def _supabase_insert_with_fallback(table_name, payload, max_retries=8):
+    data = dict(payload or {})
+    last_exc = None
+    for _ in range(max_retries):
+        try:
+            return supabase.table(table_name).insert(data).execute()
+        except Exception as exc:
+            last_exc = exc
+            text = str(exc)
+            if _drop_missing_column(data, text):
+                continue
+            raise
+    raise last_exc
+
+
+def _supabase_update_with_fallback(table_name, payload, match_col, match_val, max_retries=8):
+    data = dict(payload or {})
+    last_exc = None
+    for _ in range(max_retries):
+        try:
+            return (
+                supabase.table(table_name)
+                .update(data)
+                .eq(match_col, match_val)
+                .execute()
+            )
+        except Exception as exc:
+            last_exc = exc
+            text = str(exc)
+            if _drop_missing_column(data, text):
+                continue
+            raise
+    raise last_exc
 
 
 @contracts_bp.route("/api/contracts", methods=["GET"])
@@ -116,11 +172,18 @@ def create_contract():
         "end_date": end_date,
         "inflation_base_rule": body.get("inflation_base_rule", "TUFE"),
         "max_increase_limit": body.get("max_increase_limit"),
+        "inflation_data_source": body.get("inflation_data_source", "tcmb_evds"),
+        "inflation_source_name": body.get("inflation_source_name", "TCMB EVDS"),
+        "inflation_source_institution": body.get(
+            "inflation_source_institution",
+            "Central Bank of the Republic of Turkiye (TCMB)",
+        ),
+        "inflation_source_method": body.get("inflation_source_method", "Official EVDS API"),
         "status": "active",
     }
 
     try:
-        result = supabase.table("contracts").insert(data).execute()
+        result = _supabase_insert_with_fallback("contracts", data)
         new_contract = result.data[0]
 
         # Send creation email
@@ -191,6 +254,10 @@ def update_contract(contract_id):
         "end_date",
         "inflation_base_rule",
         "max_increase_limit",
+        "inflation_data_source",
+        "inflation_source_name",
+        "inflation_source_institution",
+        "inflation_source_method",
         "company_id",
         "status",
         "new_amount",
@@ -198,8 +265,12 @@ def update_contract(contract_id):
         "rejection_notes",
     ]
     data = {k: v for k, v in body.items() if k in allowed}
-    result = supabase.table("contracts").update(data).eq("id", contract_id).execute()
-    return jsonify(result.data[0])
+    try:
+        result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
+        return jsonify(result.data[0])
+    except Exception as e:
+        print(f"[contracts update] Error: {e}")
+        return jsonify({"error": str(e)}), 400
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/save-draft", methods=["POST"])
@@ -214,15 +285,17 @@ def save_draft(contract_id):
         "end_date",
         "inflation_base_rule",
         "max_increase_limit",
+        "inflation_data_source",
+        "inflation_source_name",
+        "inflation_source_institution",
+        "inflation_source_method",
         "new_amount",
         "applied_adjustment",
     ]
     data = {k: v for k, v in body.items() if k in allowed}
     data["status"] = "draft"
     try:
-        result = (
-            supabase.table("contracts").update(data).eq("id", contract_id).execute()
-        )
+        result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[save-draft] Error: {e}")
@@ -272,10 +345,20 @@ def approve_contract(contract_id):
         "applied_adjustment": body.get("applied_adjustment"),
         "approved_at": datetime.utcnow().isoformat(),
     }
+    if "inflation_base_rule" in body:
+        data["inflation_base_rule"] = body.get("inflation_base_rule")
+    if "max_increase_limit" in body:
+        data["max_increase_limit"] = body.get("max_increase_limit")
+    for key in (
+        "inflation_data_source",
+        "inflation_source_name",
+        "inflation_source_institution",
+        "inflation_source_method",
+    ):
+        if key in body:
+            data[key] = body.get(key)
     try:
-        result = (
-            supabase.table("contracts").update(data).eq("id", contract_id).execute()
-        )
+        result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
 
         from routes.audit_logs import log_audit
 
@@ -317,10 +400,20 @@ def send_to_client(contract_id):
             data["new_amount"] = req_data["new_amount"]
         if "applied_adjustment" in req_data:
             data["applied_adjustment"] = req_data["applied_adjustment"]
+        if "inflation_base_rule" in req_data:
+            data["inflation_base_rule"] = req_data["inflation_base_rule"]
+        if "max_increase_limit" in req_data:
+            data["max_increase_limit"] = req_data["max_increase_limit"]
+        for key in (
+            "inflation_data_source",
+            "inflation_source_name",
+            "inflation_source_institution",
+            "inflation_source_method",
+        ):
+            if key in req_data:
+                data[key] = req_data[key]
 
-        result = (
-            supabase.table("contracts").update(data).eq("id", contract_id).execute()
-        )
+        result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
 
         # Fetch full contract + both company names for the email
         contract_res = (
@@ -367,6 +460,9 @@ def send_to_client(contract_id):
                     custom_body=email_body,
                     sender_name=user.get("full_name"),
                     sender_email=user.get("email"),
+                    inflation_source_name=contract.get("inflation_source_name"),
+                    inflation_source_institution=contract.get("inflation_source_institution"),
+                    inflation_source_method=contract.get("inflation_source_method"),
                 )
         except Exception as email_err:
             print(f"[send-to-client] Email send error (non-blocking): {email_err}")

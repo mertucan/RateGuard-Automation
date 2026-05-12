@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getCompanies, deleteCompany, getRevenueAnalysis } from '../api'
+import {
+  getCompanies,
+  deleteCompany,
+  getRevenueAnalysis,
+  getAutomationSettings,
+  updateAutomationSettings,
+  runRenewalAutomation,
+} from '../api'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -37,14 +44,25 @@ function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
 
 export default function ClientManagementPage() {
   const { user } = useAuth()
+  const currentYear = new Date().getFullYear()
+  const currentQuarter = Math.floor(new Date().getMonth() / 3) + 1
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
-  const [reportPeriod, setReportPeriod] = useState('month')
+  const [reportPeriod, setReportPeriod] = useState('all')
+  const [reportQuarter, setReportQuarter] = useState(currentQuarter)
+  const [reportYear, setReportYear] = useState(currentYear)
   const [report, setReport] = useState(null)
   const [reportLoading, setReportLoading] = useState(true)
+  const [automationLoading, setAutomationLoading] = useState(false)
+  const [automationSaving, setAutomationSaving] = useState(false)
+  const [automationRunning, setAutomationRunning] = useState(false)
+  const [automationSettings, setAutomationSettings] = useState({
+    require_admin_approval_before_auto_renew: true,
+    automation_email_enabled: true,
+  })
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -66,7 +84,13 @@ export default function ClientManagementPage() {
   const loadReport = useCallback(async () => {
     setReportLoading(true)
     try {
-      const params = { period: reportPeriod === 'quarter' ? 'quarter' : 'month' }
+      const params = {
+        period: reportPeriod === 'quarter' || reportPeriod === 'month' ? reportPeriod : 'all',
+      }
+      if (params.period === 'quarter') {
+        params.quarter = reportQuarter
+        params.year = reportYear
+      }
       if (user?.role === 'company_admin' && user?.company_id) {
         params.tenant_company_id = user.company_id
       }
@@ -78,7 +102,7 @@ export default function ClientManagementPage() {
     } finally {
       setReportLoading(false)
     }
-  }, [reportPeriod, user?.role, user?.company_id])
+  }, [reportPeriod, reportQuarter, reportYear, user?.role, user?.company_id])
 
   useEffect(() => {
     load()
@@ -87,6 +111,23 @@ export default function ClientManagementPage() {
   useEffect(() => {
     loadReport()
   }, [loadReport])
+
+  useEffect(() => {
+    if (!['company_admin', 'super_admin'].includes(user?.role)) return
+    setAutomationLoading(true)
+    getAutomationSettings(user?.role === 'super_admin' ? '' : user?.company_id)
+      .then((data) => {
+        setAutomationSettings({
+          require_admin_approval_before_auto_renew: !!data?.require_admin_approval_before_auto_renew,
+          automation_email_enabled: !!data?.automation_email_enabled,
+        })
+      })
+      .catch((err) => {
+        console.error('Automation settings load error:', err)
+        showToast('Could not load automation settings', 'error')
+      })
+      .finally(() => setAutomationLoading(false))
+  }, [user?.role, user?.company_id])
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
@@ -116,20 +157,52 @@ export default function ClientManagementPage() {
     }
   }
 
+  const saveAutomationSettings = async () => {
+    setAutomationSaving(true)
+    try {
+      await updateAutomationSettings({
+        ...automationSettings,
+        company_id: user?.company_id,
+      })
+      showToast('Automation settings saved')
+    } catch (err) {
+      showToast(`Could not save settings: ${err.message}`, 'error')
+    } finally {
+      setAutomationSaving(false)
+    }
+  }
+
+  const runAutomationNow = async () => {
+    setAutomationRunning(true)
+    try {
+      const res = await runRenewalAutomation()
+      showToast(
+        `Done: checked ${res.checked}, pending admin approval ${res.pending_admin_approval}, emails sent ${res.emails_sent}`,
+      )
+      await loadReport()
+    } catch (err) {
+      showToast(`Automation failed: ${err.message}`, 'error')
+    } finally {
+      setAutomationRunning(false)
+    }
+  }
+
   const copyReportSummary = () => {
     if (!report) return
     const p = report.portfolio || {}
     const a = report.period_activity || {}
     const lines = [
-      `RateGuard — Gelir analizi (${report.period_label})`,
-      `Toplam sözleşme değeri: ${formatCurrency(p.total_value_try)}`,
-      `Sözleşme sayısı: ${p.total_contracts} (aktif süreç: ${p.active_pipeline_contracts})`,
-      `Tahmini ort. artış: %${p.avg_estimated_increase_pct}`,
-      `Tahmini yenileme artışı (TRY): ${formatCurrency(p.estimated_renewal_uplift_try)}`,
-      `Dönem: yeni sözleşme ${a.new_contracts}, müşteri onayı ${a.client_approved}, vadesi gelen ${a.expirations_in_range}`,
+      `RateGuard revenue analysis (${report.period_label})`,
+      `Total contract value: ${formatCurrency(p.total_value_try)}`,
+      `Contract count: ${p.total_contracts} (active pipeline: ${p.active_pipeline_contracts})`,
+      `Average estimated increase: ${p.avg_estimated_increase_pct}%`,
+      `Estimated renewal uplift (TRY): ${formatCurrency(p.estimated_renewal_uplift_try)}`,
+      `Period activity: ${a.new_contracts} new contracts, ${a.client_approved} client approvals, ${a.expirations_in_range} end dates`,
     ]
-    navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Copied the summary')).catch(() => showToast('Kopyalanamadı', 'error'))
+    navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Copied the summary')).catch(() => showToast('Could not copy the summary', 'error'))
   }
+
+  const quarterOptions = [1, 2, 3, 4]
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
@@ -164,13 +237,84 @@ export default function ClientManagementPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-        {/* Revenue analysis — auto snapshot for current calendar month or quarter */}
+        {['company_admin', 'super_admin'].includes(user?.role) && (
+          <section className="mb-8 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-text">Company Admin - Renewal Automation</h3>
+              <p className="mt-1 text-sm text-text-muted">
+                Summary and admin notifications use the company admin user email on record. When you click
+                Run automation now, the run summary is sent to your logged-in account email. Optional control
+                CC is configured on the server.
+              </p>
+            </div>
+            {automationLoading ? (
+              <div className="py-4"><Spinner size="md" /></div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="flex items-center gap-3 rounded-lg border border-border p-3">
+                  <input
+                    type="checkbox"
+                    checked={automationSettings.require_admin_approval_before_auto_renew}
+                    onChange={(e) =>
+                      setAutomationSettings((prev) => ({
+                        ...prev,
+                        require_admin_approval_before_auto_renew: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm font-medium">
+                    Require company admin approval before automated renewal
+                  </span>
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border border-border p-3">
+                  <input
+                    type="checkbox"
+                    checked={automationSettings.automation_email_enabled}
+                    onChange={(e) =>
+                      setAutomationSettings((prev) => ({
+                        ...prev,
+                        automation_email_enabled: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm font-medium">
+                    Send automation notification emails (to your account email)
+                  </span>
+                </label>
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={automationSaving || automationLoading}
+                onClick={saveAutomationSettings}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {automationSaving ? 'Saving…' : 'Save settings'}
+              </button>
+              <button
+                type="button"
+                disabled={automationRunning}
+                onClick={runAutomationNow}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text hover:bg-hover disabled:opacity-50"
+              >
+                {automationRunning ? 'Running…' : 'Run automation now'}
+              </button>
+              <p className="w-full text-xs text-text-muted">
+                Backend approval actions: Approve · Reject · Send back for revision. Decisions are stored in approval
+                logs.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* Revenue analysis - calendar-based monthly or quarterly snapshot */}
         <section className="mb-8 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           <div className="flex flex-col gap-4 border-b border-border bg-gradient-to-br from-primary/10 via-surface to-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
               <h3 className="text-lg font-bold text-text">Revenue & renewal analysis</h3>
               <p className="mt-1 text-sm text-text-muted">
-                Automatic snapshot for the current calendar period (TCMB rules for estimates). Updates when you open this page.
+                Automatic snapshot by calendar period using Supabase contract dates and TCMB rules for estimates.
               </p>
               {report?.generated_at && (
                 <p className="mt-1 text-xs text-text-muted">
@@ -182,19 +326,49 @@ export default function ClientManagementPage() {
               <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-xs font-semibold">
                 <button
                   type="button"
+                  onClick={() => setReportPeriod('all')}
+                  className={`rounded-md px-3 py-1.5 transition-colors ${reportPeriod === 'all' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-hover'}`}
+                >
+                  All time
+                </button>
+                <button
+                  type="button"
                   onClick={() => setReportPeriod('month')}
                   className={`rounded-md px-3 py-1.5 transition-colors ${reportPeriod === 'month' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-hover'}`}
                 >
                   This month
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setReportPeriod('quarter')}
-                  className={`rounded-md px-3 py-1.5 transition-colors ${reportPeriod === 'quarter' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:bg-hover'}`}
-                >
-                  This quarter
-                </button>
+                {quarterOptions.map((quarter) => (
+                  <button
+                    key={quarter}
+                    type="button"
+                    onClick={() => {
+                      setReportPeriod('quarter')
+                      setReportQuarter(quarter)
+                    }}
+                    className={`rounded-md px-3 py-1.5 transition-colors ${
+                      reportPeriod === 'quarter' && reportQuarter === quarter
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-text-muted hover:bg-hover'
+                    }`}
+                  >
+                    Q{quarter}
+                  </button>
+                ))}
               </div>
+              {reportPeriod === 'quarter' && (
+                <label className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-muted">
+                  Year
+                  <input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    value={reportYear}
+                    onChange={(e) => setReportYear(Number(e.target.value) || currentYear)}
+                    className="w-20 bg-transparent text-text outline-none"
+                  />
+                </label>
+              )}
               <button
                 type="button"
                 onClick={copyReportSummary}
@@ -218,7 +392,7 @@ export default function ClientManagementPage() {
                   {report.period_label}
                   {report.market && (
                     <span className="ml-2 text-text-muted">
-                      · TUFE %{report.market.tufe} · UFE %{report.market.ufe}
+                      | TUFE %{report.market.tufe} | UFE %{report.market.ufe}
                     </span>
                   )}
                 </p>
@@ -230,13 +404,13 @@ export default function ClientManagementPage() {
                   </div>
                   <div className="rounded-xl border border-border bg-surface-alt p-4">
                     <p className="text-xs font-medium text-text-muted">Active renewal pipeline</p>
-                    <p className="mt-1 text-xl font-bold tabular-nums">{report.portfolio?.active_pipeline_contracts ?? '—'}</p>
+                    <p className="mt-1 text-xl font-bold tabular-nums">{report.portfolio?.active_pipeline_contracts ?? '-'}</p>
                     <p className="mt-1 text-[11px] text-text-muted">Not finalized (approved/rejected)</p>
                   </div>
                   <div className="rounded-xl border border-border bg-surface-alt p-4">
                     <p className="text-xs font-medium text-text-muted">Avg. estimated increase</p>
                     <p className="mt-1 text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
-                      %{report.portfolio?.avg_estimated_increase_pct ?? '—'}
+                      %{report.portfolio?.avg_estimated_increase_pct ?? '-'}
                     </p>
                     <p className="mt-1 text-[11px] text-text-muted">From rules & caps vs. last amounts</p>
                   </div>
@@ -273,7 +447,7 @@ export default function ClientManagementPage() {
                           <span className="min-w-0 truncate font-medium">{row.company_name}</span>
                           <span className="shrink-0 tabular-nums text-text-muted">
                             {formatCurrency(row.value)}
-                            <span className="ml-1 text-xs">· {row.contract_count} ct.</span>
+                            <span className="ml-1 text-xs">| {row.contract_count} ct.</span>
                           </span>
                         </li>
                       ))}

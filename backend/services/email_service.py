@@ -6,7 +6,6 @@ from email.mime.text import MIMEText
 
 from config import SMTP_FROM_EMAIL, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_USER
 
-
 def send_email(
     to_email, subject, body_html, body_text=None, attachment=None, attachment_name=None
 ):
@@ -150,7 +149,8 @@ def send_approval_email(
 
 def send_client_review_email(
     to_email, company_name, tenant_name, contract_id, new_amount,
-    custom_subject=None, custom_body=None, sender_name=None, sender_email=None
+    custom_subject=None, custom_body=None, sender_name=None, sender_email=None,
+    inflation_source_name=None, inflation_source_institution=None, inflation_source_method=None
 ):
     subject = custom_subject if custom_subject else f"Contract Renewal for Review — {company_name}"
     formatted_amount = f"{new_amount:,.2f} TL" if new_amount is not None else "—"
@@ -174,6 +174,10 @@ def send_client_review_email(
             </div>
         """
 
+    source_name = inflation_source_name or "TCMB EVDS"
+    source_institution = inflation_source_institution or "Central Bank of the Republic of Turkiye (TCMB)"
+    source_method = inflation_source_method or "Official EVDS API"
+
     body_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
@@ -196,6 +200,9 @@ def send_client_review_email(
             <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
                 <p style="color: #0369a1; margin: 0; font-weight: 600;">
                     Proposed New Contract Value: {formatted_amount}
+                </p>
+                <p style="color: #0369a1; margin: 8px 0 0; font-size: 13px;">
+                    Inflation data source: <strong>{source_name}</strong> ({source_institution}) via {source_method}.
                 </p>
             </div>
             
@@ -338,6 +345,58 @@ def send_application_notification_email(
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
             RateGuard — Otomatik Sözleşme Yönetimi
         </p>
+    </div>
+    """
+    return send_email(to_email, subject, body_html)
+
+
+def send_admin_approval_request_email(to_email, contract_id, client_company, end_date):
+    subject = f"Admin Approval Required — Contract {contract_id[:8]}"
+    body_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
+            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 13px;">Otomasyon Onayı</p>
+        </div>
+        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Yönetici Onayı Bekleniyor</h2>
+            <p style="color: #64748b; line-height: 1.6;">
+                <strong>{client_company}</strong> için sözleşme yenilemesi otomasyon tarafından sıraya alındı.
+            </p>
+            <p style="color: #64748b; line-height: 1.6;">
+                Lütfen portaldan <strong>Onayla / Reddet / Revizyona Gönder</strong> aksiyonlarından birini seçin.
+            </p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+                Contract reference: {contract_id} · End date: {end_date or "N/A"}
+            </p>
+        </div>
+    </div>
+    """
+    return send_email(to_email, subject, body_html)
+
+
+def send_automation_summary_email(results, to_email):
+    if not to_email:
+        print("[Email] Automation summary skipped: no recipient.")
+        return False
+    subject = "RateGuard Automation Run Summary"
+    body_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 640px;">
+        <h2>Automation Summary</h2>
+        <ul>
+            <li>Checked: {results.get("checked", 0)}</li>
+            <li>Pending admin approval: {results.get("pending_admin_approval", 0)}</li>
+            <li>Auto-sent to client: {results.get("auto_sent_to_client", 0)}</li>
+            <li>Skipped: {results.get("skipped", 0)}</li>
+            <li>Emails sent: {results.get("emails_sent", 0)}</li>
+            <li>Triggered by: {results.get("triggered_by", "system")}</li>
+            <li>Run at: {results.get("run_at", "")}</li>
+            {(
+                '<li>Note: Tenant-scoped summary (cron).</li>'
+                if results.get("tenant_scoped")
+                else ""
+            )}
+        </ul>
     </div>
     """
     return send_email(to_email, subject, body_html)

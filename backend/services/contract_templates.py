@@ -98,7 +98,7 @@ def get_styles():
     }
 
 
-def bl(n=20):
+def _signature_blank(n=18):
     return "_" * n
 
 
@@ -123,6 +123,34 @@ def _money_line(calc):
 
 def _agreement_today():
     return date.today().strftime("%d %b, %Y")
+
+
+def _renewal_terms(calc):
+    rule = calc.get("inflation_base_rule") or "TUFE"
+    limit = calc.get("max_increase_limit")
+    adjustment = calc.get("applied_adjustment")
+    parts = [f"Renewal pricing is calculated using the {rule} rule"]
+    if adjustment is not None:
+        parts.append(f"with an applied adjustment of {adjustment}%")
+    if limit is not None:
+        parts.append(f"subject to a maximum increase limit of {limit}%")
+    return ", ".join(parts) + "."
+
+
+def _source_disclosure(calc):
+    name = calc.get("inflation_source_name") or "TCMB EVDS"
+    institution = calc.get("inflation_source_institution") or "Central Bank of the Republic of Turkiye (TCMB)"
+    method = calc.get("inflation_source_method") or "Official EVDS API"
+    return f"Inflation data source used for this contract: {name} ({institution}), via {method}."
+
+
+def _standard_service_text(kind):
+    return {
+        "lease": "Use, occupancy, renewal administration, billing coordination, and ordinary property-related support for the renewed lease term.",
+        "maintenance": "Preventive maintenance, corrective support, response coordination, documentation, and renewal administration for the covered equipment or service area.",
+        "service": "Recurring operational service, account support, reporting, renewal administration, and related assistance reasonably required for the contract period.",
+        "supply": "Supply, delivery coordination, account support, renewal administration, and related goods or services agreed between the Parties for the contract period.",
+    }.get(kind, "Services reasonably required for the renewed contract period.")
 
 
 def _end_pretty(calc):
@@ -191,27 +219,27 @@ def lease_agreement(styles, calc):
     story.append(Paragraph(
         f'This Agreement shall commence immediately, and terminate: (check one)', s['body']))
     story.append(Paragraph(f'[X] - Fixed Term. On {end_date}.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Month-to-Month. Written notice of at least {bl(6)} days.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Month-to-Month. Written notice of at least thirty (30) days.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("IV. Rent.", s['section']))
     story.append(Paragraph('The Tenant agrees to pay the Landlord the following rent: (check one)', s['body']))
     story.append(Paragraph(f'[X] - {rent_amt} / Month', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / Year', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Annual rent is not selected for this renewal.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Rent".', s['body']))
 
     story.append(Paragraph("V. Payment Method.", s['section']))
     story.append(Paragraph('The Rent shall be paid as follows: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - On the {bl(6)} day of each month', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Bank transfer / wire', s['checkbox']))
+    story.append(Paragraph(f'[X] - On the first business day of each month', s['checkbox']))
+    story.append(Paragraph(f'[X] - Bank transfer / wire', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Cash', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("VI. Security Deposit.", s['section']))
     story.append(Paragraph('This Agreement requires: (check one)', s['body']))
     story.append(Paragraph(
-        f'{cb()} - A Security Deposit. Tenant agrees to pay ${bl(10)} as a security deposit.', s['checkbox']))
+        f'{cb()} - A Security Deposit. Tenant agrees to pay the mutually agreed deposit amount as a security deposit.', s['checkbox']))
     story.append(Paragraph(f'      {cb()} - Deposit is refundable.', s['checkbox']))
     story.append(Paragraph(f'      {cb()} - Deposit is non-refundable.', s['checkbox']))
     story.append(Paragraph(f'{cb()} - No Security Deposit required.', s['checkbox']))
@@ -226,11 +254,11 @@ def lease_agreement(styles, calc):
     story.append(Paragraph(
         f'Routine maintenance and minor repairs are the responsibility of the Tenant; major structural '
         f'repairs are the responsibility of the Landlord. The maximum repair cost borne by the Tenant '
-        f'shall not exceed ${bl(10)} per occurrence.', s['body']))
+        f'shall not exceed the written amount mutually approved by the Parties per occurrence.', s['body']))
 
     story.append(Paragraph("IX. Termination.", s['section']))
     story.append(Paragraph(
-        f'This Agreement may be terminated by either Party upon written notice of at least {bl(6)} days. '
+        f'This Agreement may be terminated by either Party upon written notice of at least thirty (30) days. '
         'In the event of Tenant default, the Landlord may pursue legal eviction proceedings.', s['body']))
 
     story.append(Paragraph("X. Confidentiality.", s['section']))
@@ -244,9 +272,10 @@ def lease_agreement(styles, calc):
         'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XII. Additional Terms & Conditions.", s['section']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph(_pxml(_source_disclosure(calc)), s['body']))
+    story.append(Paragraph('All prior commercial terms remain in effect unless expressly modified by this renewal document.', s['body']))
+    story.append(Paragraph('Any service, billing, or operational changes must be confirmed in writing by both Parties.', s['body']))
 
     story.append(Paragraph("XIII. Entire Agreement.", s['section']))
     story.append(Paragraph(
@@ -259,11 +288,11 @@ def lease_agreement(styles, calc):
     story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        f"<b>Landlord&apos;s Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Landlord&apos;s Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
     story.append(Spacer(1, 10))
     story.append(Paragraph(
-        f"<b>Tenant&apos;s Signature</b> {tenant_name}     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Tenant&apos;s Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {tenant_name}', s['sign_sub']))
 
     return story
@@ -311,14 +340,14 @@ def maintenance_agreement(styles, calc):
         f'This Agreement shall commence on {made}, and terminate: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least thirty (30) days.', s['checkbox']))
     story.append(Paragraph(f'[X] - End Date. On {end_disp}.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("III. Maintenance Services.", s['section']))
     story.append(Paragraph(
         'The Service Provider agrees to perform the following maintenance services:', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_standard_service_text("maintenance")), s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph('Service levels, contact points, and maintenance windows remain as documented in the applicable work order or company records.', s['body']))
     story.append(Paragraph('Hereinafter known as the "Services".', s['body']))
     story.append(Paragraph(
         'The Service Provider shall comply with the policies, standards, and regulations of the Client, '
@@ -329,15 +358,15 @@ def maintenance_agreement(styles, calc):
     story.append(Paragraph(f'{cb()} - Scheduled / preventive maintenance', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Corrective / on-demand maintenance', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Full coverage (scheduled + corrective)', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("V. Payment Amount.", s['section']))
     story.append(Paragraph(
         'The Client agrees to pay the Service Provider the following compensation: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / Hour', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / Visit', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Hourly billing is not selected for this renewal.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Per-visit billing is not selected for this renewal.', s['checkbox']))
     story.append(Paragraph(f'[X] - {pay} / Month (flat fee)', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Payment Amount".', s['body']))
 
     story.append(Paragraph("VI. Payment Method.", s['section']))
@@ -345,7 +374,7 @@ def maintenance_agreement(styles, calc):
     story.append(Paragraph(f'{cb()} - When Invoiced', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Weekly', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Monthly', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("VII. Inspection of Services.", s['section']))
     story.append(Paragraph(
@@ -377,8 +406,9 @@ def maintenance_agreement(styles, calc):
         'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XII. Additional Terms & Conditions.", s['section']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph(_pxml(_source_disclosure(calc)), s['body']))
+    story.append(Paragraph('All operational terms not modified here remain governed by the original agreement and applicable service records.', s['body']))
 
     story.append(Paragraph("XIII. Entire Agreement.", s['section']))
     story.append(Paragraph(
@@ -390,11 +420,11 @@ def maintenance_agreement(styles, calc):
     story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        f"<b>Client&apos;s Signature</b> {client_name}     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Client&apos;s Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {client_name}', s['sign_sub']))
     story.append(Spacer(1, 10))
     story.append(Paragraph(
-        f"<b>Service Provider Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Service Provider Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
 
     return story
@@ -442,13 +472,13 @@ def service_contract(styles, calc):
         f'The term of this Agreement shall commence on {made}, and terminate: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least thirty (30) days.', s['checkbox']))
     story.append(Paragraph(f'[X] - End Date. On {end_disp}.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("III. The Service.", s['section']))
     story.append(Paragraph('The Service Provider agrees to provide the following:', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_standard_service_text("service")), s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph('Deliverables, points of contact, and service timing remain as set out in the applicable statement of work or company records.', s['body']))
     story.append(Paragraph('Hereinafter known as the "Service".', s['body']))
     story.append(Paragraph(
         'The Service Provider shall, while performing the Service, comply with the policies, standards, '
@@ -459,12 +489,12 @@ def service_contract(styles, calc):
     story.append(Paragraph(
         'The Client agrees to pay the Service Provider the following compensation for the Service '
         'performed under this Agreement: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / Hour', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - ${bl(10)} / per Job.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Hourly billing is not selected for this renewal.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Per-job billing is not selected for this renewal.', s['checkbox']))
     story.append(Paragraph(
         f'[X] - Fixed renewal amount: {pay} for the contract period (inclusive of applicable adjustment).',
         s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Payment Amount".', s['body']))
 
     story.append(Paragraph("V. Payment Method.", s['section']))
@@ -474,14 +504,14 @@ def service_contract(styles, calc):
     story.append(Paragraph(f'{cb()} - Weekly', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Bi-Weekly', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Monthly', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
     story.append(Paragraph(
         'The Payment Amount and Payment Method collectively shall be referred to as "Compensation".', s['body']))
 
     story.append(Paragraph("VI. Retainer.", s['section']))
     story.append(Paragraph('This Agreement requires: (check one)', s['body']))
     story.append(Paragraph(
-        f'{cb()} - A Retainer. Client agrees to pay a retainer of ${bl(10)} as an advance on future Services.',
+        f'{cb()} - A Retainer. Client agrees to pay the mutually agreed retainer amount as an advance on future Services.',
         s['checkbox']))
     story.append(Paragraph(f'      {cb()} - Retainer is refundable.', s['checkbox']))
     story.append(Paragraph(f'      {cb()} - Retainer is non-refundable.', s['checkbox']))
@@ -537,8 +567,9 @@ def service_contract(styles, calc):
         'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XV. Additional Terms & Conditions.", s['section']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph(_pxml(_source_disclosure(calc)), s['body']))
+    story.append(Paragraph('All original service terms remain effective unless expressly amended in this renewal document.', s['body']))
 
     story.append(Paragraph("XVI. Entire Agreement.", s['section']))
     story.append(Paragraph(
@@ -551,11 +582,11 @@ def service_contract(styles, calc):
     story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        f"<b>Client&apos;s Signature</b> {client_name}     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Client&apos;s Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {client_name}', s['sign_sub']))
     story.append(Spacer(1, 10))
     story.append(Paragraph(
-        f"<b>Service Provider Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Service Provider Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
 
     return story
@@ -603,14 +634,14 @@ def supply_agreement(styles, calc):
         f'This Agreement shall commence on {made}, and terminate: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - At-Will. Written notice of at least thirty (30) days.', s['checkbox']))
     story.append(Paragraph(f'[X] - End Date. On {end_disp}.', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("III. Scope of Supply.", s['section']))
     story.append(Paragraph(
         'The Supplier agrees to supply the following goods and/or services:', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_standard_service_text("supply")), s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph('Product specifications, quantities, and acceptance criteria remain as documented in the applicable order or company records.', s['body']))
     story.append(Paragraph('Hereinafter known as the "Supply".', s['body']))
     story.append(Paragraph(
         'The Supplier shall, while providing the Supply, comply with the policies, standards, and '
@@ -620,15 +651,15 @@ def supply_agreement(styles, calc):
     story.append(Paragraph('The Buyer agrees to pay the Supplier the following: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - Unit Price: per agreed unit', s['checkbox']))
     story.append(Paragraph(f'[X] - Lump Sum: {pay} for the entire Supply (renewal-adjusted total).', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
     story.append(Paragraph('Hereinafter known as the "Contract Price".', s['body']))
 
     story.append(Paragraph("V. Payment Terms.", s['section']))
     story.append(Paragraph('The Buyer shall pay the Contract Price as follows: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - Upfront / prior to delivery', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Upon delivery', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Within {bl(6)} days of invoice date', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'[X] - Within thirty (30) days of invoice date', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("VI. Delivery.", s['section']))
     story.append(Paragraph(
@@ -637,21 +668,21 @@ def supply_agreement(styles, calc):
     story.append(Paragraph('Delivery method: (check one)', s['body']))
     story.append(Paragraph(f'{cb()} - Delivered by Supplier (shipping included)', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Collected by Buyer', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Third-party carrier: {bl(25)}', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Third-party carrier: Not selected.', s['checkbox']))
 
     story.append(Paragraph("VII. Inspection and Acceptance.", s['section']))
     story.append(Paragraph(
-        f'The Buyer shall inspect all delivered goods within {bl(6)} business days of receipt. '
+        f'The Buyer shall inspect all delivered goods within five (5) business days of receipt. '
         'If any goods fail to conform to the agreed specifications or quality standards, the Buyer '
         'shall notify the Supplier in writing, and the Supplier shall remedy the non-conformance '
         'within a reasonable time.', s['body']))
 
     story.append(Paragraph("VIII. Warranty.", s['section']))
     story.append(Paragraph('The Supplier offers the following warranty: (check one)', s['body']))
-    story.append(Paragraph(f'{cb()} - {bl(6)}-month warranty from date of delivery', s['checkbox']))
+    story.append(Paragraph(f'[X] - Twelve (12)-month warranty from date of delivery', s['checkbox']))
     story.append(Paragraph(f'{cb()} - Manufacturer\'s warranty applies', s['checkbox']))
     story.append(Paragraph(f'{cb()} - No warranty provided', s['checkbox']))
-    story.append(Paragraph(f'{cb()} - Other: {bl(30)}.', s['checkbox']))
+    story.append(Paragraph(f'{cb()} - Other: Not applicable.', s['checkbox']))
 
     story.append(Paragraph("IX. Confidentiality.", s['section']))
     story.append(Paragraph(
@@ -678,8 +709,9 @@ def supply_agreement(styles, calc):
         'Republic of Turkey.', s['body']))
 
     story.append(Paragraph("XIII. Additional Terms & Conditions.", s['section']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
-    story.append(Paragraph(f'{bl(70)}', s['body']))
+    story.append(Paragraph(_pxml(_renewal_terms(calc)), s['body']))
+    story.append(Paragraph(_pxml(_source_disclosure(calc)), s['body']))
+    story.append(Paragraph('All supply, delivery, warranty, and billing terms not modified here remain governed by the original agreement.', s['body']))
 
     story.append(Paragraph("XIV. Entire Agreement.", s['section']))
     story.append(Paragraph(
@@ -692,11 +724,11 @@ def supply_agreement(styles, calc):
     story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        f"<b>Buyer&apos;s Signature</b> {buyer_name}     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Buyer&apos;s Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name {buyer_name}', s['sign_sub']))
     story.append(Spacer(1, 10))
     story.append(Paragraph(
-        f"<b>Supplier&apos;s Signature</b> RateGuard     Date {_pxml(_agreement_today())}", s['sign']))
+        f"<b>Supplier&apos;s Signature</b> {_signature_blank()}     Date {_pxml(_agreement_today())}", s['sign']))
     story.append(Paragraph(f'Print Name RateGuard', s['sign_sub']))
 
     return story

@@ -19,6 +19,8 @@ def generate_email(contract_id):
             calc["applied_adjustment"] = body["applied_adjustment"]
         if body.get("inflation_base_rule"):
             calc["inflation_base_rule"] = body["inflation_base_rule"]
+        if body.get("max_increase_limit") is not None:
+            calc["max_increase_limit"] = body["max_increase_limit"]
 
         result = generate_email_draft(calc)
         return jsonify(result)
