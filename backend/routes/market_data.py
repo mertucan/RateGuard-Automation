@@ -81,9 +81,29 @@ def dashboard_stats():
         
         # Enforce security filtering based on user role
         if user["role"] in ["company_admin", "finance", "sales"]:
-            query = query.eq("tenant_company_id", user["company_id"])
-        elif user["role"] in ("client", "user"):
+            company_scope = user["company_id"]
+            query = query.or_(
+                f"tenant_company_id.eq.{company_scope},company_id.eq.{company_scope}"
+            )
+        elif user["role"] == "user":
             query = query.eq("company_id", user["company_id"])
+        elif user["role"] == "hr":
+            return jsonify({
+                "expiring_30": 0,
+                "pending_approvals": 0,
+                "avg_adjustment": 0,
+                "tufe": 0,
+                "ufe": 0,
+                "usd": 0,
+                "eur": 0,
+                "expiring_calendar": [],
+                "active_contracts_count": 0,
+                "total_portfolio_value_try": 0,
+                "renewed_contracts_count": 0,
+                "renewed_uplift_try": 0,
+                "renewed_contracts_in_period_count": None,
+                "renewed_uplift_in_period_try": None,
+            })
             
         if tenant_company_id:
             query = query.eq("tenant_company_id", tenant_company_id)
@@ -96,8 +116,11 @@ def dashboard_stats():
 
             # Enforce security filtering based on user role
             if user["role"] in ["company_admin", "finance", "sales"]:
-                query = query.eq("tenant_company_id", user["company_id"])
-            elif user["role"] in ("client", "user"):
+                company_scope = user["company_id"]
+                query = query.or_(
+                    f"tenant_company_id.eq.{company_scope},company_id.eq.{company_scope}"
+                )
+            elif user["role"] == "user":
                 query = query.eq("company_id", user["company_id"])
 
             if tenant_company_id:
@@ -109,7 +132,7 @@ def dashboard_stats():
 
     active_contracts = [
         c for c in contracts
-        if c.get("status", "active") not in ("approved", "rejected")
+        if c.get("status", "draft") not in ("client_approved", "cancelled")
     ]
 
     expiring_30 = [c for c in active_contracts if c.get("end_date") and today_s <= c["end_date"] <= t30]
@@ -148,7 +171,7 @@ def dashboard_stats():
     renewed_contracts = [
         c
         for c in contracts
-        if c.get("status") in ("approved", "client_approved")
+        if c.get("status") == "client_approved"
     ]
     renewed_contracts_count = len(renewed_contracts)
     renewed_uplift = 0.0

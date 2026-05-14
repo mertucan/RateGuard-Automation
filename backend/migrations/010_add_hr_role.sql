@@ -11,8 +11,7 @@ alter table public.users
         'finance'::text,
         'sales'::text,
         'hr'::text,
-        'user'::text,
-        'client'::text
+        'user'::text
       ]
     )
   );

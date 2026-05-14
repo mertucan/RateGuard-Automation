@@ -132,11 +132,11 @@ def approval_decision(contract_id):
         return jsonify({"error": "Contract is not waiting for admin approval"}), 409
 
     if decision == "approve":
-        next_status = "approved"
+        next_status = "admin_approved"
     elif decision == "reject":
-        next_status = "rejected"
+        next_status = "cancelled"
     else:
-        next_status = "draft"
+        next_status = "admin_revision_requested"
 
     payload = {"status": next_status}
     if notes and decision in ("reject", "revise"):

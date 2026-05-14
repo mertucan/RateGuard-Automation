@@ -9,6 +9,47 @@ from services.supabase_client import supabase
 
 contracts_bp = Blueprint("contracts", __name__)
 
+FINAL_STATUSES = {"client_approved", "cancelled"}
+
+
+def _contract_scope_query():
+    return supabase.table("contracts").select(
+        "id, company_id, tenant_company_id, status"
+    )
+
+
+def _get_scoped_contract(contract_id, user):
+    result = _contract_scope_query().eq("id", contract_id).limit(1).execute()
+    contract = result.data[0] if result.data else None
+    if not contract:
+        return None, (jsonify({"error": "Contract not found"}), 404)
+
+    role = user.get("role")
+    user_company_id = str(user.get("company_id") or "")
+    tenant_id = str(contract.get("tenant_company_id") or "")
+    client_company_id = str(contract.get("company_id") or "")
+
+    if role == "super_admin":
+        return contract, None
+    if role in ("company_admin", "finance", "sales") and user_company_id in (tenant_id, client_company_id):
+        return contract, None
+    if role == "user" and user_company_id and user_company_id == client_company_id:
+        return contract, None
+
+    return None, (jsonify({"error": "Insufficient permissions"}), 403)
+
+
+def _require_status(contract, *statuses):
+    if contract.get("status") not in statuses:
+        return jsonify(
+            {
+                "error": "Invalid workflow state",
+                "current_status": contract.get("status"),
+                "allowed_statuses": list(statuses),
+            }
+        ), 409
+    return None
+
 
 def _drop_missing_column(payload, error_text):
     """Drop the missing column mentioned in a PostgREST PGRST204 error.
@@ -82,9 +123,14 @@ def list_contracts():
 
         # Enforce security filtering based on user role
         if user["role"] in ["company_admin", "finance", "sales"]:
-            query = query.eq("tenant_company_id", user["company_id"])
-        elif user["role"] in ("client", "user"):
+            company_scope = user["company_id"]
+            query = query.or_(
+                f"tenant_company_id.eq.{company_scope},company_id.eq.{company_scope}"
+            )
+        elif user["role"] == "user":
             query = query.eq("company_id", user["company_id"])
+        elif user["role"] == "hr":
+            return jsonify([])
 
         if company_id:
             query = query.eq("company_id", company_id)
@@ -137,8 +183,12 @@ def list_approved_agreements():
 
 
 @contracts_bp.route("/api/contracts/<contract_id>", methods=["GET"])
+@login_required
 def get_contract(contract_id):
     try:
+        _, error = _get_scoped_contract(contract_id, g.current_user)
+        if error:
+            return error
         result = (
             supabase.table("contracts")
             .select(
@@ -155,8 +205,10 @@ def get_contract(contract_id):
 
 
 @contracts_bp.route("/api/contracts", methods=["POST"])
+@role_required("sales", "finance", "company_admin", "super_admin")
 def create_contract():
     body = request.get_json()
+    user = g.current_user
 
     end_date = body.get("end_date")
     if not end_date:  # Convert empty strings to None to prevent DB cast errors
@@ -165,7 +217,8 @@ def create_contract():
     data = {
         "id": str(uuid.uuid4()),
         "company_id": body["company_id"],
-        "tenant_company_id": body.get("tenant_company_id"),
+        "tenant_company_id": body.get("tenant_company_id") or user.get("company_id"),
+        "sales_rep_id": user["id"] if user.get("role") == "sales" else body.get("sales_rep_id"),
         "previous_amount": body["previous_amount"],
         "currency": body.get("currency", "TRY"),
         "contract_type": body.get("contract_type", "service_contract"),
@@ -179,7 +232,7 @@ def create_contract():
             "Central Bank of the Republic of Turkiye (TCMB)",
         ),
         "inflation_source_method": body.get("inflation_source_method", "Official EVDS API"),
-        "status": "active",
+        "status": "draft",
     }
 
     try:
@@ -245,6 +298,7 @@ def create_contract():
 
 
 @contracts_bp.route("/api/contracts/<contract_id>", methods=["PUT"])
+@role_required("finance", "company_admin", "super_admin")
 def update_contract(contract_id):
     body = request.get_json()
     allowed = [
@@ -266,6 +320,11 @@ def update_contract(contract_id):
     ]
     data = {k: v for k, v in body.items() if k in allowed}
     try:
+        contract, error = _get_scoped_contract(contract_id, g.current_user)
+        if error:
+            return error
+        if contract.get("status") in FINAL_STATUSES:
+            return jsonify({"error": "Finalized contracts cannot be edited"}), 409
         result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
         return jsonify(result.data[0])
     except Exception as e:
@@ -295,6 +354,13 @@ def save_draft(contract_id):
     data = {k: v for k, v in body.items() if k in allowed}
     data["status"] = "draft"
     try:
+        contract, error = _get_scoped_contract(contract_id, g.current_user)
+        if error:
+            return error
+        if g.current_user.get("role") == "user":
+            return jsonify({"error": "Insufficient permissions"}), 403
+        if contract.get("status") in FINAL_STATUSES:
+            return jsonify({"error": "Finalized contracts cannot be edited"}), 409
         result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
         return jsonify(result.data[0])
     except Exception as e:
@@ -308,10 +374,15 @@ def reject_contract(contract_id):
     """Reject contract renewal and log the action."""
     body = request.get_json() or {}
     data = {
-        "status": "rejected",
+        "status": "cancelled",
         "rejection_notes": body.get("rejection_notes", ""),
     }
     try:
+        contract, error = _get_scoped_contract(contract_id, g.current_user)
+        if error:
+            return error
+        if g.current_user.get("role") not in ("company_admin", "super_admin"):
+            return jsonify({"error": "Only company admins can cancel contracts"}), 403
         result = (
             supabase.table("contracts").update(data).eq("id", contract_id).execute()
         )
@@ -322,7 +393,7 @@ def reject_contract(contract_id):
         log_audit(
             user_id=user["id"],
             user_name=user["full_name"],
-            action="reject",
+            action="cancel",
             entity_type="contract",
             entity_id=contract_id,
             details={"rejection_notes": body.get("rejection_notes", "")},
@@ -337,10 +408,39 @@ def reject_contract(contract_id):
 @contracts_bp.route("/api/contracts/<contract_id>/approve", methods=["POST"])
 @role_required("finance", "company_admin", "super_admin")
 def approve_contract(contract_id):
-    """Internal approval of contract renewal. Emails go out on client-approve step."""
+    """Approve the current workflow step: finance calculation first, then admin sending approval."""
     body = request.get_json() or {}
+    user = g.current_user
+    contract, error = _get_scoped_contract(contract_id, user)
+    if error:
+        return error
+
+    role = user.get("role")
+    current_status = contract.get("status")
+    if role == "finance":
+        status_error = _require_status(
+            contract,
+            "draft",
+            "finance_review",
+            "finance_revision_requested",
+            "admin_revision_requested",
+        )
+        next_status = "finance_approved"
+        audit_action = "finance_approve"
+    elif role in ("company_admin", "super_admin"):
+        status_error = _require_status(contract, "finance_approved", "admin_review")
+        next_status = "admin_approved"
+        audit_action = "admin_approve"
+    else:
+        status_error = jsonify({"error": "Insufficient permissions"}), 403
+        next_status = current_status
+        audit_action = "approve"
+
+    if status_error:
+        return status_error
+
     data = {
-        "status": "approved",
+        "status": next_status,
         "new_amount": body.get("new_amount"),
         "applied_adjustment": body.get("applied_adjustment"),
         "approved_at": datetime.utcnow().isoformat(),
@@ -362,11 +462,10 @@ def approve_contract(contract_id):
 
         from routes.audit_logs import log_audit
 
-        user = g.current_user
         log_audit(
             user_id=user["id"],
             user_name=user["full_name"],
-            action="approve",
+            action=audit_action,
             entity_type="contract",
             entity_id=contract_id,
             details={
@@ -382,12 +481,20 @@ def approve_contract(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/send-to-client", methods=["POST"])
-@role_required("finance", "company_admin", "super_admin", "sales")
+@role_required("company_admin", "super_admin", "sales")
 def send_to_client(contract_id):
-    """Mark contract as pending_client and send a review notification to the client."""
+    """Mark contract as sent_to_client and send a review notification to the client."""
     try:
+        user = g.current_user
+        contract_row, error = _get_scoped_contract(contract_id, user)
+        if error:
+            return error
+        status_error = _require_status(contract_row, "admin_approved")
+        if status_error:
+            return status_error
+
         data = {
-            "status": "pending_client",
+            "status": "sent_to_client",
             "sent_to_client_at": datetime.utcnow().isoformat(),
         }
 
@@ -436,7 +543,6 @@ def send_to_client(contract_id):
 
         from routes.audit_logs import log_audit
 
-        user = g.current_user
         log_audit(
             user_id=user["id"],
             user_name=user["full_name"],
@@ -474,7 +580,7 @@ def send_to_client(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/client-approve", methods=["POST"])
-@role_required("client", "user", "super_admin", "company_admin")
+@role_required("user", "company_admin")
 def client_approve(contract_id):
     """Client approves the contract renewal; sends mutual confirmation email with PDF."""
     try:
@@ -494,11 +600,10 @@ def client_approve(contract_id):
         )
         contract = contract_res.data[0] if contract_res.data else {}
 
-        # super_admin and company_admin can approve on behalf of any client
-        # For regular client/user roles, verify they belong to the contract's client company
-        if user.get("role") not in ("super_admin", "company_admin"):
-            if user.get("company_id") != contract.get("company_id"):
-                return jsonify({"error": "Forbidden: company mismatch"}), 403
+        if str(user.get("company_id")) != str(contract.get("company_id")):
+            return jsonify({"error": "Forbidden: company mismatch"}), 403
+        if contract.get("status") != "sent_to_client":
+            return jsonify({"error": "Contract is not waiting for client approval"}), 409
 
         data = {
             "status": "client_approved",
@@ -552,7 +657,7 @@ def client_approve(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>/client-reject", methods=["POST"])
-@role_required("client", "user", "super_admin", "company_admin")
+@role_required("user", "company_admin")
 def client_reject(contract_id):
     """Client rejects the contract renewal with a mandatory reason."""
     try:
@@ -573,10 +678,10 @@ def client_reject(contract_id):
         )
         contract = contract_res.data[0] if contract_res.data else {}
 
-        # super_admin and company_admin can reject on behalf of any client
-        if user.get("role") not in ("super_admin", "company_admin"):
-            if user.get("company_id") != contract.get("company_id"):
-                return jsonify({"error": "Forbidden: company mismatch"}), 403
+        if str(user.get("company_id")) != str(contract.get("company_id")):
+            return jsonify({"error": "Forbidden: company mismatch"}), 403
+        if contract.get("status") != "sent_to_client":
+            return jsonify({"error": "Contract is not waiting for client approval"}), 409
 
         data = {
             "status": "client_rejected",
@@ -677,8 +782,14 @@ def notify_sales(contract_id):
 
 
 @contracts_bp.route("/api/contracts/<contract_id>", methods=["DELETE"])
+@role_required("company_admin", "super_admin")
 def delete_contract(contract_id):
-    supabase.table("contracts").delete().eq("id", contract_id).execute()
+    user = g.current_user
+    contract, error = _get_scoped_contract(contract_id, user)
+    if error:
+        return error
+    payload = {"status": "cancelled", "rejection_notes": "Cancelled by admin"}
+    supabase.table("contracts").update(payload).eq("id", contract_id).execute()
     return jsonify({"ok": True})
 
 

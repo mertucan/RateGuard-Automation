@@ -19,7 +19,7 @@ def list_applications():
             " company:companies!applications_target_company_id_fkey(id, company_name)"
         )
 
-        if role in ("user", "client"):
+        if role == "user":
             query = query.eq("applicant_user_id", user["id"])
         elif role in ("company_admin", "finance", "sales", "hr"):
             if not user.get("company_id"):
@@ -35,10 +35,13 @@ def list_applications():
 
 
 @applications_bp.route("/api/applications", methods=["POST"])
-@role_required("user", "client")
+@role_required("user")
 def create_application():
     user = g.current_user
     body = request.get_json() or {}
+
+    if user.get("company_id"):
+        return jsonify({"error": "Assigned company users cannot submit department applications"}), 403
 
     target_company_id = body.get("target_company_id")
     target_department = body.get("target_department")

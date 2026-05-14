@@ -17,7 +17,7 @@ const ALL_NAV_ITEMS = [
       "company_admin",
       "finance",
       "sales",
-      "client",
+      "user",
     ],
   },
   {
@@ -30,7 +30,7 @@ const ALL_NAV_ITEMS = [
     to: "/applications",
     icon: "work",
     label: "Applications",
-    roles: ["user", "client"],
+    roles: ["user"],
   },
   {
     to: "/application-management",
@@ -54,7 +54,7 @@ const ALL_NAV_ITEMS = [
     to: "/analytics",
     icon: "monitoring",
     label: "Analytics",
-    roles: ["super_admin", "company_admin", "finance", "sales", "user", "client"],
+    roles: ["super_admin", "company_admin", "finance", "sales", "user"],
   },
 ];
 
@@ -86,7 +86,6 @@ export default function Layout({ children }) {
     finance: "Finance",
     sales: "Sales",
     hr: "HR",
-    client: "User",
     user: "User",
   };
 

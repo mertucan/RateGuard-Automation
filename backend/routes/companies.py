@@ -226,7 +226,7 @@ def list_add_client_candidates():
         tenant_id = user.get("company_id")
         if not tenant_id:
             return jsonify({"error": "No tenant context."}), 400
-    elif role in ("client", "user"):
+    elif role == "user":
         return jsonify([])
     else:
         return jsonify({"error": "Insufficient permissions."}), 403
@@ -471,13 +471,13 @@ def revenue_analysis():
         d = _date_from_value(value)
         return bool(d and period_start <= d <= period_end)
 
-    non_rejected_all = [r for r in rows if r.get("status") != "rejected"]
+    non_rejected_all = [r for r in rows if r.get("status") != "cancelled"]
     period_rows = [r for r in rows if _in_period(r.get("created_at"), include_missing_for_all=True)]
-    non_rejected = [r for r in period_rows if r.get("status") != "rejected"]
+    non_rejected = [r for r in period_rows if r.get("status") != "cancelled"]
     active_like = [
         r
         for r in non_rejected
-        if r.get("status", "active") not in ("approved", "rejected")
+        if r.get("status", "draft") not in ("client_approved", "cancelled")
     ]
 
     total_portfolio_value = sum(float(r.get("previous_amount") or 0) for r in non_rejected)

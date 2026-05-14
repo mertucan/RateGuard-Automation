@@ -20,7 +20,6 @@ import {
   rejectContract,
   approveContract,
   generateEmailDraft,
-  analyzeContractTone,
   sendContractToClient,
   clientApproveContract,
   clientRejectContract,
@@ -31,11 +30,15 @@ import {
 
 const STATUS_MAP = {
   all: { label: "All", icon: "list" },
-  active: { label: "Active", icon: "check_circle", cls: "text-emerald-500" },
   draft: { label: "Draft", icon: "edit_note", cls: "text-amber-500" },
-  approved: { label: "Approved", icon: "verified", cls: "text-primary" },
-  pending_client: {
-    label: "Awaiting Client",
+  finance_review: { label: "Finance Review", icon: "calculate", cls: "text-sky-500" },
+  finance_approved: { label: "Finance Approved", icon: "verified", cls: "text-primary" },
+  finance_revision_requested: { label: "Finance Revision", icon: "replay", cls: "text-amber-500" },
+  admin_review: { label: "Admin Review", icon: "admin_panel_settings", cls: "text-violet-500" },
+  admin_approved: { label: "Admin Approved", icon: "verified_user", cls: "text-primary" },
+  admin_revision_requested: { label: "Admin Revision", icon: "replay", cls: "text-amber-500" },
+  sent_to_client: {
+    label: "Sent to Client",
     icon: "pending",
     cls: "text-violet-500",
   },
@@ -49,7 +52,7 @@ const STATUS_MAP = {
     icon: "cancel",
     cls: "text-red-600",
   },
-  rejected: { label: "Rejected", icon: "block", cls: "text-red-500" },
+  cancelled: { label: "Cancelled", icon: "block", cls: "text-red-500" },
 };
 
 const RULE_OPTIONS = ["All", "TUFE", "UFE", "TUFE+UFE", "CUSTOM"];
@@ -69,15 +72,19 @@ function daysUntil(dateStr) {
 
 function statusBadge(status) {
   const map = {
-    active: "bg-emerald-500/10 text-emerald-500",
     draft: "bg-amber-500/10 text-amber-500",
-    approved: "bg-sky-500/10 text-sky-500",
-    pending_client: "bg-violet-500/10 text-violet-500",
+    finance_review: "bg-sky-500/10 text-sky-500",
+    finance_approved: "bg-primary/10 text-primary",
+    finance_revision_requested: "bg-amber-500/10 text-amber-500",
+    admin_review: "bg-violet-500/10 text-violet-500",
+    admin_approved: "bg-primary/10 text-primary",
+    admin_revision_requested: "bg-amber-500/10 text-amber-500",
+    sent_to_client: "bg-violet-500/10 text-violet-500",
     client_approved: "bg-emerald-600/10 text-emerald-600",
     client_rejected: "bg-red-600/10 text-red-600",
-    rejected: "bg-red-500/10 text-red-500",
+    cancelled: "bg-red-500/10 text-red-500",
   };
-  return map[status] || map.active;
+  return map[status] || map.draft;
 }
 
 function urgencyBadge(days) {
@@ -169,9 +176,9 @@ function FinanceNotifySalesButton({ contractId, contract }) {
     }
   };
 
-  const contractStatus = contract?.status || "active";
+  const contractStatus = contract?.status || "draft";
   const disabled =
-    loading || ["pending_client", "client_approved"].includes(contractStatus);
+    loading || ["sent_to_client", "client_approved"].includes(contractStatus);
 
   return (
     <button
@@ -235,9 +242,7 @@ function ContractList() {
   const load = useCallback(async () => {
     try {
       const contractParams =
-        user?.role === "company_admin" && user?.company_id
-          ? { tenant_company_id: user.company_id }
-          : user?.role === "client" && user?.company_id
+        user?.role === "user" && user?.company_id
             ? { company_id: user.company_id }
             : {};
       const [c, co, md, sources] = await Promise.all([
@@ -457,7 +462,7 @@ function ContractList() {
       c.currency || "TRY",
       c.inflation_base_rule || "",
       c.end_date || "",
-      c.status || "active",
+      c.status || "draft",
     ]);
 
     const csvContent = [headers, ...rows]
@@ -487,7 +492,7 @@ function ContractList() {
   const listAfterTextFilters = useMemo(() => {
     let list = contracts;
     if (statusFilter !== "all") {
-      list = list.filter((c) => (c.status || "active") === statusFilter);
+      list = list.filter((c) => (c.status || "draft") === statusFilter);
     }
     if (ruleFilter !== "All") {
       list = list.filter((c) => c.inflation_base_rule === ruleFilter);
@@ -531,16 +536,20 @@ function ContractList() {
   const statusCounts = useMemo(() => {
     const counts = {
       all: contracts.length,
-      active: 0,
       draft: 0,
-      approved: 0,
-      pending_client: 0,
+      finance_review: 0,
+      finance_approved: 0,
+      finance_revision_requested: 0,
+      admin_review: 0,
+      admin_approved: 0,
+      admin_revision_requested: 0,
+      sent_to_client: 0,
       client_approved: 0,
       client_rejected: 0,
-      rejected: 0,
+      cancelled: 0,
     };
     contracts.forEach((c) => {
-      const s = c.status || "active";
+      const s = c.status || "draft";
       if (counts[s] !== undefined) counts[s]++;
     });
     return counts;
@@ -577,7 +586,7 @@ function ContractList() {
             Review and approve contract renewals.
           </p>
         </div>
-        {!["client", "user"].includes(user?.role) && (
+        {user?.role !== "user" && (
           <div className="flex items-center gap-3">
             <button
               onClick={handleExport}
@@ -588,7 +597,7 @@ function ContractList() {
               </span>
               Export
             </button>
-            {["company_admin", "finance", "super_admin"].includes(
+            {["company_admin", "finance", "sales", "super_admin"].includes(
               user?.role,
             ) && (
               <button
@@ -621,7 +630,7 @@ function ContractList() {
                       setForm({ ...form, company_id: e.target.value })
                     }
                     title={
-                      companies.length === 0 && user?.role !== "client"
+                      companies.length === 0 && user?.role !== "user"
                         ? canManageClients
                           ? "Add a client company on the Clients page first."
                           : "Ask a company admin to add client companies first."
@@ -636,7 +645,7 @@ function ContractList() {
                     ))}
                   </select>
                   {companies.length === 0 &&
-                    !["client", "user"].includes(user?.role) && (
+                    user?.role !== "user" && (
                       <p className="mt-2 text-xs leading-relaxed text-text-muted">
                         No companies available in the directory. Please contact
                         a Super Admin.
@@ -935,7 +944,7 @@ function ContractList() {
                     {filtered.map((c) => {
                       const days = daysUntil(c.end_date);
                       const urgency = urgencyBadge(days);
-                      const st = c.status || "active";
+                      const st = c.status || "draft";
 
                       return (
                         <tr
@@ -1007,7 +1016,7 @@ function ContractList() {
                               >
                                 Review
                               </button>
-                              {user?.role !== "client" && (
+                              {user?.role !== "user" && (
                                 <button
                                   onClick={() => setDeleteTarget(c.id)}
                                   className="flex items-center justify-center rounded-lg p-1.5 text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100"
@@ -2073,7 +2082,11 @@ function ContractDetail() {
         inflation_source_method: inflationSourceMethod,
       });
       setShowApproveModal(false);
-      showToast("Contract approved!");
+      showToast(
+        user?.role === "finance"
+          ? "Calculation approved. Waiting for company admin approval."
+          : "Admin approval completed. Contract can now be sent to the client.",
+      );
       setTimeout(() => navigate("/renewal-review"), 1500);
     } catch (err) {
       showToast("Approval error: " + err.message, "error");
@@ -2148,20 +2161,36 @@ function ContractDetail() {
     );
   }
 
-  const contractStatus = contract.status || "active";
+  const contractStatus = contract.status || "draft";
+  const isTenantSide =
+    user?.role === "super_admin" ||
+    (user?.company_id &&
+      contract.tenant_company_id &&
+      String(user.company_id) === String(contract.tenant_company_id));
+  const isClientSide =
+    user?.company_id &&
+    contract.company_id &&
+    String(user.company_id) === String(contract.company_id);
+  const canClientDecide =
+    isClientSide && ["user", "company_admin"].includes(user?.role);
   const isFinalized = [
-    "approved",
-    "pending_client",
+    "admin_approved",
+    "sent_to_client",
     "client_approved",
     "client_rejected",
+    "cancelled",
   ].includes(contractStatus);
 
   const badge = {
-    active: { text: "Active", cls: "bg-emerald-500/10 text-emerald-500" },
     draft: { text: "Draft", cls: "bg-amber-500/10 text-amber-500" },
-    approved: { text: "Approved", cls: "bg-primary/10 text-primary" },
-    pending_client: {
-      text: "Awaiting Client",
+    finance_review: { text: "Finance Review", cls: "bg-sky-500/10 text-sky-500" },
+    finance_approved: { text: "Finance Approved", cls: "bg-primary/10 text-primary" },
+    finance_revision_requested: { text: "Finance Revision Requested", cls: "bg-amber-500/10 text-amber-500" },
+    admin_review: { text: "Admin Review", cls: "bg-violet-500/10 text-violet-500" },
+    admin_approved: { text: "Admin Approved", cls: "bg-primary/10 text-primary" },
+    admin_revision_requested: { text: "Admin Revision Requested", cls: "bg-amber-500/10 text-amber-500" },
+    sent_to_client: {
+      text: "Sent to Client",
       cls: "bg-violet-500/10 text-violet-500",
     },
     client_approved: {
@@ -2172,10 +2201,10 @@ function ContractDetail() {
       text: "Client Rejected",
       cls: "bg-red-600/10 text-red-600",
     },
-    rejected: { text: "Rejected", cls: "bg-red-500/10 text-red-500" },
+    cancelled: { text: "Cancelled", cls: "bg-red-500/10 text-red-500" },
   }[contractStatus] || {
-    text: "Active",
-    cls: "bg-emerald-500/10 text-emerald-500",
+    text: "Draft",
+    cls: "bg-amber-500/10 text-amber-500",
   };
 
   const inputCls =
@@ -2284,8 +2313,12 @@ function ContractDetail() {
       {/* Approve Modal (internal) */}
       <ConfirmModal
         open={showApproveModal}
-        title="Approve & Send Renewal"
-        message={`${companyName} - This action is final.`}
+        title={user?.role === "finance" ? "Approve Calculation" : "Approve for Client Send"}
+        message={
+          user?.role === "finance"
+            ? `${companyName} - Finance approval moves this contract to admin review.`
+            : `${companyName} - Admin approval allows Sales/Admin to send this to the client.`
+        }
         details={
           <div className="space-y-2">
             <div className="flex justify-between">
@@ -2309,7 +2342,7 @@ function ContractDetail() {
             </div>
           </div>
         }
-        confirmText="Approve & Send"
+        confirmText={user?.role === "finance" ? "Approve Calculation" : "Approve Sending"}
         onConfirm={handleApprove}
         onCancel={() => setShowApproveModal(false)}
         loading={saving}
@@ -2470,11 +2503,9 @@ function ContractDetail() {
           <div className="grid grid-cols-1 gap-6 sm:gap-8 xl:grid-cols-12">
             {/* ── Left Column ── */}
             <div className="space-y-6 sm:space-y-8 xl:col-span-7">
-              {/* Client Decision Panel - visible to client/user and admins when pending */}
-              {["client", "user", "super_admin", "company_admin"].includes(
-                user?.role,
-              ) &&
-                contractStatus === "pending_client" && (
+              {/* Client Decision Panel - visible only to client-company users */}
+              {canClientDecide &&
+                contractStatus === "sent_to_client" && (
                   <section className="rounded-xl border-2 border-violet-500/30 bg-violet-500/5 p-4 sm:p-6">
                     <div className="mb-4 flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/10">
@@ -2484,26 +2515,13 @@ function ContractDetail() {
                       </div>
                       <div>
                         <h3 className="text-lg font-bold">
-                          {["super_admin", "company_admin"].includes(user?.role)
-                            ? "Approve on Behalf of Client"
-                            : "Contract Awaiting Your Decision"}
+                          Contract Awaiting Your Decision
                         </h3>
                         <p className="text-sm text-text-muted">
-                          {["super_admin", "company_admin"].includes(user?.role)
-                            ? `Approving as admin on behalf of ${companyName}.`
-                            : "Please review the terms and accept or reject."}
+                          Please review the terms and accept or reject.
                         </p>
                       </div>
                     </div>
-                    {["super_admin", "company_admin"].includes(user?.role) && (
-                      <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600">
-                        <span className="material-symbols-outlined text-[16px]">
-                          admin_panel_settings
-                        </span>
-                        You are acting as an administrator. This action will be
-                        recorded in the audit log.
-                      </div>
-                    )}
                     <div className="mb-4 rounded-lg border border-border bg-surface p-4 text-sm space-y-2">
                       <div className="flex justify-between">
                         <span className="text-text-muted">
@@ -2566,7 +2584,7 @@ function ContractDetail() {
                 )}
 
               {/* Editable Calculation */}
-              {!["client", "user"].includes(user?.role) &&
+              {isTenantSide && user?.role !== "user" &&
                 (() => {
                   const isSalesReadonly = user?.role === "sales";
                   return (
@@ -2845,8 +2863,38 @@ function ContractDetail() {
                     </div>
                   </div>
 
+                  {/* Finance/Admin: approve the current workflow step */}
+                  {isTenantSide && ["finance", "company_admin", "super_admin"].includes(
+                    user?.role,
+                  ) && (
+                    <button
+                      onClick={() => setShowApproveModal(true)}
+                      disabled={
+                        saving ||
+                        (user?.role === "finance"
+                          ? ![
+                              "draft",
+                              "finance_review",
+                              "finance_revision_requested",
+                              "admin_revision_requested",
+                            ].includes(contractStatus)
+                          : !["finance_approved", "admin_review"].includes(
+                              contractStatus,
+                            ))
+                      }
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-text-muted"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        verified
+                      </span>
+                      {user?.role === "finance"
+                        ? "Approve Calculation"
+                        : "Approve for Client Send"}
+                    </button>
+                  )}
+
                   {/* Finance: Notify Sales (instead of send-to-client) */}
-                  {user?.role === "finance" && (
+                  {isTenantSide && user?.role === "finance" && (
                     <FinanceNotifySalesButton
                       contractId={id}
                       contract={contract}
@@ -2854,7 +2902,7 @@ function ContractDetail() {
                   )}
 
                   {/* Sales + Admin: Send to Client */}
-                  {["company_admin", "super_admin", "sales"].includes(
+                  {isTenantSide && ["company_admin", "super_admin", "sales"].includes(
                     user?.role,
                   ) && (
                     <button
@@ -2862,42 +2910,46 @@ function ContractDetail() {
                       disabled={
                         saving ||
                         [
-                          "pending_client",
+                          "sent_to_client",
                           "client_approved",
-                          "rejected",
+                          "cancelled",
                         ].includes(contractStatus)
+                        || contractStatus !== "admin_approved"
                       }
                       className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold transition-colors ${
                         [
-                          "pending_client",
+                          "sent_to_client",
                           "client_approved",
-                          "rejected",
+                          "cancelled",
                         ].includes(contractStatus)
+                        || contractStatus !== "admin_approved"
                           ? "cursor-not-allowed border border-border bg-surface-alt text-text-muted"
                           : "bg-primary text-white hover:bg-primary-dark disabled:opacity-50"
                       }`}
                     >
                       <span className="material-symbols-outlined text-[18px]">
-                        {contractStatus === "pending_client"
+                        {contractStatus === "sent_to_client"
                           ? "hourglass_empty"
                           : contractStatus === "client_approved"
                             ? "task_alt"
                             : "send"}
                       </span>
-                      {contractStatus === "pending_client"
+                      {contractStatus === "sent_to_client"
                         ? "Awaiting Client Response"
                         : contractStatus === "client_approved"
                           ? "Client Approved ✓"
                           : contractStatus === "client_rejected"
                             ? "Re-send to Client"
-                            : contractStatus === "rejected"
-                              ? "Internally Rejected"
-                              : "Send to Client"}
+                            : contractStatus === "cancelled"
+                              ? "Cancelled"
+                              : contractStatus === "admin_approved"
+                                ? "Send to Client"
+                                : "Waiting for Admin Approval"}
                     </button>
                   )}
 
                   {/* Finance/Admin: Save Draft (not Sales) */}
-                  {["finance", "company_admin", "super_admin"].includes(
+                  {isTenantSide && ["finance", "company_admin", "super_admin"].includes(
                     user?.role,
                   ) && (
                     <div className="w-full">
@@ -2920,7 +2972,7 @@ function ContractDetail() {
               <ChatPanel contractId={id} />
 
               {/* AI Email Composer — only for Sales and Admin roles */}
-              {["sales", "company_admin", "super_admin"].includes(
+              {isTenantSide && ["sales", "company_admin", "super_admin"].includes(
                 user?.role,
               ) && (
                 <section className="rounded-xl border border-border bg-surface">

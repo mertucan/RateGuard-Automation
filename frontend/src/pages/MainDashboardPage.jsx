@@ -48,18 +48,14 @@ export default function MainDashboardPage() {
     async function load() {
       try {
         const params = {}
-        if (user?.role === 'company_admin' && user?.company_id) {
-          params.tenant_company_id = user.company_id
-        }
-        
         const [s, c] = await Promise.all([
           getDashboardStats(params),
           getContracts({ pending: 'true', ...params }),
         ])
         setStats(s)
         const pending = (c || []).filter((ct) => {
-          const st = ct.status || 'active'
-          return st !== 'approved' && st !== 'rejected'
+          const st = ct.status || 'draft'
+          return !['client_approved', 'cancelled'].includes(st)
         })
         setRows(pending)
       } catch (err) {
@@ -117,10 +113,10 @@ export default function MainDashboardPage() {
     company_admin: 'Company Admin',
     finance: 'Finance Department',
     sales: 'Sales Representative',
-    client: 'Client',
+    user: user?.company_id ? 'Client User' : 'User',
   }
 
-  const role = user?.role || 'client'
+  const role = user?.role || 'user'
   const showMarket = ['super_admin', 'company_admin', 'finance'].includes(role)
   const showRenewals = ['super_admin', 'company_admin', 'finance', 'sales'].includes(role)
   const canCreateContract = ['super_admin', 'company_admin', 'sales'].includes(role)
@@ -152,7 +148,7 @@ export default function MainDashboardPage() {
                   </span>
                 </div>
                 <h2 className="headline-font truncate text-2xl font-extrabold tracking-tight sm:text-3xl">
-                  {role === 'client' ? 'My Contracts' : 'Renewal Command Center'}
+                  {role === 'user' ? 'My Contracts' : 'Renewal Command Center'}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
                   Welcome back, {user?.full_name || 'User'}. Monitor contract deadlines,
@@ -161,7 +157,7 @@ export default function MainDashboardPage() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {(showRenewals || role === 'client') && (
+                {(showRenewals || role === 'user') && (
                   <button
                     type="button"
                     onClick={() => navigate('/renewal-review')}
@@ -218,7 +214,7 @@ export default function MainDashboardPage() {
 
         <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 sm:px-8 sm:py-8">
           {/* Quick links */}
-          {(showRenewals || role === 'client') && (
+          {(showRenewals || role === 'user') && (
             <nav className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 type="button"
@@ -244,7 +240,7 @@ export default function MainDashboardPage() {
                   <span className="material-symbols-outlined text-primary text-[22px]">group</span>
                 </button>
               )}
-              {['super_admin', 'company_admin', 'finance', 'user', 'client'].includes(role) && (
+              {['super_admin', 'company_admin', 'finance', 'user'].includes(role) && (
                 <button
                   type="button"
                   onClick={() => navigate('/analytics')}
@@ -576,8 +572,8 @@ export default function MainDashboardPage() {
             </section>
           )}
 
-          {/* Client role: simplified view */}
-          {role === 'client' && (
+          {/* Client-company user: simplified view */}
+          {role === 'user' && (
             <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
               <div className="border-b border-border p-4 sm:p-6">
                 <h3 className="text-lg font-bold">Your Contracts</h3>

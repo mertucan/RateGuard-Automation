@@ -18,8 +18,7 @@ create table public.users (
           'finance'::text,
           'sales'::text,
           'hr'::text,
-          'user'::text,
-          'client'::text
+          'user'::text
         ]
       )
     )
@@ -81,7 +80,7 @@ create table public.contracts (
   inflation_base_rule text null,
   max_increase_limit numeric null,
   created_at timestamp with time zone not null default now(),
-  status text null default 'active'::text,
+  status text null default 'draft'::text,
   new_amount numeric null,
   applied_adjustment numeric null,
   rejection_notes text null,

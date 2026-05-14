@@ -75,7 +75,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Layout>
-              {user?.role === "user" ? (
+              {user?.role === "user" && !user?.company_id ? (
                 <UserWelcomePage />
               ) : user?.role === "hr" ? (
                 <HRDashboardPage />
@@ -95,7 +95,7 @@ function AppRoutes() {
               "company_admin",
               "finance",
               "sales",
-              "client",
+              "user",
             ]}
           >
             <Layout>
@@ -115,7 +115,7 @@ function AppRoutes() {
               "company_admin",
               "finance",
               "sales",
-              "client",
+              "user",
             ]}
           >
             <Layout>
@@ -145,7 +145,6 @@ function AppRoutes() {
               "company_admin",
               "finance",
               "user",
-              "client",
             ]}
           >
             <Layout>
@@ -157,7 +156,7 @@ function AppRoutes() {
       <Route
         path="/applications"
         element={
-          <ProtectedRoute roles={["user", "client"]}>
+          <ProtectedRoute roles={["user"]}>
             <Layout>
               <ApplicationsPage />
             </Layout>
