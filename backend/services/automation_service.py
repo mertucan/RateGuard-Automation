@@ -1,3 +1,4 @@
+from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 
@@ -10,6 +11,7 @@ from services.email_service import (
 
 
 DEFAULT_SETTINGS = {
+    "auto_renewal_enabled": False,
     "require_admin_approval_before_auto_renew": True,
     "automation_email_enabled": True,
 }
@@ -21,6 +23,7 @@ def _empty_tenant_aggregate():
         "skipped": 0,
         "pending_admin_approval": 0,
         "auto_sent_to_client": 0,
+        "renewed_created": 0,
         "emails_sent": 0,
     }
 
@@ -71,6 +74,7 @@ def get_company_automation_settings(company_id):
             return {**DEFAULT_SETTINGS}
         row = res.data[0]
         return {
+            "auto_renewal_enabled": bool(row.get("auto_renewal_enabled", False)),
             "require_admin_approval_before_auto_renew": bool(
                 row.get("require_admin_approval_before_auto_renew", True)
             ),
@@ -87,6 +91,7 @@ def upsert_company_automation_settings(company_id, data):
 
     payload = {
         "company_id": company_id,
+        "auto_renewal_enabled": bool(data.get("auto_renewal_enabled", False)),
         "require_admin_approval_before_auto_renew": bool(
             data.get("require_admin_approval_before_auto_renew", True)
         ),
@@ -126,13 +131,69 @@ def add_contract_approval_log(
 
 
 def _contract_is_final(status):
-    return status in ("client_approved", "client_rejected", "rejected")
+    return status in ("client_approved", "client_rejected", "cancelled")
 
 
 def _tenant_key(tenant_company_id):
     if tenant_company_id is None:
         return "__none__"
     return str(tenant_company_id)
+
+
+def _add_months(d, months):
+    month_index = d.month - 1 + int(months or 12)
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(d.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _create_next_period_contract(contract, triggered_by):
+    existing = (
+        supabase.table("contracts")
+        .select("id")
+        .eq("renewed_from_contract_id", contract["id"])
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return None
+
+    try:
+        end_date = date.fromisoformat(str(contract.get("end_date"))[:10])
+    except (TypeError, ValueError):
+        return None
+
+    next_end_date = _add_months(end_date, contract.get("auto_renew_term_months") or 12)
+    payload = {
+        "company_id": contract["company_id"],
+        "tenant_company_id": contract.get("tenant_company_id"),
+        "sales_rep_id": contract.get("sales_rep_id"),
+        "previous_amount": contract.get("new_amount") or contract.get("previous_amount"),
+        "currency": contract.get("currency") or "TRY",
+        "contract_type": contract.get("contract_type") or "service_contract",
+        "end_date": next_end_date.isoformat(),
+        "inflation_base_rule": contract.get("inflation_base_rule") or "TUFE",
+        "max_increase_limit": contract.get("max_increase_limit"),
+        "inflation_data_source": contract.get("inflation_data_source") or "tcmb_evds",
+        "inflation_source_name": contract.get("inflation_source_name") or "TCMB EVDS",
+        "inflation_source_institution": contract.get("inflation_source_institution"),
+        "inflation_source_method": contract.get("inflation_source_method"),
+        "status": "draft",
+        "auto_renew_enabled": bool(contract.get("auto_renew_enabled")),
+        "auto_renew_term_months": contract.get("auto_renew_term_months") or 12,
+        "renewed_from_contract_id": contract["id"],
+    }
+    created = supabase.table("contracts").insert(payload).execute()
+    row = created.data[0] if created.data else None
+    if row:
+        add_contract_approval_log(
+            contract_id=row["id"],
+            action="auto_renewal_period_created",
+            notes="New renewal period created from approved contract.",
+            metadata={"triggered_by": triggered_by, "previous_contract_id": contract["id"]},
+        )
+    return row
 
 
 def run_renewal_automation(triggered_by="system", summary_to_email=None):
@@ -154,7 +215,10 @@ def run_renewal_automation(triggered_by="system", summary_to_email=None):
     contracts = (
         supabase.table("contracts")
         .select(
-            "id, company_id, tenant_company_id, status, end_date, new_amount, "
+            "id, company_id, tenant_company_id, sales_rep_id, status, end_date, previous_amount, new_amount, "
+            "currency, contract_type, inflation_base_rule, max_increase_limit, "
+            "inflation_data_source, inflation_source_name, inflation_source_institution, inflation_source_method, "
+            "auto_renew_enabled, auto_renew_term_months, renewed_from_contract_id, "
             "companies!contracts_company_id_fkey(company_name, authorized_email), "
             "tenant_companies:companies!contracts_tenant_company_id_fkey(company_name, authorized_email)"
         )
@@ -168,19 +232,39 @@ def run_renewal_automation(triggered_by="system", summary_to_email=None):
         tid_k = _tenant_key(contract.get("tenant_company_id"))
         tenant_agg[tid_k]["checked"] += 1
 
+        tenant_company_id = contract.get("tenant_company_id")
+        settings = get_company_automation_settings(tenant_company_id)
+        contract_id = contract["id"]
+
+        if not settings.get("auto_renewal_enabled"):
+            results["skipped"] += 1
+            tenant_agg[tid_k]["skipped"] += 1
+            continue
+
         status = contract.get("status")
+        if status == "client_approved":
+            created = _create_next_period_contract(contract, triggered_by)
+            if created:
+                results["renewed_created"] += 1
+                tenant_agg[tid_k]["renewed_created"] += 1
+            else:
+                results["skipped"] += 1
+                tenant_agg[tid_k]["skipped"] += 1
+            continue
+
         if _contract_is_final(status):
             results["skipped"] += 1
             tenant_agg[tid_k]["skipped"] += 1
             continue
 
-        tenant_company_id = contract.get("tenant_company_id")
-        settings = get_company_automation_settings(tenant_company_id)
-        contract_id = contract["id"]
+        if not contract.get("auto_renew_enabled"):
+            results["skipped"] += 1
+            tenant_agg[tid_k]["skipped"] += 1
+            continue
 
         if settings["require_admin_approval_before_auto_renew"]:
-            if status != "pending_admin_approval":
-                supabase.table("contracts").update({"status": "pending_admin_approval"}).eq(
+            if status != "admin_review":
+                supabase.table("contracts").update({"status": "admin_review"}).eq(
                     "id", contract_id
                 ).execute()
                 add_contract_approval_log(
@@ -208,9 +292,9 @@ def run_renewal_automation(triggered_by="system", summary_to_email=None):
                         tenant_agg[tid_k]["emails_sent"] += 1
             continue
 
-        if status != "pending_client":
+        if status != "sent_to_client":
             update_payload = {
-                "status": "pending_client",
+                "status": "sent_to_client",
                 "sent_to_client_at": datetime.now(timezone.utc).isoformat(),
             }
             supabase.table("contracts").update(update_payload).eq("id", contract_id).execute()

@@ -223,6 +223,8 @@ def create_contract():
         "currency": body.get("currency", "TRY"),
         "contract_type": body.get("contract_type", "service_contract"),
         "end_date": end_date,
+        "auto_renew_enabled": bool(body.get("auto_renew_enabled", False)),
+        "auto_renew_term_months": int(body.get("auto_renew_term_months") or 12),
         "inflation_base_rule": body.get("inflation_base_rule", "TUFE"),
         "max_increase_limit": body.get("max_increase_limit"),
         "inflation_data_source": body.get("inflation_data_source", "tcmb_evds"),
@@ -317,6 +319,8 @@ def update_contract(contract_id):
         "new_amount",
         "applied_adjustment",
         "rejection_notes",
+        "auto_renew_enabled",
+        "auto_renew_term_months",
     ]
     data = {k: v for k, v in body.items() if k in allowed}
     try:
@@ -350,6 +354,8 @@ def save_draft(contract_id):
         "inflation_source_method",
         "new_amount",
         "applied_adjustment",
+        "auto_renew_enabled",
+        "auto_renew_term_months",
     ]
     data = {k: v for k, v in body.items() if k in allowed}
     data["status"] = "draft"

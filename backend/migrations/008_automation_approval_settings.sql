@@ -1,6 +1,7 @@
 create table if not exists public.company_settings (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null unique references public.companies(id) on delete cascade,
+  auto_renewal_enabled boolean not null default false,
   require_admin_approval_before_auto_renew boolean not null default true,
   automation_email_enabled boolean not null default true,
   automation_notice_email text null,

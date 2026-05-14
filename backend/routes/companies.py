@@ -471,16 +471,33 @@ def revenue_analysis():
         d = _date_from_value(value)
         return bool(d and period_start <= d <= period_end)
 
-    non_rejected_all = [r for r in rows if r.get("status") != "cancelled"]
+    non_rejected_all = [
+        r for r in rows if r.get("status") not in ("client_rejected", "cancelled")
+    ]
     period_rows = [r for r in rows if _in_period(r.get("created_at"), include_missing_for_all=True)]
-    non_rejected = [r for r in period_rows if r.get("status") != "cancelled"]
+    non_rejected = [
+        r for r in period_rows if r.get("status") not in ("client_rejected", "cancelled")
+    ]
     active_like = [
         r
         for r in non_rejected
         if r.get("status", "draft") not in ("client_approved", "cancelled")
     ]
 
-    total_portfolio_value = sum(float(r.get("previous_amount") or 0) for r in non_rejected)
+    def _money(value):
+        try:
+            return float(value) if value is not None and str(value).strip() != "" else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _current_portfolio_value(row):
+        if row.get("status") == "client_approved":
+            approved_amount = _money(row.get("new_amount"))
+            if approved_amount > 0:
+                return approved_amount
+        return _money(row.get("previous_amount"))
+
+    total_portfolio_value = sum(_current_portfolio_value(r) for r in non_rejected)
     active_contracts = len(active_like)
 
     uplift_numerator = 0.0
@@ -529,7 +546,7 @@ def revenue_analysis():
         if key not in by_client:
             by_client[key] = {"company_id": cid, "company_name": name, "contract_count": 0, "value": 0.0}
         by_client[key]["contract_count"] += 1
-        by_client[key]["value"] += float(r.get("previous_amount") or 0)
+        by_client[key]["value"] += _current_portfolio_value(r)
 
     top_clients = sorted(by_client.values(), key=lambda x: x["value"], reverse=True)[:8]
 

@@ -231,6 +231,8 @@ function ContractList() {
     currency: "TRY",
     contract_type: "service_contract",
     end_date: "",
+    auto_renew_enabled: false,
+    auto_renew_term_months: 12,
     inflation_base_rule: "TUFE",
     max_increase_limit: "",
     inflation_data_source: DEFAULT_MARKET_SOURCE.key,
@@ -406,6 +408,8 @@ function ContractList() {
         currency: "TRY",
         contract_type: "service_contract",
         end_date: "",
+        auto_renew_enabled: false,
+        auto_renew_term_months: 12,
         inflation_base_rule: "TUFE",
         max_increase_limit: "",
         inflation_data_source: DEFAULT_MARKET_SOURCE.key,
@@ -799,6 +803,50 @@ function ContractList() {
                       Select <strong>Custom</strong> to enter a manual value.
                     </p>
                   )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface-alt p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={form.auto_renew_enabled}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            auto_renew_enabled: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>
+                        <span className="block text-sm font-bold">
+                          Enable automatic renewal for this contract
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-text-muted">
+                          Uses the company automation policy. A new renewal period can be created from this contract when it reaches renewal time.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex shrink-0 items-center gap-2 text-xs font-semibold uppercase text-text-muted">
+                      Renewal term
+                      <select
+                        className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-text outline-none focus:border-primary disabled:opacity-50"
+                        value={form.auto_renew_term_months}
+                        disabled={!form.auto_renew_enabled}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            auto_renew_term_months: Number(e.target.value),
+                          })
+                        }
+                      >
+                        <option value={6}>6 months</option>
+                        <option value={12}>12 months</option>
+                        <option value={24}>24 months</option>
+                      </select>
+                    </label>
                   </div>
                 </div>
 
@@ -2173,11 +2221,9 @@ function ContractDetail() {
     String(user.company_id) === String(contract.company_id);
   const canClientDecide =
     isClientSide && ["user", "company_admin"].includes(user?.role);
-  const isFinalized = [
-    "admin_approved",
+  const isEmailLocked = [
     "sent_to_client",
     "client_approved",
-    "client_rejected",
     "cancelled",
   ].includes(contractStatus);
 
@@ -2451,8 +2497,8 @@ function ContractDetail() {
           </div>
 
           {/* Stats Row */}
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:mb-8 md:grid-cols-4">
-            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-border bg-surface p-4 sm:p-5">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 md:grid-cols-4">
+            <div className="flex min-h-[7rem] flex-col justify-center rounded-lg border border-border bg-surface p-4">
               <p className="text-xs font-medium text-text-muted sm:text-sm">
                 Current Contract Value
               </p>
@@ -2460,7 +2506,7 @@ function ContractDetail() {
                 {formatCurrency(amount)}
               </p>
             </div>
-            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-border bg-surface p-4 sm:p-5">
+            <div className="flex min-h-[7rem] flex-col justify-center rounded-lg border border-border bg-surface p-4">
               <p className="text-xs font-medium text-text-muted sm:text-sm">
                 Inflation Adjustment ({editRule})
               </p>
@@ -2473,7 +2519,7 @@ function ContractDetail() {
                 </p>
               )}
             </div>
-            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-border bg-surface p-4 sm:p-5">
+            <div className="flex min-h-[7rem] flex-col justify-center rounded-lg border border-border bg-surface p-4">
               <p className="text-xs font-medium text-text-muted sm:text-sm">
                 Price Difference
               </p>
@@ -2481,7 +2527,7 @@ function ContractDetail() {
                 +{formatCurrency(liveDifference)}
               </p>
             </div>
-            <div className="flex min-h-[9.5rem] flex-col justify-center rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-5">
+            <div className="flex min-h-[7rem] flex-col justify-center rounded-lg border border-primary/20 bg-primary-soft p-4">
               <p className="text-xs font-bold text-primary sm:text-sm">
                 Calculated New Price
               </p>
@@ -2819,7 +2865,7 @@ function ContractDetail() {
             </div>
 
             {/* ── Right Column ── */}
-            <div className="space-y-4 xl:col-span-5">
+            <div className="space-y-4 xl:sticky xl:top-6 xl:col-span-5 xl:self-start">
               {/* === CONTRACT ACTIONS CARD === */}
               <section className="overflow-hidden rounded-xl border border-border bg-surface">
                 <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-5">
@@ -2968,9 +3014,6 @@ function ContractDetail() {
                 </div>
               </section>
 
-              {/* Chat Panel */}
-              <ChatPanel contractId={id} />
-
               {/* AI Email Composer — only for Sales and Admin roles */}
               {isTenantSide && ["sales", "company_admin", "super_admin"].includes(
                 user?.role,
@@ -3005,7 +3048,7 @@ function ContractDetail() {
                         </div>
                         <button
                           onClick={handleGenerateEmail}
-                          disabled={aiLoading || isFinalized}
+                          disabled={aiLoading || isEmailLocked}
                           className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-primary-dark hover:shadow-lg disabled:opacity-50"
                         >
                           {aiLoading ? (
@@ -3049,7 +3092,7 @@ function ContractDetail() {
                           </label>
                           <button
                             onClick={handleGenerateEmail}
-                            disabled={aiLoading}
+                            disabled={aiLoading || isEmailLocked}
                             className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:opacity-50"
                             title="Regenerate with AI"
                           >
@@ -3100,6 +3143,8 @@ function ContractDetail() {
                   </div>
                 </section>
               )}
+
+              <ChatPanel contractId={id} />
 
               {/* Finance: Internal Notes reminder */}
               {user?.role === "finance" && (

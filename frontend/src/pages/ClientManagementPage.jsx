@@ -60,6 +60,7 @@ export default function ClientManagementPage() {
   const [automationSaving, setAutomationSaving] = useState(false)
   const [automationRunning, setAutomationRunning] = useState(false)
   const [automationSettings, setAutomationSettings] = useState({
+    auto_renewal_enabled: false,
     require_admin_approval_before_auto_renew: true,
     automation_email_enabled: true,
   })
@@ -118,6 +119,7 @@ export default function ClientManagementPage() {
     getAutomationSettings(user?.role === 'super_admin' ? '' : user?.company_id)
       .then((data) => {
         setAutomationSettings({
+          auto_renewal_enabled: !!data?.auto_renewal_enabled,
           require_admin_approval_before_auto_renew: !!data?.require_admin_approval_before_auto_renew,
           automation_email_enabled: !!data?.automation_email_enabled,
         })
@@ -177,7 +179,7 @@ export default function ClientManagementPage() {
     try {
       const res = await runRenewalAutomation()
       showToast(
-        `Done: checked ${res.checked}, pending admin approval ${res.pending_admin_approval}, emails sent ${res.emails_sent}`,
+        `Done: checked ${res.checked}, new periods ${res.renewed_created || 0}, pending admin approval ${res.pending_admin_approval}, emails sent ${res.emails_sent}`,
       )
       await loadReport()
     } catch (err) {
@@ -242,15 +244,29 @@ export default function ClientManagementPage() {
             <div className="mb-4">
               <h3 className="text-lg font-bold text-text">Company Admin - Renewal Automation</h3>
               <p className="mt-1 text-sm text-text-muted">
-                Summary and admin notifications use the company admin user email on record. When you click
-                Run automation now, the run summary is sent to your logged-in account email. Optional control
-                CC is configured on the server.
+                Company admins control whether eligible contracts can renew automatically. Individual contracts
+                must also have automatic renewal enabled, so teams can opt in contract by contract.
               </p>
             </div>
             {automationLoading ? (
               <div className="py-4"><Spinner size="md" /></div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="flex items-center gap-3 rounded-lg border border-border p-3">
+                  <input
+                    type="checkbox"
+                    checked={automationSettings.auto_renewal_enabled}
+                    onChange={(e) =>
+                      setAutomationSettings((prev) => ({
+                        ...prev,
+                        auto_renewal_enabled: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm font-medium">
+                    Enable automatic renewal for eligible contracts
+                  </span>
+                </label>
                 <label className="flex items-center gap-3 rounded-lg border border-border p-3">
                   <input
                     type="checkbox"

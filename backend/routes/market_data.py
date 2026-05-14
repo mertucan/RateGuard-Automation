@@ -98,6 +98,7 @@ def dashboard_stats():
                 "eur": 0,
                 "expiring_calendar": [],
                 "active_contracts_count": 0,
+                "portfolio_contracts_count": 0,
                 "total_portfolio_value_try": 0,
                 "renewed_contracts_count": 0,
                 "renewed_uplift_try": 0,
@@ -132,7 +133,11 @@ def dashboard_stats():
 
     active_contracts = [
         c for c in contracts
-        if c.get("status", "draft") not in ("client_approved", "cancelled")
+        if c.get("status", "draft") not in ("client_approved", "client_rejected", "cancelled")
+    ]
+    portfolio_contracts = [
+        c for c in contracts
+        if c.get("status", "draft") not in ("client_rejected", "cancelled")
     ]
 
     expiring_30 = [c for c in active_contracts if c.get("end_date") and today_s <= c["end_date"] <= t30]
@@ -164,9 +169,20 @@ def dashboard_stats():
     ufe = market.get("ufe", 0)
     avg_adjustment = round((tufe + ufe) / 2, 1) if (tufe or ufe) else 0
 
-    total_portfolio_value = sum(
-        float(c.get("previous_amount") or 0) for c in active_contracts
-    )
+    def _money(value):
+        try:
+            return float(value) if value is not None and str(value).strip() != "" else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _current_portfolio_value(contract):
+        if contract.get("status") == "client_approved":
+            approved_amount = _money(contract.get("new_amount"))
+            if approved_amount > 0:
+                return approved_amount
+        return _money(contract.get("previous_amount"))
+
+    total_portfolio_value = sum(_current_portfolio_value(c) for c in portfolio_contracts)
 
     renewed_contracts = [
         c
@@ -232,6 +248,7 @@ def dashboard_stats():
         "eur": market.get("eur", 0),
         "expiring_calendar": calendar_rows,
         "active_contracts_count": len(active_contracts),
+        "portfolio_contracts_count": len(portfolio_contracts),
         "total_portfolio_value_try": round(total_portfolio_value, 2),
         "renewed_contracts_count": renewed_contracts_count,
         "renewed_uplift_try": round(renewed_uplift, 2),

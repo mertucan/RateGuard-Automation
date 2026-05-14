@@ -125,6 +125,7 @@ export default function MainDashboardPage() {
   const expiringCount = stats?.expiring_30 ?? 0
   const pendingCount = stats?.pending_approvals ?? 0
   const portfolioValue = stats?.total_portfolio_value_try
+  const portfolioCount = stats?.portfolio_contracts_count ?? activeCount
   const actionLoad = Math.min(100, activeCount ? Math.round(((expiringCount + pendingCount) / activeCount) * 100) : 0)
 
   return (
@@ -197,7 +198,7 @@ export default function MainDashboardPage() {
                 <p className="mt-1 truncate text-xl font-extrabold tabular-nums">
                   {portfolioValue != null ? formatCurrency(portfolioValue) : '\u2014'}
                 </p>
-                <p className="mt-1 text-xs text-text-muted">{activeCount || '\u2014'} active contracts tracked</p>
+                <p className="mt-1 text-xs text-text-muted">{portfolioCount || '\u2014'} contracts in portfolio</p>
               </div>
               <div className="rounded-xl border border-border bg-surface-alt p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Market pulse</p>
@@ -276,7 +277,7 @@ export default function MainDashboardPage() {
             </div>
             <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-text-muted">Portfolio (active)</p>
+                <p className="text-sm font-medium text-text-muted">Portfolio value</p>
                 <span className="material-symbols-outlined rounded-lg bg-emerald-500/15 p-1.5 text-emerald-600 text-[22px]">account_balance</span>
               </div>
               <p className="mt-2 text-lg font-bold tabular-nums sm:text-2xl">
@@ -287,7 +288,7 @@ export default function MainDashboardPage() {
               <p className="mt-2 text-xs text-text-muted">
                 {stats?.active_contracts_count != null
                   ? `${stats.active_contracts_count} open contracts`
-                  : 'Booked value excl. finalized'}
+                  : 'Booked value'}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">

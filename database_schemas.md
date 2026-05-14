@@ -91,8 +91,12 @@ create table public.contracts (
   sent_to_client_at timestamp with time zone null,
   currency character varying(3) null default 'TRY'::character varying,
   contract_type text null default 'service_contract'::text,
+  auto_renew_enabled boolean not null default false,
+  auto_renew_term_months integer not null default 12,
+  renewed_from_contract_id uuid null,
   constraint contracts_pkey primary key (id),
   constraint contracts_company_id_fkey foreign KEY (company_id) references companies (id),
+  constraint contracts_renewed_from_contract_id_fkey foreign KEY (renewed_from_contract_id) references contracts (id) on delete set null,
   constraint contracts_sales_rep_id_fkey foreign KEY (sales_rep_id) references users (id),
   constraint contracts_tenant_company_id_fkey foreign KEY (tenant_company_id) references companies (id)
 ) TABLESPACE pg_default;
@@ -160,3 +164,17 @@ create index IF not exists idx_audit_logs_user_id on public.audit_logs using btr
 create index IF not exists idx_audit_logs_entity_type on public.audit_logs using btree (entity_type) TABLESPACE pg_default;
 
 create index IF not exists idx_audit_logs_created_at on public.audit_logs using btree (created_at desc) TABLESPACE pg_default;
+
+create table public.company_settings (
+  id uuid not null default gen_random_uuid (),
+  company_id uuid not null,
+  auto_renewal_enabled boolean not null default false,
+  require_admin_approval_before_auto_renew boolean not null default true,
+  automation_email_enabled boolean not null default true,
+  automation_notice_email text null,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint company_settings_pkey primary key (id),
+  constraint company_settings_company_id_key unique (company_id),
+  constraint company_settings_company_id_fkey foreign KEY (company_id) references companies (id) on delete CASCADE
+) TABLESPACE pg_default;
