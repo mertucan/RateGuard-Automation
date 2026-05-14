@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { getApplications, reviewApplication } from '../api'
 import Spinner from '../components/Spinner'
 
-const DEPT_LABELS = { sales: 'Sales', finance: 'Finance' }
+const DEPT_LABELS = { sales: 'Sales', finance: 'Finance', hr: 'HR' }
 const STATUS_BADGES = {
   pending: 'bg-amber-500/10 text-amber-500',
   approved: 'bg-emerald-500/10 text-emerald-500',
@@ -11,6 +12,7 @@ const STATUS_BADGES = {
 }
 
 export default function ApplicationManagementPage() {
+  const { user } = useAuth()
   const { success: toastSuccess, error: toastError } = useToast()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
@@ -55,13 +57,18 @@ export default function ApplicationManagementPage() {
     rejected: applications.filter(a => a.status === 'rejected').length,
   }
 
+  const scopeText =
+    user?.role === 'super_admin'
+      ? 'Review and approve applications across all companies.'
+      : 'Review and approve applications submitted to your assigned company.'
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
       <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
         <div>
           <h2 className="text-xl font-bold sm:text-2xl">Application Management</h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">
-            Review and approve user applications to your company's departments.
+            {scopeText}
           </p>
         </div>
         {counts.pending > 0 && (
@@ -128,6 +135,11 @@ export default function ApplicationManagementPage() {
                         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
                           {DEPT_LABELS[app.target_department] || app.target_department}
                         </span>
+                        {user?.role === 'super_admin' && app.company?.company_name && (
+                          <span className="rounded-full bg-surface-alt px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+                            {app.company.company_name}
+                          </span>
+                        )}
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_BADGES[app.status] || ''}`}>
                           {app.status}
                         </span>

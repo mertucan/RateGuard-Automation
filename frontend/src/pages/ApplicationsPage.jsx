@@ -3,7 +3,7 @@ import { useToast } from '../contexts/ToastContext'
 import { getApplications, createApplication } from '../api'
 import Spinner from '../components/Spinner'
 
-const DEPT_LABELS = { sales: 'Sales', finance: 'Finance' }
+const DEPT_LABELS = { sales: 'Sales', finance: 'Finance', hr: 'HR' }
 const STATUS_BADGES = {
   pending: 'bg-amber-500/10 text-amber-500',
   approved: 'bg-emerald-500/10 text-emerald-500',
@@ -108,7 +108,7 @@ export default function ApplicationsPage() {
             >
               <h3 className="text-lg font-bold">Apply to a Department</h3>
               <p className="text-sm text-text-muted">
-                Select a company and department. The company admin will review your application and
+                Select a company and department. The company HR team will review your application and
                 may assign you to their team.
               </p>
 
@@ -136,6 +136,7 @@ export default function ApplicationsPage() {
                 >
                   <option value="sales">Sales</option>
                   <option value="finance">Finance</option>
+                  <option value="hr">HR</option>
                 </select>
               </div>
 

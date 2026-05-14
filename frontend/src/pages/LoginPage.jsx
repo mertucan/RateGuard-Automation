@@ -28,11 +28,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="antialiased bg-mesh min-h-screen flex flex-col items-center justify-center p-6 relative">
+    <div className="antialiased bg-mesh min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
       <div className="geometric-overlay"></div>
 
-      <div className="relative z-10 mb-10 flex flex-col items-center">
-        <div className="text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-primary/10 to-transparent" />
+
+      <div className="relative z-10 mb-8 flex flex-col items-center">
+        <Link to="/" className="text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3">
           <span
             className="material-symbols-outlined text-4xl"
             data-icon="security"
@@ -41,21 +43,45 @@ export default function LoginPage() {
             security
           </span>
           RateGuard
-        </div>
+        </Link>
         <div className="mt-2 text-xs uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
-          Contract Management Platform
+          Renewal Intelligence Platform
         </div>
       </div>
 
-      <div className="relative z-10 w-full max-w-[440px]">
-        <div className="relative bg-surface-container-low border border-outline-variant/10 rounded-xl p-10 sovereign-glow">
-          <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 blur-[80px] rounded-full"></div>
+      <div className="relative z-10 grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low shadow-2xl shadow-primary/10 lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="hidden border-r border-outline-variant/20 bg-surface-container-highest/60 p-10 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <span className="inline-flex rounded-full bg-primary-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+              Secure access
+            </span>
+            <h1 className="headline-font mt-6 text-3xl font-extrabold tracking-tight text-on-surface">
+              Continue managing renewals with full operational context.
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-on-surface-variant">
+              Sign in to review contract deadlines, approval queues, market-based calculations, client decisions, and company applications.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {['TCMB data', 'Role access', 'Audit logs', 'AI drafts'].map((item) => (
+              <div key={item} className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-3">
+                <span className="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+                <p className="mt-1 text-xs font-semibold text-on-surface">{item}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <div className="relative z-10">
+        <div className="relative p-6 sm:p-10">
+          <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/10 blur-[70px]"></div>
+          <div className="relative z-10 mx-auto max-w-[420px]">
             <div className="text-center mb-8">
               <h2 className="font-headline text-2xl font-bold text-on-surface mb-2 tracking-tight">
                 Sign In
               </h2>
+              <p className="text-sm text-on-surface-variant">
+                Enter your credentials to open your RateGuard workspace.
+              </p>
             </div>
 
             <form className="space-y-6" onSubmit={handleSubmit}>
@@ -158,9 +184,9 @@ export default function LoginPage() {
           © 2026 RateGuard Intelligence
         </div>
         <div className="flex flex-wrap justify-center gap-8">
-          <a className="hover:text-primary transition-colors" href="#">Privacy</a>
-          <a className="hover:text-primary transition-colors" href="#">Security</a>
-          <a className="hover:text-primary transition-colors" href="#">Compliance</a>
+          <Link className="hover:text-primary transition-colors" to="/privacy-policy">Privacy</Link>
+          <Link className="hover:text-primary transition-colors" to="/terms-of-service">Terms</Link>
+          <Link className="hover:text-primary transition-colors" to="/contact">Contact</Link>
         </div>
       </footer>
     </div>

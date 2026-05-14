@@ -313,7 +313,7 @@ def send_finance_ready_notification(
 def send_application_notification_email(
     to_email, applicant_name, applicant_email, company_name, department, message, application_id
 ):
-    dept_label = {"sales": "Sales", "finance": "Finance"}.get(department, department.capitalize())
+    dept_label = {"sales": "Sales", "finance": "Finance", "hr": "HR"}.get(department, department.capitalize())
     subject = f"Yeni Başvuru — {company_name} {dept_label} Departmanına"
     msg_html = f'<p style="color: #334155; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 0;">{message}</p>' if message else '<p style="color: #94a3b8; font-size: 14px;">Başvuru mesajı girilmedi.</p>'
     body_html = f"""

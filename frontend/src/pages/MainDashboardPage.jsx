@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getDashboardStats, getContracts } from '../api'
@@ -12,6 +12,37 @@ export default function MainDashboardPage() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [calendarDay, setCalendarDay] = useState(null)
+  const calendarBoxRef = useRef(null)
+  const [calendarBoxHeight, setCalendarBoxHeight] = useState(null)
+  const [isLg, setIsLg] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mql = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => setIsLg(!!mql.matches)
+    onChange()
+    if (mql.addEventListener) mql.addEventListener('change', onChange)
+    else mql.addListener(onChange)
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener('change', onChange)
+      else mql.removeListener(onChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = calendarBoxRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+
+    const updateHeight = () => {
+      const h = el.getBoundingClientRect?.().height
+      if (h) setCalendarBoxHeight(Math.round(h))
+    }
+    updateHeight()
+
+    const ro = new ResizeObserver(updateHeight)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -68,6 +99,13 @@ export default function MainDashboardPage() {
     return list.filter((r) => (r.end_date || '').slice(0, 10) === calendarDay)
   }, [stats, calendarDay])
 
+  const urgentExpirations = useMemo(() => {
+    return [...(stats?.expiring_calendar || [])]
+      .filter((item) => item.days_until != null && item.days_until <= 30)
+      .sort((a, b) => (a.days_until ?? 999) - (b.days_until ?? 999))
+      .slice(0, 3)
+  }, [stats])
+
   if (loading) return <PageLoader />
 
   const tufe = stats?.tufe || 0
@@ -87,77 +125,152 @@ export default function MainDashboardPage() {
   const showRenewals = ['super_admin', 'company_admin', 'finance', 'sales'].includes(role)
   const canCreateContract = ['super_admin', 'company_admin', 'sales'].includes(role)
 
+  const activeCount = stats?.active_contracts_count ?? 0
+  const expiringCount = stats?.expiring_30 ?? 0
+  const pendingCount = stats?.pending_approvals ?? 0
+  const portfolioValue = stats?.total_portfolio_value_try
+  const actionLoad = Math.min(100, activeCount ? Math.round(((expiringCount + pendingCount) / activeCount) * 100) : 0)
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-gradient-to-r from-surface via-surface to-primary/5 px-4 py-4 sm:px-8 sm:py-5">
-        <div className="min-w-0">
-          <h2 className="truncate text-xl font-bold sm:text-2xl">
-            {role === 'client' ? 'My Contracts' : 'Dashboard'}
-          </h2>
-          <p className="mt-1 hidden text-sm text-text-muted sm:block">
-            Welcome back, {user?.full_name || 'User'}
-            <span className="ml-2 inline-flex items-center rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
-              {ROLE_LABEL[role] || role}
-            </span>
-          </p>
-        </div>
-        {canCreateContract && (
-          <button
-            onClick={() => navigate('/renewal-review')}
-            className="shrink-0 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md shadow-primary/25 transition-colors hover:bg-primary-dark sm:text-sm"
-          >
-            New contract
-          </button>
-        )}
-      </header>
+      <div className="flex-1 overflow-y-auto">
+        <div className="border-b border-border bg-surface">
+          <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-8 sm:py-7">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary">
+                    <span className="material-symbols-outlined text-[16px]">verified_user</span>
+                    {ROLE_LABEL[role] || role}
+                  </span>
+                  <span className="text-xs font-medium text-text-muted">
+                    {new Date().toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
+                <h2 className="headline-font truncate text-2xl font-extrabold tracking-tight sm:text-3xl">
+                  {role === 'client' ? 'My Contracts' : 'Renewal Command Center'}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
+                  Welcome back, {user?.full_name || 'User'}. Monitor contract deadlines,
+                  approval load, and market signals from one focused workspace.
+                </p>
+              </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="mx-auto w-full max-w-6xl space-y-6 sm:space-y-8">
+              <div className="flex flex-wrap gap-2">
+                {(showRenewals || role === 'client') && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/renewal-review')}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface-alt px-3.5 text-sm font-semibold text-text transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                  >
+                    <span className="material-symbols-outlined text-primary text-[20px]">description</span>
+                    Contracts
+                  </button>
+                )}
+                {canCreateContract && (
+                  <button
+                    onClick={() => navigate('/renewal-review')}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-md shadow-primary/25 transition-colors hover:bg-primary-dark"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                    New contract
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-3">
+              <div className="rounded-xl border border-border bg-surface-alt p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Attention load</p>
+                    <p className="mt-1 text-sm text-text-muted">{expiringCount + pendingCount} items need review</p>
+                  </div>
+                  <p className="text-2xl font-extrabold tabular-nums text-primary">{actionLoad}%</p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-border">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${actionLoad}%` }} />
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-surface-alt p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Portfolio value</p>
+                <p className="mt-1 truncate text-xl font-extrabold tabular-nums">
+                  {portfolioValue != null ? formatCurrency(portfolioValue) : '\u2014'}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">{activeCount || '\u2014'} active contracts tracked</p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface-alt p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Market pulse</p>
+                <div className="mt-2 flex items-baseline gap-3">
+                  <span className="text-xl font-extrabold tabular-nums">%{tufe.toFixed(1)}</span>
+                  <span className="text-sm font-semibold text-text-muted">TUFE</span>
+                  <span className="text-xl font-extrabold tabular-nums">%{ufe.toFixed(1)}</span>
+                  <span className="text-sm font-semibold text-text-muted">UFE</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 sm:px-8 sm:py-8">
           {/* Quick links */}
           {(showRenewals || role === 'client') && (
-            <nav className="flex flex-wrap gap-2">
+            <nav className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => navigate('/renewal-review')}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                className="flex min-h-16 items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
               >
-                <span className="material-symbols-outlined text-primary text-[20px]">description</span>
-                Contracts
+                <span>
+                  <span className="block text-sm font-bold">Contracts</span>
+                  <span className="mt-0.5 block text-xs text-text-muted">Review renewals and drafts</span>
+                </span>
+                <span className="material-symbols-outlined text-primary text-[22px]">description</span>
               </button>
               {['super_admin', 'company_admin'].includes(role) && (
                 <button
                   type="button"
                   onClick={() => navigate('/clients')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                  className="flex min-h-16 items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
                 >
-                  <span className="material-symbols-outlined text-primary text-[20px]">group</span>
-                  Clients
+                  <span>
+                    <span className="block text-sm font-bold">Clients</span>
+                    <span className="mt-0.5 block text-xs text-text-muted">Manage counterparties</span>
+                  </span>
+                  <span className="material-symbols-outlined text-primary text-[22px]">group</span>
                 </button>
               )}
               {['super_admin', 'company_admin', 'finance', 'user', 'client'].includes(role) && (
                 <button
                   type="button"
                   onClick={() => navigate('/analytics')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                  className="flex min-h-16 items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
                 >
-                  <span className="material-symbols-outlined text-primary text-[20px]">monitoring</span>
-                  Analytics
+                  <span>
+                    <span className="block text-sm font-bold">Analytics</span>
+                    <span className="mt-0.5 block text-xs text-text-muted">Track revenue impact</span>
+                  </span>
+                  <span className="material-symbols-outlined text-primary text-[22px]">monitoring</span>
                 </button>
               )}
             </nav>
           )}
 
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 sm:gap-4">
+            <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-text-muted">Expiring (30d)</p>
                 <span className="material-symbols-outlined rounded-lg bg-amber-500/15 p-1.5 text-amber-600 text-[22px]">event_upcoming</span>
               </div>
               <p className="mt-2 text-2xl font-bold tabular-nums sm:text-3xl">{stats?.expiring_30 ?? '\u2014'}</p>
-              <p className="mt-2 text-xs text-text-muted">Needs review soon</p>
+              <p className="mt-2 text-xs text-text-muted">Contracts ending within 30 days</p>
             </div>
-            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+            <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-text-muted">Pending approvals</p>
                 <span className="material-symbols-outlined rounded-lg bg-primary/15 p-1.5 text-primary text-[22px]">pending_actions</span>
@@ -165,7 +278,7 @@ export default function MainDashboardPage() {
               <p className="mt-2 text-2xl font-bold tabular-nums sm:text-3xl">{stats?.pending_approvals ?? '\u2014'}</p>
               <p className="mt-2 text-xs text-text-muted">Due within 60 days</p>
             </div>
-            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+            <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-text-muted">Portfolio (active)</p>
                 <span className="material-symbols-outlined rounded-lg bg-emerald-500/15 p-1.5 text-emerald-600 text-[22px]">account_balance</span>
@@ -181,7 +294,7 @@ export default function MainDashboardPage() {
                   : 'Booked value excl. finalized'}
               </p>
             </div>
-            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+            <div className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-sm font-medium text-text-muted">Avg. adjustment</p>
                 <span className="material-symbols-outlined rounded-lg bg-violet-500/15 p-1.5 text-violet-600 text-[22px]">percent</span>
@@ -191,14 +304,50 @@ export default function MainDashboardPage() {
             </div>
           </div>
 
+          {urgentExpirations.length > 0 && (
+            <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined rounded-lg bg-amber-500/20 p-2 text-amber-600 text-[22px]">priority_high</span>
+                  <div>
+                    <h3 className="text-sm font-bold">Priority renewals</h3>
+                    <p className="mt-1 text-sm text-text-muted">Closest deadlines are ready for review.</p>
+                  </div>
+                </div>
+                <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3 lg:max-w-3xl">
+                  {urgentExpirations.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => navigate(`/renewal-review/${item.id}`)}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/20 bg-surface px-3 py-2 text-left transition-colors hover:border-amber-500/50"
+                    >
+                      <span className="min-w-0 truncate text-sm font-semibold">{item.company_name}</span>
+                      <span className="shrink-0 text-xs font-bold text-amber-600">{item.days_until}d</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Contract expiry calendar (next 120 days) */}
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
-            <ContractExpiryCalendar
-              events={stats?.expiring_calendar || []}
-              selectedDay={calendarDay}
-              onDaySelect={setCalendarDay}
-            />
-            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
+            <div ref={calendarBoxRef}>
+              <ContractExpiryCalendar
+                events={stats?.expiring_calendar || []}
+                selectedDay={calendarDay}
+                onDaySelect={setCalendarDay}
+              />
+            </div>
+            <div
+              className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-6"
+              style={
+                isLg && calendarBoxHeight
+                  ? { height: `${calendarBoxHeight}px` }
+                  : undefined
+              }
+            >
               <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="text-lg font-bold">Upcoming expirations</h3>
@@ -218,7 +367,10 @@ export default function MainDashboardPage() {
                   </button>
                 )}
               </div>
-              <ul className="max-h-64 space-y-2 overflow-y-auto sm:max-h-80">
+              <ul
+                className="rg-scroll min-h-0 flex-1 space-y-2 overflow-y-scroll pr-1"
+                style={{ scrollbarGutter: 'stable' }}
+              >
                 {upcomingFiltered.length === 0 ? (
                   <li className="rounded-lg border border-border bg-surface-alt px-4 py-6 text-center text-sm text-text-muted">
                     No contracts in this view.
@@ -270,7 +422,7 @@ export default function MainDashboardPage() {
           {/* Market Data + Alerts (visible to admin/finance roles) */}
           {showMarket && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:gap-6">
-              <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6 lg:col-span-2">
+              <section className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-6 lg:col-span-2">
                 <h3 className="text-lg font-bold">Market Snapshot</h3>
                 <p className="text-sm text-text-muted">Live data from TCMB (Central Bank of Turkey) EVDS API. Rates are updated daily.</p>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 md:grid-cols-4">
@@ -301,7 +453,7 @@ export default function MainDashboardPage() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-primary/25 bg-gradient-to-b from-primary-soft to-surface p-4 shadow-sm sm:p-6">
+              <section className="rounded-xl border border-primary/25 bg-primary-soft p-4 shadow-sm sm:p-6">
                 <h3 className="text-lg font-bold text-primary">Market Alerts</h3>
                 <div className="mt-4 space-y-3">
                   {tufe > 40 && (
@@ -335,7 +487,7 @@ export default function MainDashboardPage() {
 
           {/* Pending Renewals Table */}
           {showRenewals && (
-            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
               <div className="border-b border-border p-4 sm:p-6">
                 <h3 className="text-lg font-bold">Pending Renewals</h3>
                 <p className="mt-1 text-sm text-text-muted">
@@ -426,7 +578,7 @@ export default function MainDashboardPage() {
 
           {/* Client role: simplified view */}
           {role === 'client' && (
-            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
               <div className="border-b border-border p-4 sm:p-6">
                 <h3 className="text-lg font-bold">Your Contracts</h3>
                 <p className="mt-1 text-sm text-text-muted">

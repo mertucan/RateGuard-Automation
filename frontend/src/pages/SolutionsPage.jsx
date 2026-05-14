@@ -1,100 +1,73 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { useTheme } from '../hooks/useTheme';
+import { Link } from 'react-router-dom'
+import MarketingLayout from '../components/MarketingLayout'
+
+const solutionBlocks = [
+  ['contract_edit', 'Renewal operations', 'Track end dates, calculate new prices, prepare drafts, and move contracts through approval without spreadsheet drift.'],
+  ['monitoring', 'Market data intelligence', 'Use official inflation and exchange-rate inputs to keep every renewal calculation explainable and repeatable.'],
+  ['groups', 'Role-based collaboration', 'Separate finance, sales, company admin, client, and HR responsibilities so each team sees only what it should act on.'],
+  ['assignment_ind', 'Application management', 'Let users apply to company departments and allow HR or admins to approve them within company scope.'],
+]
 
 export default function SolutionsPage() {
-  const { dark, toggle } = useTheme();
-
   return (
-    <div className="bg-bg text-text min-h-screen font-display selection:bg-primary selection:text-white">
-      <nav className="bg-surface/95 backdrop-blur-md fixed top-0 w-full z-50 border-b border-border shadow-sm transition-all duration-300">
-        <div className="flex justify-between items-center h-16 px-6 md:px-12 max-w-7xl mx-auto">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-2xl">shield</span>
-              <span className="text-2xl font-extrabold tracking-tighter">RateGuard</span>
-            </Link>
-            <div className="hidden md:flex items-center gap-6">
-              <Link to="/solutions" className="text-primary font-medium transition-colors">Solutions</Link>
-              <Link to="/about-us" className="text-text-muted hover:text-text transition-colors">About Us</Link>
-              <Link to="/key-benefits" className="text-text-muted hover:text-text transition-colors">Key Benefits</Link>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggle}
-              className="flex h-10 w-10 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-text"
-              title={dark ? 'Light mode' : 'Dark mode'}
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                {dark ? 'light_mode' : 'dark_mode'}
-              </span>
-            </button>
-            <Link to="/login" className="text-text hover:text-primary transition-colors font-medium">Log In</Link>
-            <Link to="/register" className="bg-primary text-white px-5 py-2.5 rounded-lg hover:bg-primary-dark transition-colors shadow-sm font-medium">Get Started</Link>
+    <MarketingLayout>
+      <section className="relative overflow-hidden border-b border-border">
+        <img
+          alt="Team reviewing financial operations"
+          className="absolute inset-0 h-full w-full object-cover"
+          src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1800&q=80"
+        />
+        <div className="absolute inset-0 bg-slate-950/70" />
+        <div className="relative mx-auto max-w-7xl px-6 py-24 md:px-10">
+          <div className="max-w-3xl">
+            <span className="text-sm font-bold uppercase tracking-wider text-primary">Solutions</span>
+            <h1 className="headline-font mt-3 text-4xl font-extrabold tracking-tight text-white md:text-5xl">
+              Operational tools for every renewal decision
+            </h1>
+            <p className="mt-5 text-lg leading-8 text-slate-200">
+              RateGuard connects contract dates, market rates, approval ownership, and team applications into one governed workflow.
+            </p>
           </div>
         </div>
-      </nav>
+      </section>
 
-      <main className="pt-24 pb-16 px-6 md:px-12 max-w-7xl mx-auto">
-        <div className="max-w-3xl">
-          <h1 className="text-4xl md:text-5xl font-extrabold mb-6">Our Solutions</h1>
-          <p className="text-text-muted text-lg leading-relaxed mb-12">
-            Discover how RateGuard's autonomous systems can help your business manage complex data, eliminate calculation errors, and stay compliant with ever-changing regulations.
-          </p>
+      <section className="px-6 py-20 md:px-10">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-4 md:grid-cols-2">
+          {solutionBlocks.map(([icon, title, text]) => (
+            <article key={title} className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <span className="material-symbols-outlined rounded-lg bg-primary-soft p-2 text-primary text-[26px]">{icon}</span>
+                <div>
+                  <h2 className="text-xl font-bold">{title}</h2>
+                  <p className="mt-3 text-sm leading-6 text-text-muted">{text}</p>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
+      </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-surface-alt border border-border rounded-2xl p-8 hover:shadow-lg transition-all duration-300">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6">
-              <span className="material-symbols-outlined text-2xl">apartment</span>
-            </div>
-            <h3 className="text-xl font-bold mb-3">For Enterprises</h3>
-            <p className="text-text-muted mb-6">Automate thousands of contracts across multiple departments. Ensure perfect alignment with corporate policies and central bank data.</p>
-            <Link to="/register" className="text-primary font-medium hover:underline flex items-center gap-1">
-              Start Enterprise Trial <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </Link>
-          </div>
-          <div className="bg-surface-alt border border-border rounded-2xl p-8 hover:shadow-lg transition-all duration-300">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6">
-              <span className="material-symbols-outlined text-2xl">storefront</span>
-            </div>
-            <h3 className="text-xl font-bold mb-3">For Growing Businesses</h3>
-            <p className="text-text-muted mb-6">Protect your margins from inflation without hiring a large legal and finance team. RateGuard handles the complexity for you.</p>
-            <Link to="/register" className="text-primary font-medium hover:underline flex items-center gap-1">
-              Get Started <span className="material-symbols-outlined text-sm">arrow_forward</span>
+      <section className="border-y border-border bg-surface px-6 py-20 md:px-10">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
+            <h2 className="headline-font text-3xl font-extrabold tracking-tight">From intake to signed renewal</h2>
+            <p className="mt-4 text-base leading-7 text-text-muted">
+              Your team can create contracts, calculate inflation-based increases, generate client communication, send approvals, and keep audit trails from the same system.
+            </p>
+            <Link to="/contact" className="mt-7 inline-flex rounded-lg bg-primary px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark">
+              Talk to us
             </Link>
           </div>
-        </div>
-      </main>
-
-      <footer className="bg-surface w-full border-t border-border">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 py-16 px-6 md:px-12 max-w-7xl mx-auto">
-          <div className="flex flex-col gap-4 pr-8">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-xl">shield</span>
-              <span className="text-xl font-extrabold tracking-tighter">RateGuard</span>
-            </div>
-            <p className="text-text-muted text-sm leading-relaxed">Calculated Security. Autonomous contract management platform preventing financial loss through advanced AI and live data integration.</p>
-            <p className="text-text-muted/60 text-xs mt-4">© 2026 RateGuard. All rights reserved.</p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h4 className="font-semibold text-text mb-2">Platform</h4>
-            <Link to="/solutions" className="text-text-muted hover:text-primary transition-colors text-sm">Solutions</Link>
-            <Link to="/key-benefits" className="text-text-muted hover:text-primary transition-colors text-sm">Key Benefits</Link>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h4 className="font-semibold text-text mb-2">Company</h4>
-            <Link to="/about-us" className="text-text-muted hover:text-primary transition-colors text-sm">About Us</Link>
-            <Link to="/register" className="text-text-muted hover:text-primary transition-colors text-sm">Contact</Link>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h4 className="font-semibold text-text mb-2">Legal</h4>
-            <Link to="/register" className="text-text-muted hover:text-primary transition-colors text-sm">Privacy Policy</Link>
-            <Link to="/register" className="text-text-muted hover:text-primary transition-colors text-sm">Terms of Service</Link>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {['Create or import contract', 'Calculate new amount', 'Finance and admin review', 'Client approval and PDF archive'].map((step, idx) => (
+              <div key={step} className="rounded-xl border border-border bg-surface-alt p-5">
+                <p className="text-xs font-bold uppercase tracking-wider text-primary">Step {idx + 1}</p>
+                <p className="mt-3 text-lg font-bold">{step}</p>
+              </div>
+            ))}
           </div>
         </div>
-      </footer>
-    </div>
-  );
+      </section>
+    </MarketingLayout>
+  )
 }

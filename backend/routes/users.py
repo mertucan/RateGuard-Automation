@@ -8,7 +8,7 @@ from services.email_service import send_email
 
 users_bp = Blueprint("users", __name__)
 
-VALID_ROLES = {"super_admin", "company_admin", "finance", "sales", "user", "client"}  # "client" kept for backward compat
+VALID_ROLES = {"super_admin", "company_admin", "finance", "sales", "hr", "user", "client"}  # "client" kept for backward compat
 
 
 def _sanitize_user(user):

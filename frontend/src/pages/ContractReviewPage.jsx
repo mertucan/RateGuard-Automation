@@ -1972,6 +1972,20 @@ function ContractDetail() {
     [],
   );
 
+  const inflationBaseline = Math.max(tufe || 0, ufe || 0, 0);
+  const customExcessPp =
+    editRule === "CUSTOM" && inflationBaseline > 0
+      ? liveAdjustment - inflationBaseline
+      : 0;
+  const hasExcessiveIncreaseWarning =
+    liveAdjustment >= 60 ||
+    (amount > 0 && liveDifference / amount >= 0.5) ||
+    (editRule === "CUSTOM" && customExcessPp >= 10);
+  const excessiveIncreaseWarningText =
+    editRule === "CUSTOM" && customExcessPp >= 10
+      ? `Custom increase exceeds inflation baseline by ${customExcessPp.toFixed(1)}pp (+${liveAdjustment.toFixed(1)}%). Review before sending.`
+      : `High price increase (+${liveAdjustment.toFixed(1)}%, +${formatCurrency(liveDifference)}). Review before sending.`;
+
   const handleGenerateEmail = async () => {
     setAiLoading(true);
     try {
@@ -2441,11 +2455,11 @@ function ContractDetail() {
               <p className="mt-3 text-2xl font-black leading-tight text-primary sm:text-4xl">
                 {formatCurrency(liveNewPrice)}
               </p>
-              {liveAdjustment > 60 && (
+              {hasExcessiveIncreaseWarning && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-red-600">
                   <span className="material-symbols-outlined text-[18px]">warning</span>
                   <p className="mt-0.5 text-[11px] font-semibold leading-snug">
-                    Excessive increase ({liveAdjustment.toFixed(1)}%). Review before sending.
+                    {excessiveIncreaseWarningText}
                   </p>
                 </div>
               )}

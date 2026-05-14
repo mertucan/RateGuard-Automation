@@ -87,10 +87,13 @@ export default function RegisterPage() {
     "w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg py-3 pl-11 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:ring-1 focus:ring-primary/50 transition-all";
 
   return (
-    <div className="bg-mesh font-body text-on-surface min-h-screen flex flex-col items-center justify-center selection:bg-primary selection:text-on-primary antialiased px-4">
-      <header className="mb-12 text-center mt-8">
+    <div className="bg-mesh font-body text-on-surface min-h-screen flex flex-col items-center justify-center selection:bg-primary selection:text-on-primary antialiased px-4 relative overflow-hidden">
+      <div className="geometric-overlay" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-primary/10 to-transparent" />
+
+      <header className="relative z-10 mb-8 text-center mt-8">
         <div className="flex flex-col items-center gap-2">
-          <div className="text-3xl font-bold tracking-tighter text-primary font-headline flex items-center gap-3">
+          <Link to="/" className="text-3xl font-bold tracking-tighter text-primary font-headline flex items-center gap-3">
             <span
               className="material-symbols-outlined text-4xl"
               data-icon="security"
@@ -99,26 +102,52 @@ export default function RegisterPage() {
               security
             </span>
             RateGuard
-          </div>
+          </Link>
           <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-on-surface-variant font-semibold opacity-70">
-            Sovereign Intelligence
+            Renewal Intelligence Platform
           </div>
         </div>
       </header>
 
-      <main className="w-full max-w-[440px] relative">
-        <div className="absolute -inset-0.5 bg-linear-to-br from-primary/10 to-transparent rounded-xl blur-sm opacity-20" />
-        <div className="relative bg-surface-container-low border border-outline-variant/10 rounded-xl p-10 sovereign-glow">
-          <div className="mb-8">
-            <h2 className="font-headline text-xl font-bold text-on-surface">
-              Establish Node
-            </h2>
-            <p className="text-sm text-on-surface-variant mt-1">
-              Register institutional credentials for secure terminal access.
+      <main className="relative z-10 grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low shadow-2xl shadow-primary/10 lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="hidden border-r border-outline-variant/20 bg-surface-container-highest/60 p-10 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <span className="inline-flex rounded-full bg-primary-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
+              Create workspace access
+            </span>
+            <h1 className="headline-font mt-6 text-3xl font-extrabold tracking-tight text-on-surface">
+              Start with a company admin account or request user access.
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-on-surface-variant">
+              Company administrators can create a tenant company. Users can register and later apply to Sales, Finance, or HR teams.
             </p>
           </div>
+          <div className="space-y-3">
+            {[
+              ['Company admin', 'Create and manage a company workspace.'],
+              ['User', 'Apply to join company departments after sign in.'],
+            ].map(([title, text]) => (
+              <div key={title} className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
+                <p className="text-sm font-bold text-on-surface">{title}</p>
+                <p className="mt-1 text-xs leading-5 text-on-surface-variant">{text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+        <div className="relative p-6 sm:p-10">
+          <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/10 blur-[70px]" />
+          <div className="relative z-10 mx-auto max-w-[440px]">
+            <div className="mb-8 text-center">
+              <h2 className="font-headline text-2xl font-bold text-on-surface">
+                Create Account
+              </h2>
+              <p className="text-sm text-on-surface-variant mt-2">
+                Set up your RateGuard credentials.
+              </p>
+            </div>
+
+            <form className="space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-on-surface uppercase tracking-wider opacity-90">
                 Account Type
@@ -296,18 +325,19 @@ export default function RegisterPage() {
                 </>
               )}
             </button>
-          </form>
+            </form>
 
-          <div className="mt-10 pt-6 border-t border-outline-variant/5 text-center">
-            <p className="text-xs text-on-surface-variant">
-              Already have a terminal key?
-              <Link
-                to="/login"
-                className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1"
-              >
-                Login
-              </Link>
-            </p>
+            <div className="mt-10 pt-6 border-t border-outline-variant/10 text-center">
+              <p className="text-xs text-on-surface-variant">
+                Already have an account?
+                <Link
+                  to="/login"
+                  className="text-primary font-semibold hover:underline decoration-primary/30 underline-offset-4 transition-all ml-1"
+                >
+                  Login
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
       </main>

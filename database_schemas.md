@@ -17,6 +17,8 @@ create table public.users (
           'company_admin'::text,
           'finance'::text,
           'sales'::text,
+          'hr'::text,
+          'user'::text,
           'client'::text
         ]
       )

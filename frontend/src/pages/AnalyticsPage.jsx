@@ -10,12 +10,11 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { getMarketHistory, getDashboardStats } from '../api'
+import { getMarketHistory, getDashboardStats, getRevenueAnalysis } from '../api'
 import Spinner from '../components/Spinner'
 
 const periods = [
   { label: '30 Days', value: 30 },
-  { label: '90 Days', value: 90 },
   { label: '6 Months', value: 180 },
   { label: '1 Year', value: 365 },
 ]
@@ -67,9 +66,10 @@ function EmptyState({ icon, title, subtitle }) {
 
 export default function AnalyticsPage() {
   const { user } = useAuth()
-  const [period, setPeriod] = useState(90)
+  const [period, setPeriod] = useState(30)
   const [history, setHistory] = useState(null)
   const [stats, setStats] = useState(null)
+  const [revenue, setRevenue] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -82,10 +82,19 @@ export default function AnalyticsPage() {
       params.tenant_company_id = user.company_id
     }
 
-    Promise.all([getMarketHistory(period), getDashboardStats(params)])
-      .then(([h, s]) => {
+    const canSeeRevenue = ['super_admin', 'company_admin'].includes(user?.role)
+
+    Promise.all([
+      getMarketHistory(period),
+      getDashboardStats({ ...params, period_days: period }),
+      canSeeRevenue
+        ? getRevenueAnalysis({ period: 'month', ...params }).catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([h, s, r]) => {
         setHistory(h)
         setStats(s)
+        setRevenue(r)
       })
       .catch((err) => {
         console.error('Analytics load error:', err)
@@ -177,6 +186,48 @@ export default function AnalyticsPage() {
           />
         ) : (
           <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+            {/* Contract KPI Strip */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">Active contracts</p>
+                <p className="mt-1 text-xl font-bold sm:text-2xl">
+                  {stats?.active_contracts_count ?? '—'}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">Open pipeline (non-finalized)</p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">Portfolio value (TRY)</p>
+                <p className="mt-1 text-xl font-bold sm:text-2xl">
+                  {stats?.total_portfolio_value_try != null
+                    ? new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(stats.total_portfolio_value_try)
+                    : '—'}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">Sum of current contract values</p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">Renewed contracts</p>
+                <p className="mt-1 text-xl font-bold sm:text-2xl">
+                  {stats?.renewed_contracts_in_period_count ?? stats?.renewed_contracts_count ?? revenue?.period_activity?.client_approved ?? '—'}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">
+                  Last {period} days
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <p className="text-xs font-medium text-text-muted">Estimated uplift (TRY)</p>
+                <p className="mt-1 text-xl font-bold text-amber-500 sm:text-2xl">
+                  {stats?.renewed_uplift_in_period_try != null
+                    ? new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(stats.renewed_uplift_in_period_try)
+                    : revenue?.portfolio?.estimated_renewal_uplift_try != null
+                      ? new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(revenue.portfolio.estimated_renewal_uplift_try)
+                      : stats?.renewed_uplift_try != null
+                        ? new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(stats.renewed_uplift_try)
+                        : '—'}
+                </p>
+                <p className="mt-1 text-xs text-text-muted">Rule-based renewal estimate</p>
+              </div>
+            </div>
+
             {/* Summary KPI Strip */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
               <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">

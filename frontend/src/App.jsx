@@ -10,6 +10,7 @@ import AuditLogPage from "./pages/AuditLogPage";
 import TeamManagementPage from "./pages/TeamManagementPage";
 import ApplicationsPage from "./pages/ApplicationsPage";
 import ApplicationManagementPage from "./pages/ApplicationManagementPage";
+import HRDashboardPage from "./pages/HRDashboardPage";
 import Layout from "./components/Layout";
 import SplashScreen from "./components/SplashScreen";
 import LoginPage from "./pages/LoginPage";
@@ -19,6 +20,9 @@ import LandingPage from "./pages/LandingPage";
 import SolutionsPage from "./pages/SolutionsPage";
 import AboutUsPage from "./pages/AboutUsPage";
 import KeyBenefitsPage from "./pages/KeyBenefitsPage";
+import ContactPage from "./pages/ContactPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
 import UserWelcomePage from "./pages/UserWelcomePage";
 import { PageLoader } from "./components/Spinner";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -48,6 +52,9 @@ function AppRoutes() {
       <Route path="/solutions" element={<SolutionsPage />} />
       <Route path="/about-us" element={<AboutUsPage />} />
       <Route path="/key-benefits" element={<KeyBenefitsPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms-of-service" element={<TermsOfServicePage />} />
       <Route
         path="/login"
         element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
@@ -68,7 +75,13 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Layout>
-              {user?.role === "user" ? <UserWelcomePage /> : <MainDashboardPage />}
+              {user?.role === "user" ? (
+                <UserWelcomePage />
+              ) : user?.role === "hr" ? (
+                <HRDashboardPage />
+              ) : (
+                <MainDashboardPage />
+              )}
             </Layout>
           </ProtectedRoute>
         }
@@ -154,7 +167,7 @@ function AppRoutes() {
       <Route
         path="/application-management"
         element={
-          <ProtectedRoute roles={["super_admin", "company_admin"]}>
+          <ProtectedRoute roles={["super_admin", "company_admin", "hr"]}>
             <Layout>
               <ApplicationManagementPage />
             </Layout>

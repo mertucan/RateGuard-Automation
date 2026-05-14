@@ -21,7 +21,9 @@ def list_applications():
 
         if role in ("user", "client"):
             query = query.eq("applicant_user_id", user["id"])
-        elif role in ("company_admin", "finance", "sales"):
+        elif role in ("company_admin", "finance", "sales", "hr"):
+            if not user.get("company_id"):
+                return jsonify([])
             query = query.eq("target_company_id", user["company_id"])
         # super_admin sees all
 
@@ -44,8 +46,8 @@ def create_application():
 
     if not target_company_id or not target_department:
         return jsonify({"error": "target_company_id and target_department are required"}), 400
-    if target_department not in ("sales", "finance"):
-        return jsonify({"error": "Department must be 'sales' or 'finance'"}), 400
+    if target_department not in ("sales", "finance", "hr"):
+        return jsonify({"error": "Department must be 'sales', 'finance' or 'hr'"}), 400
 
     try:
         # Prevent duplicate pending application
@@ -116,7 +118,7 @@ def create_application():
 
 
 @applications_bp.route("/api/applications/<app_id>", methods=["PUT"])
-@role_required("company_admin", "super_admin")
+@role_required("company_admin", "super_admin", "hr")
 def review_application(app_id):
     user = g.current_user
     body = request.get_json() or {}
@@ -138,7 +140,7 @@ def review_application(app_id):
 
         application = app_res.data[0]
 
-        if user.get("role") == "company_admin" and str(user.get("company_id")) != str(application.get("target_company_id")):
+        if user.get("role") in ("company_admin", "hr") and str(user.get("company_id")) != str(application.get("target_company_id")):
             return jsonify({"error": "You can only manage applications for your company"}), 403
 
         update_data = {

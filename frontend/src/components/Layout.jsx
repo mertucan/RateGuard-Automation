@@ -42,7 +42,7 @@ const ALL_NAV_ITEMS = [
     to: "/application-management",
     icon: "assignment_ind",
     label: "Applications",
-    roles: ["super_admin", "company_admin"],
+    roles: ["super_admin", "company_admin", "hr"],
   },
   {
     to: "/team",
@@ -85,6 +85,7 @@ export default function Layout({ children }) {
     company_admin: "Company Admin",
     finance: "Finance",
     sales: "Sales",
+    hr: "HR",
     client: "User",
     user: "User",
   };

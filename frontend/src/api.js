@@ -375,3 +375,6 @@ export const downloadApprovedPdf = async (contractId, filename) => {
 // ── RateBot ───────────────────────────────────────────────
 export const ratebotChat = (data) =>
   request("/ratebot/chat", { method: "POST", body: JSON.stringify(data) });
+
+export const sendContactMessage = (data) =>
+  request("/contact", { method: "POST", body: JSON.stringify(data) });

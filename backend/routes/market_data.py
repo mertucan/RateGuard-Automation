@@ -57,12 +57,27 @@ def dashboard_stats():
     t60 = (today + timedelta(days=60)).isoformat()
     today_s = today.isoformat()
     tenant_company_id = request.args.get("tenant_company_id")
+    period_days_raw = request.args.get("period_days")
+    period_days = None
+    try:
+        if period_days_raw is not None and str(period_days_raw).strip() != "":
+            period_days = int(period_days_raw)
+            if period_days <= 0:
+                period_days = None
+    except (TypeError, ValueError):
+        period_days = None
 
     try:
-        query = supabase.table("contracts").select(
+        base_select = (
             "id, end_date, previous_amount, status, "
             "companies!contracts_company_id_fkey(company_name)"
         )
+        extended_select = (
+            "id, end_date, previous_amount, status, new_amount, approved_at, "
+            "companies!contracts_company_id_fkey(company_name)"
+        )
+
+        query = supabase.table("contracts").select(extended_select)
         
         # Enforce security filtering based on user role
         if user["role"] in ["company_admin", "finance", "sales"]:
@@ -73,7 +88,22 @@ def dashboard_stats():
         if tenant_company_id:
             query = query.eq("tenant_company_id", tenant_company_id)
             
-        contracts = query.execute().data or []
+        try:
+            contracts = query.execute().data or []
+        except Exception:
+            # Backwards compatible: older schemas may not have new_amount/approved_at
+            query = supabase.table("contracts").select(base_select)
+
+            # Enforce security filtering based on user role
+            if user["role"] in ["company_admin", "finance", "sales"]:
+                query = query.eq("tenant_company_id", user["company_id"])
+            elif user["role"] in ("client", "user"):
+                query = query.eq("company_id", user["company_id"])
+
+            if tenant_company_id:
+                query = query.eq("tenant_company_id", tenant_company_id)
+
+            contracts = query.execute().data or []
     except Exception:
         contracts = []
 
@@ -115,6 +145,60 @@ def dashboard_stats():
         float(c.get("previous_amount") or 0) for c in active_contracts
     )
 
+    renewed_contracts = [
+        c
+        for c in contracts
+        if c.get("status") in ("approved", "client_approved")
+    ]
+    renewed_contracts_count = len(renewed_contracts)
+    renewed_uplift = 0.0
+    for c in renewed_contracts:
+        prev = float(c.get("previous_amount") or 0)
+        if prev <= 0:
+            continue
+        na = c.get("new_amount")
+        try:
+            new_amount = float(na) if na is not None and str(na).strip() != "" else None
+        except (TypeError, ValueError):
+            new_amount = None
+        if new_amount is None:
+            continue
+        renewed_uplift += max(0.0, new_amount - prev)
+
+    def _approved_date(value):
+        if not value:
+            return None
+        try:
+            s = str(value)
+            return date.fromisoformat(s[:10])
+        except Exception:
+            return None
+
+    renewed_contracts_in_period_count = None
+    renewed_uplift_in_period = None
+    if period_days is not None:
+        start = today - timedelta(days=period_days)
+        in_range = []
+        for c in renewed_contracts:
+            d = _approved_date(c.get("approved_at"))
+            if d and start <= d <= today:
+                in_range.append(c)
+        renewed_contracts_in_period_count = len(in_range)
+        uplift = 0.0
+        for c in in_range:
+            prev = float(c.get("previous_amount") or 0)
+            if prev <= 0:
+                continue
+            na = c.get("new_amount")
+            try:
+                new_amount = float(na) if na is not None and str(na).strip() != "" else None
+            except (TypeError, ValueError):
+                new_amount = None
+            if new_amount is None:
+                continue
+            uplift += max(0.0, new_amount - prev)
+        renewed_uplift_in_period = uplift
+
     return jsonify({
         "expiring_30": len(expiring_30),
         "pending_approvals": len(pending),
@@ -126,4 +210,10 @@ def dashboard_stats():
         "expiring_calendar": calendar_rows,
         "active_contracts_count": len(active_contracts),
         "total_portfolio_value_try": round(total_portfolio_value, 2),
+        "renewed_contracts_count": renewed_contracts_count,
+        "renewed_uplift_try": round(renewed_uplift, 2),
+        "renewed_contracts_in_period_count": renewed_contracts_in_period_count,
+        "renewed_uplift_in_period_try": round(renewed_uplift_in_period, 2)
+        if renewed_uplift_in_period is not None
+        else None,
     })

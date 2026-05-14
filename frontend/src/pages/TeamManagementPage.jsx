@@ -5,6 +5,7 @@ import { PageLoader } from '../components/Spinner'
 
 // Team invites only internal roles; clients belong on the Clients flow, not as a team role.
 const TEAM_ROLE_OPTIONS = [
+  { value: 'hr', label: 'HR' },
   { value: 'finance', label: 'Finance' },
   { value: 'sales', label: 'Sales' },
 ]
@@ -12,6 +13,7 @@ const TEAM_ROLE_OPTIONS = [
   const ROLE_BADGES = {
   super_admin: 'bg-red-500/10 text-red-500',
   company_admin: 'bg-purple-500/10 text-purple-500',
+  hr: 'bg-cyan-500/10 text-cyan-500',
   finance: 'bg-amber-500/10 text-amber-500',
   sales: 'bg-blue-500/10 text-blue-500',
   client: 'bg-emerald-500/10 text-emerald-500',
