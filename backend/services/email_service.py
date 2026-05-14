@@ -1,14 +1,126 @@
-import smtplib
 import re
+import smtplib
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape
+from urllib.parse import quote
 
-from config import SMTP_FROM_EMAIL, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_USER
+from config import APP_BASE_URL, SMTP_FROM_EMAIL, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_USER
 
-def send_email(
-    to_email, subject, body_html, body_text=None, attachment=None, attachment_name=None
-):
+
+def _safe_portal_path(path):
+    if not path or not isinstance(path, str):
+        return "/dashboard"
+    if not path.startswith("/") or path.startswith("//"):
+        return "/dashboard"
+    return path
+
+
+def _login_redirect_url(path="/dashboard", expected_email=None):
+    safe_path = _safe_portal_path(path)
+    url = f"{APP_BASE_URL.rstrip('/')}/login?redirect={quote(safe_path, safe='/')}"
+    if expected_email:
+        url += f"&email={quote(str(expected_email).strip().lower())}"
+    return url
+
+
+def _format_amount(value):
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):,.2f} TL"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _paragraph(text):
+    return f'<p style="margin: 0 0 16px; color: #475569; line-height: 1.65; font-size: 14px;">{text}</p>'
+
+
+def _key_value(label, value):
+    return f"""
+        <tr>
+            <td style="padding: 7px 0; color: #64748b; font-size: 13px;">{escape(str(label))}</td>
+            <td style="padding: 7px 0; color: #0f172a; font-size: 13px; font-weight: 600; text-align: right;">{value}</td>
+        </tr>
+    """
+
+
+def _details_table(rows):
+    if not rows:
+        return ""
+    return f"""
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin: 20px 0;">
+            <tr>
+                <td style="padding: 14px 16px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                        {''.join(_key_value(label, value) for label, value in rows)}
+                    </table>
+                </td>
+            </tr>
+        </table>
+    """
+
+
+def _cta_button(label, path="/dashboard", expected_email=None):
+    href = _login_redirect_url(path, expected_email)
+    return f"""
+        <div style="margin: 24px 0 16px;">
+            <a href="{href}" style="display: inline-block; background: #136dec; color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 8px; padding: 12px 18px; font-size: 14px;">
+                {escape(label)}
+            </a>
+        </div>
+        <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0 0 8px;">
+            If the button does not work, sign in and open this link:
+            <br><span style="word-break: break-all;">{href}</span>
+        </p>
+    """
+
+
+def render_email(title, intro=None, details=None, action_label=None, action_path="/dashboard", recipient_email=None, footer_note=None):
+    intro_html = "".join(_paragraph(item) for item in (intro or []))
+    details_html = _details_table(details or [])
+    action_html = _cta_button(action_label, action_path, recipient_email) if action_label else ""
+    footer_note_html = (
+        f'<p style="margin: 18px 0 0; color: #64748b; line-height: 1.6; font-size: 13px;">{footer_note}</p>'
+        if footer_note
+        else ""
+    )
+    return f"""
+    <div style="margin: 0; padding: 24px; background: #f6f8fb; font-family: Inter, Arial, sans-serif;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+            <tr>
+                <td align="center">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 0 0 12px;">
+                                <div style="font-size: 18px; font-weight: 800; color: #136dec;">RateGuard</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 28px;">
+                                <h1 style="margin: 0 0 16px; color: #0f172a; font-size: 20px; line-height: 1.3;">{escape(title)}</h1>
+                                {intro_html}
+                                {details_html}
+                                {action_html}
+                                {footer_note_html}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 16px 4px 0; color: #94a3b8; font-size: 12px; line-height: 1.5; text-align: center;">
+                                RateGuard - Contract renewal and pricing operations
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </div>
+    """
+
+
+def send_email(to_email, subject, body_html, body_text=None, attachment=None, attachment_name=None):
     if not SMTP_USER or not SMTP_PASSWORD:
         print("[Email] SMTP credentials not configured. Skipping email send.")
         return False
@@ -24,7 +136,6 @@ def send_email(
     msg["Errors-To"] = "noreply@rateguard.app"
     msg["Return-Path"] = "noreply@rateguard.app"
 
-    # Add Control CC
     cc_email = "mertucan44@gmail.com"
     msg["Cc"] = cc_email
     rcpt = [to_email, cc_email]
@@ -53,176 +164,110 @@ def send_email(
 
 
 def send_contract_created_email(to_email, tenant_name, company_name, contract_id, previous_amount, end_date):
-    subject = f"New Contract Created — {company_name}"
-    formatted_amount = f"{previous_amount:,.2f} TL" if previous_amount is not None else "—"
-    end_date_str = end_date if end_date else "N/A"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">New Contract Created</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                A new contract has been created by <strong>{tenant_name}</strong> for <strong>{company_name}</strong>.
-            </p>
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0 0 8px 0; color: #334155; font-size: 14px;">
-                    <strong>Previous Amount:</strong> {formatted_amount}
-                </p>
-                <p style="margin: 0; color: #334155; font-size: 14px;">
-                    <strong>End Date:</strong> {end_date_str}
-                </p>
-            </div>
-            <p style="color: #64748b; line-height: 1.6;">
-                The contract is currently in <strong>Active</strong> state. You will be notified when it requires review.
-            </p>
-            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-                Contract reference: {contract_id}
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard - Automated Contract Management
-        </p>
-    </div>
-    """
+    subject = f"New contract created - {company_name}"
+    body_html = render_email(
+        title="New contract created",
+        intro=[
+            f"A new contract has been created by <strong>{escape(str(tenant_name))}</strong> for <strong>{escape(str(company_name))}</strong>.",
+            "You can review the contract details in the RateGuard portal.",
+        ],
+        details=[
+            ("Company", escape(str(company_name))),
+            ("Current value", escape(_format_amount(previous_amount))),
+            ("End date", escape(str(end_date or "N/A"))),
+            ("Reference", escape(str(contract_id))),
+        ],
+        action_label="Open contract",
+        action_path=f"/renewal-review/{contract_id}",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
 def send_contract_notification(to_email, company_name, days_remaining, contract_id):
-    subject = f"Contract Expiry Notice - {days_remaining} Days Remaining"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Contract Expiry Alert</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                The contract for <strong>{company_name}</strong> will expire in
-                <strong style="color: #f59e0b;">{days_remaining} days</strong>.
-            </p>
-            <p style="color: #64748b; line-height: 1.6;">
-                Please review and initiate the renewal process at your earliest convenience.
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard - Automated Contract Management
-        </p>
-    </div>
-    """
+    subject = f"Contract expires in {days_remaining} days - {company_name}"
+    body_html = render_email(
+        title="Contract expiry notice",
+        intro=[
+            f"The contract for <strong>{escape(str(company_name))}</strong> expires in <strong>{escape(str(days_remaining))} days</strong>.",
+            "Please review the renewal status and take the next required action.",
+        ],
+        details=[
+            ("Company", escape(str(company_name))),
+            ("Days remaining", escape(str(days_remaining))),
+            ("Reference", escape(str(contract_id))),
+        ],
+        action_label="Review contract",
+        action_path=f"/renewal-review/{contract_id}",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
-def send_approval_email(
-    to_email, company_name, new_amount, pdf_bytes=None, pdf_filename=None
-):
-    subject = f"Contract Renewal Approved - {company_name}"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Contract Renewal Approved</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                The contract renewal for <strong>{company_name}</strong> has been approved.
-            </p>
-            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="color: #0369a1; margin: 0; font-weight: 600;">
-                    New Contract Value: {new_amount:,.2f} TL
-                </p>
-            </div>
-            <p style="color: #64748b; line-height: 1.6;">
-                Please find the addendum document attached to this email.
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard - Automated Contract Management
-        </p>
-    </div>
-    """
-    return send_email(
-        to_email, subject, body_html, attachment=pdf_bytes, attachment_name=pdf_filename
+def send_approval_email(to_email, company_name, new_amount, pdf_bytes=None, pdf_filename=None, contract_id=None):
+    subject = f"Contract renewal approved - {company_name}"
+    body_html = render_email(
+        title="Contract renewal approved",
+        intro=[
+            f"The contract renewal for <strong>{escape(str(company_name))}</strong> has been approved.",
+            "The addendum document is attached for your records.",
+        ],
+        details=[
+            ("Company", escape(str(company_name))),
+            ("Approved value", escape(_format_amount(new_amount))),
+        ],
+        action_label="Open contract" if contract_id else None,
+        action_path=f"/renewal-review/{contract_id}" if contract_id else "/dashboard",
+        recipient_email=to_email,
     )
+    return send_email(to_email, subject, body_html, attachment=pdf_bytes, attachment_name=pdf_filename)
 
 
 def send_client_review_email(
-    to_email, company_name, tenant_name, contract_id, new_amount,
-    custom_subject=None, custom_body=None, sender_name=None, sender_email=None,
-    inflation_source_name=None, inflation_source_institution=None, inflation_source_method=None
+    to_email,
+    company_name,
+    tenant_name,
+    contract_id,
+    new_amount,
+    custom_subject=None,
+    custom_body=None,
+    sender_name=None,
+    sender_email=None,
+    inflation_source_name=None,
+    inflation_source_institution=None,
+    inflation_source_method=None,
 ):
-    subject = custom_subject if custom_subject else f"Contract Renewal for Review — {company_name}"
-    formatted_amount = f"{new_amount:,.2f} TL" if new_amount is not None else "—"
-    
-    if custom_body:
-        custom_body_html = custom_body.replace('\n', '<br>')
-    else:
-        custom_body_html = f"""
-            <p style="color: #64748b; line-height: 1.6; margin: 0;">
-                <strong>{tenant_name}</strong> has prepared a contract renewal for
-                <strong>{company_name}</strong> and it is now awaiting your approval.
-            </p>
-        """
-
-    sender_info_html = ""
-    if sender_name:
-        sender_info_html = f"""
-            <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
-                <p style="color: #475569; margin: 0; font-size: 14px;"><strong>Sent by:</strong> {sender_name} ({tenant_name})</p>
-                {f'<p style="color: #64748b; margin: 4px 0 0 0; font-size: 12px;">{sender_email}</p>' if sender_email else ''}
-            </div>
-        """
-
+    subject = custom_subject if custom_subject else f"Contract renewal ready for review - {company_name}"
     source_name = inflation_source_name or "TCMB EVDS"
     source_institution = inflation_source_institution or "Central Bank of the Republic of Turkiye (TCMB)"
     source_method = inflation_source_method or "Official EVDS API"
 
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Contract Renewal Ready for Your Review</h2>
-            
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-                <p style="margin: 0; color: #334155; font-size: 14px;">
-                    <strong>From:</strong> {tenant_name} <br>
-                    <strong>To:</strong> {company_name}
-                </p>
-            </div>
-            
-            <div style="color: #334155; line-height: 1.6; font-size: 15px; margin-bottom: 24px;">
-                {custom_body_html}
-            </div>
+    if custom_body:
+        intro = [escape(custom_body).replace("\n", "<br>")]
+    else:
+        intro = [
+            f"<strong>{escape(str(tenant_name))}</strong> has prepared a contract renewal for <strong>{escape(str(company_name))}</strong>.",
+            "Please review the proposed renewal and accept or reject it in the RateGuard portal.",
+        ]
 
-            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="color: #0369a1; margin: 0; font-weight: 600;">
-                    Proposed New Contract Value: {formatted_amount}
-                </p>
-                <p style="color: #0369a1; margin: 8px 0 0; font-size: 13px;">
-                    Inflation data source: <strong>{source_name}</strong> ({source_institution}) via {source_method}.
-                </p>
-            </div>
-            
-            <p style="color: #64748b; line-height: 1.6;">
-                Please log in to the RateGuard portal to review the details and either
-                <strong style="color: #16a34a;">accept</strong> or
-                <strong style="color: #dc2626;">reject</strong> the proposed renewal.
-            </p>
-            
-            {sender_info_html}
-            
-            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-                Contract reference: {contract_id}
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard - Automated Contract Management
-        </p>
-    </div>
-    """
+    details = [
+        ("From", escape(str(tenant_name))),
+        ("To", escape(str(company_name))),
+        ("Proposed value", escape(_format_amount(new_amount))),
+        ("Data source", escape(f"{source_name} ({source_institution}) via {source_method}")),
+        ("Reference", escape(str(contract_id))),
+    ]
+    if sender_name:
+        details.append(("Sent by", escape(f"{sender_name} ({sender_email})" if sender_email else str(sender_name))))
+
+    body_html = render_email(
+        title="Contract renewal ready for review",
+        intro=intro,
+        details=details,
+        action_label="Review contract",
+        action_path=f"/renewal-review/{contract_id}",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
@@ -233,145 +278,113 @@ def send_mutual_approval_email(
     new_amount,
     pdf_bytes=None,
     pdf_filename=None,
+    contract_id=None,
 ):
-    subject = f"Contract Approved — {client_company} & {tenant_company}"
-    formatted_amount = f"{new_amount:,.2f} TL" if new_amount is not None else "—"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Contract Officially Approved ✓</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                The contract renewal between <strong>{tenant_company}</strong> and
-                <strong>{client_company}</strong> has been officially approved by both parties.
-            </p>
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="color: #15803d; margin: 0; font-weight: 600; font-size: 16px;">
-                    New Contract Value: {formatted_amount}
-                </p>
-            </div>
-            <p style="color: #64748b; line-height: 1.6;">
-                The signed addendum document is attached to this email for your records.
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard - Automated Contract Management
-        </p>
-    </div>
-    """
-    return send_email(
-        to_email, subject, body_html, attachment=pdf_bytes, attachment_name=pdf_filename
+    subject = f"Contract approved - {client_company} and {tenant_company}"
+    body_html = render_email(
+        title="Contract approved",
+        intro=[
+            f"The contract renewal between <strong>{escape(str(tenant_company))}</strong> and <strong>{escape(str(client_company))}</strong> has been approved by both parties.",
+            "The approved addendum document is attached for your records.",
+        ],
+        details=[
+            ("Client company", escape(str(client_company))),
+            ("Tenant company", escape(str(tenant_company))),
+            ("Approved value", escape(_format_amount(new_amount))),
+        ],
+        action_label="View approved contract" if contract_id else None,
+        action_path=f"/renewal-review/{contract_id}" if contract_id else "/dashboard",
+        recipient_email=to_email,
     )
+    return send_email(to_email, subject, body_html, attachment=pdf_bytes, attachment_name=pdf_filename)
 
 
 def send_finance_ready_notification(
-    to_email, sales_name, finance_name, client_company_name,
-    contract_id, previous_amount, new_amount, end_date, inflation_rule
+    to_email,
+    sales_name,
+    finance_name,
+    client_company_name,
+    contract_id,
+    previous_amount,
+    new_amount,
+    end_date,
+    inflation_rule,
 ):
-    subject = f"Sözleşme Hazır — {client_company_name} için Sales Aksiyonu Gerekiyor"
-    prev_fmt = f"{previous_amount:,.2f} TL" if previous_amount is not None else "—"
-    new_fmt = f"{new_amount:,.2f} TL" if new_amount is not None else "Henüz hesaplanmadı"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 13px;">Finance → Sales Bildirimi</p>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Sözleşme Hazırlığı Tamamlandı</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                Merhaba <strong>{sales_name}</strong>,
-            </p>
-            <p style="color: #64748b; line-height: 1.6;">
-                Finance departmanından <strong>{finance_name}</strong>, <strong>{client_company_name}</strong> şirketi ile olan sözleşme yenileme hazırlığını tamamladı. Artık sıra sende!
-            </p>
-            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="color: #0369a1; margin: 0 0 8px; font-size: 14px;"><strong>Sözleşme Detayları:</strong></p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">🏢 <strong>Şirket:</strong> {client_company_name}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">💰 <strong>Mevcut Tutar:</strong> {prev_fmt}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📈 <strong>Önerilen Yeni Tutar:</strong> {new_fmt}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📅 <strong>Bitiş Tarihi:</strong> {end_date}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📊 <strong>Enflasyon Kuralı:</strong> {inflation_rule}</p>
-            </div>
-            <p style="color: #64748b; line-height: 1.6;">
-                Lütfen RateGuard portalına giriş yaparak sözleşmeyi incele ve karşı şirkete göndermek için gerekli adımları tamamla.
-            </p>
-            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-                Sözleşme referansı: {contract_id}
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard — Otomatik Sözleşme Yönetimi
-        </p>
-    </div>
-    """
+    subject = f"Contract ready for sales action - {client_company_name}"
+    body_html = render_email(
+        title="Contract ready for sales action",
+        intro=[
+            f"Hello <strong>{escape(str(sales_name))}</strong>,",
+            f"<strong>{escape(str(finance_name))}</strong> has completed the renewal preparation for <strong>{escape(str(client_company_name))}</strong>.",
+            "Please review the contract and continue with the client communication step.",
+        ],
+        details=[
+            ("Client company", escape(str(client_company_name))),
+            ("Current value", escape(_format_amount(previous_amount))),
+            ("Proposed value", escape(_format_amount(new_amount))),
+            ("End date", escape(str(end_date or "N/A"))),
+            ("Inflation rule", escape(str(inflation_rule or "N/A"))),
+            ("Reference", escape(str(contract_id))),
+        ],
+        action_label="Open contract",
+        action_path=f"/renewal-review/{contract_id}",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
 def send_application_notification_email(
-    to_email, applicant_name, applicant_email, company_name, department, message, application_id
+    to_email,
+    applicant_name,
+    applicant_email,
+    company_name,
+    department,
+    message,
+    application_id,
 ):
-    dept_label = {"sales": "Sales", "finance": "Finance", "hr": "HR"}.get(department, department.capitalize())
-    subject = f"Yeni Başvuru — {company_name} {dept_label} Departmanına"
-    msg_html = f'<p style="color: #334155; font-size: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 0;">{message}</p>' if message else '<p style="color: #94a3b8; font-size: 14px;">Başvuru mesajı girilmedi.</p>'
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 13px;">Yeni Departman Başvurusu</p>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Yeni Başvuru Alındı</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                <strong>{company_name}</strong> firmasının <strong>{dept_label}</strong> departmanına yeni bir başvuru yapıldı.
-            </p>
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0 0 8px; color: #334155; font-size: 14px;">👤 <strong>Başvuran:</strong> {applicant_name}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">✉️ <strong>E-posta:</strong> {applicant_email}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">🏢 <strong>Şirket:</strong> {company_name}</p>
-                <p style="margin: 4px 0; color: #334155; font-size: 14px;">📁 <strong>Departman:</strong> {dept_label}</p>
-            </div>
-            <p style="color: #475569; font-size: 14px; margin-bottom: 8px;"><strong>Başvuru Mesajı:</strong></p>
-            {msg_html}
-            <p style="color: #64748b; line-height: 1.6; margin-top: 16px;">
-                RateGuard portalına giriş yaparak başvuruyu onaylayabilir veya reddedebilirsiniz.
-            </p>
-            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-                Başvuru referansı: {application_id}
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard — Otomatik Sözleşme Yönetimi
-        </p>
-    </div>
-    """
+    dept_label = {"sales": "Sales", "finance": "Finance", "hr": "HR"}.get(department, str(department).capitalize())
+    subject = f"New department application - {company_name} {dept_label}"
+    intro = [
+        f"A new application has been submitted to the <strong>{escape(dept_label)}</strong> department at <strong>{escape(str(company_name))}</strong>.",
+        "Please review the application in the RateGuard portal.",
+    ]
+    if message:
+        intro.append(f"<strong>Applicant message:</strong><br>{escape(str(message)).replace(chr(10), '<br>')}")
+
+    body_html = render_email(
+        title="New department application",
+        intro=intro,
+        details=[
+            ("Applicant", escape(str(applicant_name))),
+            ("Applicant email", escape(str(applicant_email))),
+            ("Company", escape(str(company_name))),
+            ("Department", escape(dept_label)),
+            ("Reference", escape(str(application_id))),
+        ],
+        action_label="Review application",
+        action_path="/application-management",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
 def send_admin_approval_request_email(to_email, contract_id, client_company, end_date):
-    subject = f"Admin Approval Required — Contract {contract_id[:8]}"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-            <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 13px;">Otomasyon Onayı</p>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Yönetici Onayı Bekleniyor</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                <strong>{client_company}</strong> için sözleşme yenilemesi otomasyon tarafından sıraya alındı.
-            </p>
-            <p style="color: #64748b; line-height: 1.6;">
-                Lütfen portaldan <strong>Onayla / Reddet / Revizyona Gönder</strong> aksiyonlarından birini seçin.
-            </p>
-            <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
-                Contract reference: {contract_id} · End date: {end_date or "N/A"}
-            </p>
-        </div>
-    </div>
-    """
+    subject = f"Admin approval required - Contract {str(contract_id)[:8]}"
+    body_html = render_email(
+        title="Admin approval required",
+        intro=[
+            f"A renewal for <strong>{escape(str(client_company))}</strong> has been queued by automation.",
+            "Please review the contract and choose the appropriate approval action.",
+        ],
+        details=[
+            ("Client company", escape(str(client_company))),
+            ("End date", escape(str(end_date or "N/A"))),
+            ("Reference", escape(str(contract_id))),
+        ],
+        action_label="Review approval",
+        action_path=f"/renewal-review/{contract_id}",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
@@ -379,56 +392,38 @@ def send_automation_summary_email(results, to_email):
     if not to_email:
         print("[Email] Automation summary skipped: no recipient.")
         return False
-    subject = "RateGuard Automation Run Summary"
-    body_html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 640px;">
-        <h2>Automation Summary</h2>
-        <ul>
-            <li>Checked: {results.get("checked", 0)}</li>
-            <li>Pending admin approval: {results.get("pending_admin_approval", 0)}</li>
-            <li>Auto-sent to client: {results.get("auto_sent_to_client", 0)}</li>
-            <li>Skipped: {results.get("skipped", 0)}</li>
-            <li>Emails sent: {results.get("emails_sent", 0)}</li>
-            <li>Triggered by: {results.get("triggered_by", "system")}</li>
-            <li>Run at: {results.get("run_at", "")}</li>
-            {(
-                '<li>Note: Tenant-scoped summary (cron).</li>'
-                if results.get("tenant_scoped")
-                else ""
-            )}
-        </ul>
-    </div>
-    """
+    subject = "RateGuard automation summary"
+    body_html = render_email(
+        title="Automation run summary",
+        intro=["The scheduled renewal automation run has completed."],
+        details=[
+            ("Checked", escape(str(results.get("checked", 0)))),
+            ("Pending admin approval", escape(str(results.get("pending_admin_approval", 0)))),
+            ("Auto-sent to client", escape(str(results.get("auto_sent_to_client", 0)))),
+            ("New periods created", escape(str(results.get("renewed_created", 0)))),
+            ("Skipped", escape(str(results.get("skipped", 0)))),
+            ("Emails sent", escape(str(results.get("emails_sent", 0)))),
+            ("Triggered by", escape(str(results.get("triggered_by", "system")))),
+            ("Run at", escape(str(results.get("run_at", "")))),
+        ],
+        action_label="Open automation settings",
+        action_path="/clients",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)
 
 
 def send_user_removed_email(to_email, user_name, company_name, role):
-    subject = f"Account Update — {company_name}"
-    body_html = f"""
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-        </div>
-        <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Team Member Removal Notification</h2>
-            <p style="color: #64748b; line-height: 1.6;">
-                Dear <strong>{user_name}</strong>,
-            </p>
-            <p style="color: #64748b; line-height: 1.6;">
-                This email is to notify you that you have been removed from the <strong>{company_name}</strong> team, where you previously held the role of <strong>{role}</strong>.
-            </p>
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0; color: #334155; font-size: 14px;">
-                    Your account has not been deleted. Your role has been reverted to <strong>Client</strong>, and you can still log in to access your personal dashboard.
-                </p>
-            </div>
-            <p style="color: #64748b; line-height: 1.6;">
-                If you believe this is an error, please contact your company administrator.
-            </p>
-        </div>
-        <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-            RateGuard - Automated Contract Management
-        </p>
-    </div>
-    """
+    subject = f"Account update - {company_name}"
+    body_html = render_email(
+        title="Account access updated",
+        intro=[
+            f"Hello <strong>{escape(str(user_name))}</strong>,",
+            f"Your access to the <strong>{escape(str(company_name))}</strong> team has been removed. Your previous role was <strong>{escape(str(role))}</strong>.",
+            "Your account has not been deleted. You can still sign in as a standard user.",
+        ],
+        action_label="Sign in",
+        action_path="/dashboard",
+        recipient_email=to_email,
+    )
     return send_email(to_email, subject, body_html)

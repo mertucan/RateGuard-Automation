@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.supabase_client import supabase
-from services.email_service import send_email
+from services.email_service import render_email, send_email
 
 users_bp = Blueprint("users", __name__)
 
@@ -257,30 +257,21 @@ def forgot_password():
         }).execute()
 
         # Send email
-        body_html = f"""
-        <div style="font-family: Inter, Arial, sans-serif; max-width: 520px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #136dec, #0e52b5); padding: 24px; border-radius: 12px 12px 0 0;">
-                <h1 style="color: white; margin: 0; font-size: 20px;">RateGuard</h1>
-            </div>
-            <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-                <h2 style="color: #0f172a; font-size: 18px; margin-top: 0;">Password Reset Request</h2>
-                <p style="color: #64748b; line-height: 1.6;">
-                    We received a request to reset your password. Use the 6-digit code below:
-                </p>
-                <div style="text-align: center; margin: 24px 0;">
-                    <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #136dec; background: #f0f7ff; padding: 16px 24px; border-radius: 12px; border: 2px solid #bfdbfe;">
-                        {code}
-                    </span>
-                </div>
-                <p style="color: #64748b; line-height: 1.6; font-size: 13px;">
-                    This code expires in <strong>15 minutes</strong>. If you did not request a password reset, you can safely ignore this email.
-                </p>
-            </div>
-            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
-                RateGuard &mdash; Automated Contract Management
-            </p>
-        </div>
-        """
+        code_html = (
+            '<div style="margin: 22px 0; padding: 18px; background: #f8fafc; '
+            'border: 1px solid #e2e8f0; border-radius: 10px; text-align: center;">'
+            f'<span style="font-size: 32px; letter-spacing: 10px; color: #0f172a; font-weight: 800;">{code}</span>'
+            "</div>"
+        )
+        body_html = render_email(
+            title="Password reset code",
+            intro=[
+                "We received a request to reset your RateGuard password.",
+                "Use the verification code below to continue.",
+                code_html,
+                "This code expires in <strong>15 minutes</strong>. If you did not request a password reset, you can safely ignore this email.",
+            ],
+        )
         send_email(email, "Your RateGuard Password Reset Code", body_html)
 
         return jsonify({"ok": True, "message": "If that email exists, a reset code has been sent."})

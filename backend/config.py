@@ -24,6 +24,12 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "")
+APP_BASE_URL = (
+    os.getenv("APP_BASE_URL")
+    or os.getenv("FRONTEND_URL")
+    or os.getenv("RATEGUARD_APP_URL")
+    or "http://localhost:5173"
+)
 
 # Scheduler uses UTC (APScheduler CronTrigger timezone="UTC").
 # Example for Turkiye 08:00 (UTC+3): 05:00 UTC -> AUTOMATION_CRON_HOUR_UTC=5

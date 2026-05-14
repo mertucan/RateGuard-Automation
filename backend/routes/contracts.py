@@ -652,6 +652,7 @@ def client_approve(contract_id):
                     new_amount,
                     pdf_bytes=pdf_bytes,
                     pdf_filename=filename,
+                    contract_id=contract_id,
                 )
         except Exception as email_err:
             print(f"[client-approve] Email send error (non-blocking): {email_err}")

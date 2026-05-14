@@ -1,4 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { RateBotProvider } from "./contexts/RateBotContext";
@@ -29,13 +30,38 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <PageLoader />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    const redirect = `${location.pathname}${location.search}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirect)}`} replace />;
+  }
   if (roles && !roles.includes(user.role))
     return <Navigate to="/dashboard" replace />;
 
   return children;
+}
+
+function LoginRoute() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const redirect = params.get("redirect") || "/dashboard";
+  const expectedEmail = (params.get("email") || "").trim().toLowerCase();
+  const safeRedirect = redirect.startsWith("/") && !redirect.startsWith("//")
+    ? redirect
+    : "/dashboard";
+  const userEmail = (user?.email || "").trim().toLowerCase();
+  const isWrongSession = !!user && !!expectedEmail && userEmail !== expectedEmail;
+
+  useEffect(() => {
+    if (isWrongSession) logout();
+  }, [isWrongSession, logout]);
+
+  if (isWrongSession) return <LoginPage />;
+
+  return user ? <Navigate to={safeRedirect} replace /> : <LoginPage />;
 }
 
 function AppRoutes() {
@@ -57,7 +83,7 @@ function AppRoutes() {
       <Route path="/terms-of-service" element={<TermsOfServicePage />} />
       <Route
         path="/login"
-        element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        element={<LoginRoute />}
       />
       <Route
         path="/register"

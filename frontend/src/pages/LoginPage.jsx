@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { loginUser } from '../api'
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, logout } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { error: toastError } = useToast()
-  const [email, setEmail] = useState('')
+  const expectedEmail = (searchParams.get('email') || '').trim().toLowerCase()
+  const [email, setEmail] = useState(expectedEmail)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -18,8 +20,19 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const user = await loginUser({ email, password })
+      const signedInEmail = (user?.email || '').trim().toLowerCase()
+      if (expectedEmail && signedInEmail !== expectedEmail) {
+        logout()
+        setPassword('')
+        toastError(`This link is for ${expectedEmail}. Please sign in with that account.`)
+        return
+      }
       login(user)
-      navigate('/dashboard')
+      const redirect = searchParams.get('redirect') || '/dashboard'
+      const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//')
+        ? redirect
+        : '/dashboard'
+      navigate(safeRedirect, { replace: true })
     } catch (err) {
       toastError(err.message || 'Login failed. Please check your credentials.')
     } finally {
@@ -80,7 +93,9 @@ export default function LoginPage() {
                 Sign In
               </h2>
               <p className="text-sm text-on-surface-variant">
-                Enter your credentials to open your RateGuard workspace.
+                {expectedEmail
+                  ? `Sign in as ${expectedEmail} to open this secure link.`
+                  : 'Enter your credentials to open your RateGuard workspace.'}
               </p>
             </div>
 

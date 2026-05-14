@@ -1,8 +1,9 @@
 from html import escape
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
+
 from services.calculation import calculate_renewal
-from services.email_service import send_email
+from services.email_service import render_email, send_email
 from services.gemini_service import generate_email_draft
 
 email_bp = Blueprint("email", __name__)
@@ -24,21 +25,18 @@ def contact_message():
     safe_company = escape(company)
     safe_message = escape(message).replace("\n", "<br>")
 
-    body_html = f"""
-    <div style="font-family: Inter, Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #136dec; padding: 24px; border-radius: 12px 12px 0 0;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 20px;">RateGuard Contact Request</h1>
-      </div>
-      <div style="background: #ffffff; padding: 28px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-        <p style="margin: 0 0 8px; color: #334155;"><strong>Name:</strong> {safe_name}</p>
-        <p style="margin: 0 0 8px; color: #334155;"><strong>Email:</strong> {safe_email}</p>
-        <p style="margin: 0 0 16px; color: #334155;"><strong>Company:</strong> {safe_company or "Not provided"}</p>
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; color: #0f172a; line-height: 1.6;">
-          {safe_message}
-        </div>
-      </div>
-    </div>
-    """
+    body_html = render_email(
+        title="New contact request",
+        intro=[
+            "A new contact request was submitted from the RateGuard website.",
+            f"<strong>Message:</strong><br>{safe_message}",
+        ],
+        details=[
+            ("Name", safe_name),
+            ("Email", safe_email),
+            ("Company", safe_company or "Not provided"),
+        ],
+    )
     sent = send_email(
         "mertucan44@gmail.com",
         f"RateGuard contact request from {name}",
@@ -52,7 +50,7 @@ def contact_message():
 
 @email_bp.route("/api/contracts/<contract_id>/generate-email", methods=["POST"])
 def generate_email(contract_id):
-    """Gemini API ile sözleşme yenileme e-posta taslağı oluşturur."""
+    """Generate a contract renewal email draft with Gemini."""
     try:
         calc = calculate_renewal(contract_id)
 
@@ -75,7 +73,7 @@ def generate_email(contract_id):
         print(f"[generate-email] Gemini error: {e}")
         error_msg = str(e)
         if "429" in error_msg or "quota" in error_msg.lower():
-            return jsonify({"error": "AI kota limiti aşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin."}), 429
+            return jsonify({"error": "The AI quota limit has been reached. Please wait a few minutes and try again."}), 429
         return jsonify({"error": error_msg}), 500
     except Exception as e:
         print(f"[generate-email] Error: {e}")

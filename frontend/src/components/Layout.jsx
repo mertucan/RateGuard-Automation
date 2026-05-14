@@ -17,7 +17,6 @@ const ALL_NAV_ITEMS = [
       "company_admin",
       "finance",
       "sales",
-      "user",
     ],
   },
   {
