@@ -27,12 +27,6 @@ const ALL_NAV_ITEMS = [
     roles: ["super_admin", "company_admin"],
   },
   {
-    to: "/analytics",
-    icon: "monitoring",
-    label: "Analytics",
-    roles: ["super_admin", "company_admin", "finance", "user", "client"],
-  },
-  {
     to: "/applications",
     icon: "work",
     label: "Applications",
@@ -55,6 +49,12 @@ const ALL_NAV_ITEMS = [
     icon: "history",
     label: "Audit Log",
     roles: ["super_admin", "company_admin", "finance"],
+  },
+  {
+    to: "/analytics",
+    icon: "monitoring",
+    label: "Analytics",
+    roles: ["super_admin", "company_admin", "finance", "sales", "user", "client"],
   },
 ];
 
@@ -105,7 +105,7 @@ export default function Layout({ children }) {
 
           <Link to="/dashboard" className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary filled text-xl">
-              shield
+              security
             </span>
             <span className="text-lg font-bold tracking-tight">RateGuard</span>
           </Link>

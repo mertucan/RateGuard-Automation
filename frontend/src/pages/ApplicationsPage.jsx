@@ -88,7 +88,7 @@ export default function ApplicationsPage() {
         <div>
           <h2 className="text-xl font-bold sm:text-2xl">Department Applications</h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">
-            Apply to join a company's Sales or Finance department.
+            Apply to join a company's Sales, Finance, or HR department.
           </p>
         </div>
         <button

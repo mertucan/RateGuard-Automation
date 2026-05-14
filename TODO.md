@@ -1,4 +1,4 @@
-# Enflasyon Kalkanı - Development Plan (TODO)
+# RateGuard - Development Plan (TODO)
 
 ## Phase 1: Core Backend Setup and Data Fetching
 - [x] TCMB EVDS API data fetching script (`veri_cekme_tcmb.py`) setup.
@@ -56,7 +56,7 @@
 - [x] **Check Expiring Contracts Endpoint**: API endpoint to scan and create notifications for expiring contracts.
 
 ## Phase 9: Branding & Polish
-- [x] **Rebranding**: RateGuard renamed to "Enflasyon Kalkanı" across all components (frontend, backend, PDF, email, AI prompts).
+- [x] **Branding**: Product name standardized as RateGuard across public and app surfaces.
 - [x] **Login/Register Cleanup**: Removed out-of-context text ("Sovereign Intelligence", "Establish Node", "terminal key", etc.).
 - [x] **Modern Auth UI**: Clean, minimal login and register pages consistent with app theme.
 - [x] **Turkish Font Support**: PDF generation uses Arial/DejaVu/Liberation fonts for proper Turkish character rendering.

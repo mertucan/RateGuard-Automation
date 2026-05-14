@@ -297,7 +297,7 @@ export default function RegisterPage() {
                 </span>
                 <input
                   className={inputCls}
-                  placeholder="............."
+                  placeholder="••••••••••"
                   type={showPassword ? "text" : "password"}
                   value={form.confirmPassword}
                   onChange={onChange("confirmPassword")}
