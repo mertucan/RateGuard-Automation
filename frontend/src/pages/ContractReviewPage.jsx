@@ -27,6 +27,8 @@ import {
   getApprovedAgreements,
   getContractVersions,
   createContractVersion,
+  getContractAiAnalysis,
+  generateContractAiAnalysis,
   downloadApprovedPdf,
 } from "../api";
 
@@ -1944,6 +1946,158 @@ function ContractDocumentPreview({
 }
 
 /* ─── CONTRACT DETAIL ─── */
+function AiChangeAnalysisPanel({
+  analysis,
+  loading,
+  generating,
+  onGenerate,
+  formatCurrency,
+}) {
+  const risk = analysis?.risk || {};
+  const financial = analysis?.financial_delta || {};
+  const clauseDiffs = analysis?.clause_diffs || [];
+  const changedClauses = clauseDiffs.filter((item) => item.change_type !== "unchanged");
+  const playbooks = analysis?.playbooks || [];
+  const riskCls =
+    risk.level === "high"
+      ? "bg-red-500/10 text-red-600"
+      : risk.level === "medium"
+        ? "bg-amber-500/10 text-amber-600"
+        : "bg-emerald-500/10 text-emerald-600";
+  const severityCls = (severity) =>
+    severity === "high"
+      ? "bg-red-500/10 text-red-600"
+      : severity === "medium"
+        ? "bg-amber-500/10 text-amber-600"
+        : "bg-slate-500/10 text-slate-600";
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px] text-primary">psychology</span>
+            <h3 className="text-lg font-bold">AI Change Analysis</h3>
+          </div>
+          <p className="mt-1 text-xs text-text-muted">
+            Version comparison, changed clauses, risk score, and renewal playbooks.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={generating}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+          {generating ? "Analyzing..." : "Run AI"}
+        </button>
+      </div>
+
+      <div className="space-y-4 p-4 sm:p-6">
+        {loading ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-text-muted">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+            Loading analysis...
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-border bg-surface-alt p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Source</p>
+                <p className="mt-1 text-sm font-bold capitalize">{analysis?.source || "structured"}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-surface-alt p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Risk</p>
+                <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-bold capitalize ${riskCls}`}>
+                  {risk.level || "low"} {risk.score != null ? `${risk.score}/100` : ""}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border bg-surface-alt p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Changed Clauses</p>
+                <p className="mt-1 text-sm font-bold">{changedClauses.length}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-surface-alt p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Value Delta</p>
+                <p className="mt-1 text-sm font-bold">
+                  {formatCurrency(financial.difference || 0, financial.currency || "TRY")}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface-alt p-4">
+              <p className="text-sm font-semibold">Executive summary</p>
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                {analysis?.executive_summary || "No analysis summary available yet."}
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-border bg-surface-alt p-4">
+                <p className="mb-3 text-sm font-semibold">Changed clauses</p>
+                <div className="space-y-2">
+                  {(changedClauses.length ? changedClauses : clauseDiffs.slice(0, 3)).map((item) => (
+                    <div key={item.key || item.title} className="rounded-md border border-border bg-surface p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-bold">{item.title}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${severityCls(item.severity)}`}>
+                          {item.change_type}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-text-muted">
+                        {item.summary || "Clause comparison available."}
+                      </p>
+                      {item.old_text && item.new_text && item.old_text !== item.new_text && (
+                        <div className="mt-2 grid gap-2 text-[11px] leading-5">
+                          <p className="rounded bg-red-500/5 p-2 text-text-muted">Before: {item.old_text}</p>
+                          <p className="rounded bg-emerald-500/5 p-2 text-text-muted">After: {item.new_text}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border bg-surface-alt p-4">
+                  <p className="mb-2 text-sm font-semibold">Risk factors</p>
+                  <div className="space-y-2">
+                    {(risk.factors || []).map((factor) => (
+                      <div key={factor} className="flex gap-2 text-xs leading-5 text-text-muted">
+                        <span className="material-symbols-outlined mt-0.5 text-[14px] text-amber-500">report</span>
+                        <span>{factor}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-surface-alt p-4">
+                  <p className="mb-2 text-sm font-semibold">Smart playbooks</p>
+                  <div className="space-y-3">
+                    {playbooks.map((playbook) => (
+                      <div key={playbook.name} className="rounded-md border border-border bg-surface p-3">
+                        <p className="text-xs font-bold">{playbook.name}</p>
+                        <ul className="mt-2 space-y-1">
+                          {(playbook.actions || []).map((action) => (
+                            <li key={action} className="flex gap-2 text-xs leading-5 text-text-muted">
+                              <span className="material-symbols-outlined mt-0.5 text-[13px] text-primary">check_circle</span>
+                              <span>{action}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ContractDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1975,6 +2129,9 @@ function ContractDetail() {
   const [clientActing, setClientActing] = useState(false);
   const [showSendToClientModal, setShowSendToClientModal] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
+  const [changeAnalysis, setChangeAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisGenerating, setAnalysisGenerating] = useState(false);
 
   const { setActiveContractId } = useRateBot();
 
@@ -1997,6 +2154,22 @@ function ContractDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadChangeAnalysis = useCallback(async () => {
+    setAnalysisLoading(true);
+    try {
+      const data = await getContractAiAnalysis(id);
+      setChangeAnalysis(data);
+    } catch (err) {
+      console.error("Contract AI analysis error:", err);
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadChangeAnalysis();
+  }, [loadChangeAnalysis]);
 
   // Set active contract context for RateBot
   useEffect(() => {
@@ -2293,6 +2466,23 @@ function ContractDetail() {
       showToast("Version could not be created: " + err.message, "error");
     } finally {
       setCreatingVersion(false);
+    }
+  };
+
+  const handleGenerateChangeAnalysis = async () => {
+    setAnalysisGenerating(true);
+    try {
+      const data = await generateContractAiAnalysis(id);
+      setChangeAnalysis(data);
+      showToast(
+        data.source === "gemini"
+          ? "AI change analysis generated"
+          : "Structured change analysis generated",
+      );
+    } catch (err) {
+      showToast("AI analysis error: " + err.message, "error");
+    } finally {
+      setAnalysisGenerating(false);
     }
   };
 
@@ -2851,6 +3041,14 @@ function ContractDetail() {
                     </section>
                   );
                 })()}
+
+              <AiChangeAnalysisPanel
+                analysis={changeAnalysis}
+                loading={analysisLoading}
+                generating={analysisGenerating}
+                onGenerate={handleGenerateChangeAnalysis}
+                formatCurrency={formatCurrency}
+              />
 
               {/* Addendum Preview */}
               <section className="rounded-xl border border-border bg-surface">

@@ -14,6 +14,7 @@ from routes.renewals import renewals_bp
 from routes.audit_logs import audit_logs_bp
 from routes.applications import applications_bp
 from routes.automation import automation_bp
+from routes.internal_chat import internal_chat_bp
 from services.scheduler import start_scheduler
 
 
@@ -34,6 +35,7 @@ def create_app():
     app.register_blueprint(audit_logs_bp)
     app.register_blueprint(applications_bp)
     app.register_blueprint(automation_bp)
+    app.register_blueprint(internal_chat_bp)
     start_scheduler()
 
     @app.route("/api/health")

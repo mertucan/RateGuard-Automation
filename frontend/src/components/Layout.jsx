@@ -44,6 +44,12 @@ const ALL_NAV_ITEMS = [
     roles: ["super_admin", "company_admin"],
   },
   {
+    to: "/internal-chat",
+    icon: "forum",
+    label: "Chat",
+    roles: ["super_admin", "company_admin", "finance", "sales", "hr", "user"],
+  },
+  {
     to: "/audit-log",
     icon: "history",
     label: "Audit Log",

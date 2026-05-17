@@ -12,6 +12,7 @@ import TeamManagementPage from "./pages/TeamManagementPage";
 import ApplicationsPage from "./pages/ApplicationsPage";
 import ApplicationManagementPage from "./pages/ApplicationManagementPage";
 import HRDashboardPage from "./pages/HRDashboardPage";
+import InternalChatPage from "./pages/InternalChatPage";
 import Layout from "./components/Layout";
 import SplashScreen from "./components/SplashScreen";
 import LoginPage from "./pages/LoginPage";
@@ -215,6 +216,25 @@ function AppRoutes() {
           <ProtectedRoute roles={["super_admin", "company_admin", "finance"]}>
             <Layout>
               <AuditLogPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/internal-chat"
+        element={
+          <ProtectedRoute
+            roles={[
+              "super_admin",
+              "company_admin",
+              "finance",
+              "sales",
+              "hr",
+              "user",
+            ]}
+          >
+            <Layout>
+              <InternalChatPage />
             </Layout>
           </ProtectedRoute>
         }

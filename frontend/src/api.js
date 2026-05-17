@@ -289,6 +289,26 @@ export const analyzeContractTone = (contractId) =>
   request(`/contracts/${contractId}/analyze-tone`, { method: "POST" });
 
 // ── Renewals ──────────────────────────────────────────────
+export const getInternalChatUsers = () => request("/internal-chat/users");
+
+export const getInternalChatConversations = () =>
+  request("/internal-chat/conversations");
+
+export const createInternalChatConversation = (data) =>
+  request("/internal-chat/conversations", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const getInternalChatMessages = (conversationId) =>
+  request(`/internal-chat/conversations/${conversationId}/messages`);
+
+export const sendInternalChatMessage = (conversationId, data) =>
+  request(`/internal-chat/conversations/${conversationId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 export const getRenewals = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/renewals${qs ? `?${qs}` : ""}`);
@@ -357,6 +377,15 @@ export const createContractVersion = (contractId, data = {}) =>
   request(`/contracts/${contractId}/versions`, {
     method: "POST",
     body: JSON.stringify(data),
+  });
+
+export const getContractAiAnalysis = (contractId) =>
+  request(`/contracts/${contractId}/ai-analysis`);
+
+export const generateContractAiAnalysis = (contractId) =>
+  request(`/contracts/${contractId}/ai-analysis`, {
+    method: "POST",
+    body: JSON.stringify({}),
   });
 
 export const downloadApprovedPdf = async (contractId, filename) => {

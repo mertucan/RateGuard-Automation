@@ -221,6 +221,90 @@ def _parse_response(text: str) -> dict:
         }
 
 
+def _parse_json_object(text: str) -> dict:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        first_newline = cleaned.find("\n")
+        if first_newline != -1:
+            cleaned = cleaned[first_newline + 1 :]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    cleaned = cleaned.strip()
+    return json.loads(cleaned)
+
+
+def generate_contract_change_analysis(analysis_payload: dict) -> dict:
+    """Generate an AI executive layer for contract version comparison."""
+    if not client:
+        raise RuntimeError("Gemini API is not configured. GEMINI_API_KEY is missing.")
+
+    compact_payload = {
+        "financial_delta": analysis_payload.get("financial_delta", {}),
+        "risk": analysis_payload.get("risk", {}),
+        "clause_diffs": [
+            {
+                "title": item.get("title"),
+                "change_type": item.get("change_type"),
+                "severity": item.get("severity"),
+                "old_text": item.get("old_text"),
+                "new_text": item.get("new_text"),
+            }
+            for item in analysis_payload.get("clause_diffs", [])
+            if item.get("change_type") != "unchanged"
+        ][:10],
+        "playbooks": analysis_payload.get("playbooks", []),
+    }
+
+    system_prompt = """You are RateGuard's AI contract renewal analyst.
+
+Return ONLY a valid JSON object with these keys:
+- executive_summary: one concise paragraph in English
+- risk: object with score, level, and factors array. You may refine but keep grounded in the input.
+- playbooks: array of objects with name and actions array
+- clause_diffs: array matching the input changed clauses, each with title, change_type, severity, summary, old_text, new_text
+
+Rules:
+- Do not invent legal facts that are not in the input.
+- Focus on renewal-before/after impact, clause changes, approval readiness, and client communication.
+- Keep wording business-friendly and actionable.
+- Do not use Markdown or code fences."""
+
+    user_prompt = "Analyze this contract version comparison:\n" + json.dumps(
+        compact_payload, ensure_ascii=False
+    )
+
+    contents = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
+    config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        temperature=0.25,
+        max_output_tokens=1800,
+    )
+
+    for model_name in [GEMINI_MODEL, FALLBACK_MODEL]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
+            parsed = _parse_json_object(response.text)
+            return {
+                "executive_summary": parsed.get("executive_summary", ""),
+                "risk": parsed.get("risk") or analysis_payload.get("risk", {}),
+                "playbooks": parsed.get("playbooks") or analysis_payload.get("playbooks", []),
+                "clause_diffs": parsed.get("clause_diffs") or analysis_payload.get("clause_diffs", []),
+            }
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                print(f"[contract-change-analysis] Quota exhausted ({model_name}), trying fallback...")
+                continue
+            print(f"[contract-change-analysis] API Error ({model_name}): {e}")
+            continue
+
+    raise RuntimeError("Gemini API quota exhausted. Please try again in a few minutes.")
+
+
 def ratebot_respond(
     message: str, contract_id: Optional[str] = None, history: Optional[list] = None
 ) -> str:

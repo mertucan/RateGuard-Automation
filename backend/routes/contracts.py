@@ -363,6 +363,66 @@ def create_contract_version(contract_id):
         return jsonify({"error": str(e)}), 500
 
 
+@contracts_bp.route("/api/contracts/<contract_id>/ai-analysis", methods=["GET"])
+@login_required
+def get_contract_ai_analysis(contract_id):
+    user = g.current_user
+    _, error = _get_scoped_contract(contract_id, user)
+    if error:
+        return error
+
+    try:
+        from services.contract_ai_analysis import (
+            build_contract_ai_analysis,
+            get_cached_contract_ai_analysis,
+        )
+
+        cached = get_cached_contract_ai_analysis(contract_id)
+        if cached:
+            return jsonify(cached), 200
+        return jsonify(build_contract_ai_analysis(contract_id, user=user, persist=False)), 200
+    except Exception as e:
+        print(f"[contract ai analysis] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/ai-analysis", methods=["POST"])
+@login_required
+def generate_contract_ai_analysis(contract_id):
+    user = g.current_user
+    _, error = _get_scoped_contract(contract_id, user)
+    if error:
+        return error
+
+    try:
+        from services.contract_ai_analysis import build_contract_ai_analysis
+
+        analysis = build_contract_ai_analysis(contract_id, user=user, persist=True)
+
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=user["id"],
+                user_name=user["full_name"],
+                action="generate_contract_ai_analysis",
+                entity_type="contract",
+                entity_id=contract_id,
+                details={
+                    "source": analysis.get("source"),
+                    "previous_contract_id": analysis.get("previous_contract_id"),
+                    "risk_level": (analysis.get("risk") or {}).get("level"),
+                },
+            )
+        except Exception as audit_err:
+            print(f"[contract ai analysis] Audit error: {audit_err}")
+
+        return jsonify(analysis), 200
+    except Exception as e:
+        print(f"[contract ai analysis] Generate error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @contracts_bp.route("/api/contracts/<contract_id>", methods=["GET"])
 @login_required
 def get_contract(contract_id):
