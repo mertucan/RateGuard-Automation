@@ -350,6 +350,15 @@ export const getApprovedAgreements = (params = {}) => {
   return request(`/contracts/approved-agreements${qs ? `?${qs}` : ""}`);
 };
 
+export const getContractVersions = (contractId) =>
+  request(`/contracts/${contractId}/versions`);
+
+export const createContractVersion = (contractId, data = {}) =>
+  request(`/contracts/${contractId}/versions`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 export const downloadApprovedPdf = async (contractId, filename) => {
   const res = await fetch(`${BASE}/contracts/${contractId}/approved-pdf`, {
     headers: getAuthHeaders(),

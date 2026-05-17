@@ -1,4 +1,5 @@
 import uuid
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 import re
 
@@ -106,6 +107,57 @@ def _supabase_update_with_fallback(table_name, payload, match_col, match_val, ma
     raise last_exc
 
 
+def _add_months(d, months):
+    month_index = d.month - 1 + int(months or 12)
+    year = d.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(d.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _current_amount(contract):
+    return contract.get("new_amount") or contract.get("previous_amount")
+
+
+def _version_sort_key(contract):
+    return (
+        str(contract.get("created_at") or ""),
+        str(contract.get("approved_at") or ""),
+        str(contract.get("end_date") or ""),
+        str(contract.get("id") or ""),
+    )
+
+
+def _build_contract_lineage(all_contracts, contract_id):
+    by_id = {str(c.get("id")): c for c in all_contracts if c.get("id")}
+    if str(contract_id) not in by_id:
+        return []
+
+    connected_ids = {str(contract_id)}
+    changed = True
+    while changed:
+        changed = False
+        for c in all_contracts:
+            cid = str(c.get("id") or "")
+            parent_id = str(c.get("renewed_from_contract_id") or "")
+            if not cid:
+                continue
+            if cid in connected_ids or parent_id in connected_ids:
+                before = len(connected_ids)
+                connected_ids.add(cid)
+                if parent_id:
+                    connected_ids.add(parent_id)
+                changed = changed or len(connected_ids) != before
+
+    chain = [by_id[cid] for cid in connected_ids if cid in by_id]
+    chain.sort(key=_version_sort_key)
+    child_parent_ids = {str(c.get("renewed_from_contract_id")) for c in chain if c.get("renewed_from_contract_id")}
+    for index, c in enumerate(chain, start=1):
+        c["version_number"] = index
+        c["is_current_version"] = str(c.get("id")) not in child_parent_ids
+    return chain
+
+
 @contracts_bp.route("/api/contracts", methods=["GET"])
 @login_required
 def list_contracts():
@@ -179,6 +231,135 @@ def list_approved_agreements():
         return jsonify(result.data), 200
     except Exception as e:
         print(f"[approved-agreements] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/versions", methods=["GET"])
+@login_required
+def get_contract_versions(contract_id):
+    user = g.current_user
+    contract, error = _get_scoped_contract(contract_id, user)
+    if error:
+        return error
+
+    try:
+        select_query = (
+            "*, "
+            "tenant_company:companies!contracts_tenant_company_id_fkey(id, company_name), "
+            "client_company:companies!contracts_company_id_fkey(id, company_name, authorized_email)"
+        )
+        query = supabase.table("contracts").select(select_query)
+        if user["role"] == "super_admin":
+            pass
+        elif user["role"] in ("company_admin", "finance", "sales"):
+            company_scope = user["company_id"]
+            query = query.or_(
+                f"tenant_company_id.eq.{company_scope},company_id.eq.{company_scope}"
+            )
+        elif user["role"] == "user":
+            query = query.eq("company_id", user["company_id"])
+        else:
+            return jsonify([])
+
+        rows = query.execute().data or []
+        versions = _build_contract_lineage(rows, contract_id)
+        if not versions and contract:
+            versions = [contract]
+        return jsonify(versions), 200
+    except Exception as e:
+        print(f"[contract versions] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@contracts_bp.route("/api/contracts/<contract_id>/versions", methods=["POST"])
+@role_required("sales", "finance", "company_admin", "super_admin")
+def create_contract_version(contract_id):
+    user = g.current_user
+    body = request.get_json() or {}
+    contract, error = _get_scoped_contract(contract_id, user)
+    if error:
+        return error
+
+    try:
+        full_res = (
+            supabase.table("contracts")
+            .select("*")
+            .eq("id", contract_id)
+            .limit(1)
+            .execute()
+        )
+        source = full_res.data[0] if full_res.data else None
+        if not source:
+            return jsonify({"error": "Contract not found"}), 404
+
+        if source.get("status") not in ("client_approved", "client_rejected", "cancelled"):
+            return jsonify({"error": "Only finalized contracts can start a new version"}), 409
+
+        if not body.get("allow_duplicate"):
+            existing = (
+                supabase.table("contracts")
+                .select("id, status")
+                .eq("renewed_from_contract_id", contract_id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                return jsonify({
+                    "error": "A next version already exists",
+                    "contract_id": existing.data[0]["id"],
+                }), 409
+
+        end_date = body.get("end_date")
+        if not end_date and source.get("end_date"):
+            try:
+                end_date = _add_months(
+                    date.fromisoformat(str(source.get("end_date"))[:10]),
+                    source.get("auto_renew_term_months") or 12,
+                ).isoformat()
+            except (TypeError, ValueError):
+                end_date = source.get("end_date")
+
+        payload = {
+            "id": str(uuid.uuid4()),
+            "company_id": source.get("company_id"),
+            "tenant_company_id": source.get("tenant_company_id"),
+            "sales_rep_id": user["id"] if user.get("role") == "sales" else source.get("sales_rep_id"),
+            "previous_amount": body.get("previous_amount") or _current_amount(source),
+            "currency": body.get("currency") or source.get("currency") or "TRY",
+            "contract_type": body.get("contract_type") or source.get("contract_type") or "service_contract",
+            "end_date": end_date,
+            "inflation_base_rule": body.get("inflation_base_rule") or source.get("inflation_base_rule") or "TUFE",
+            "max_increase_limit": body.get("max_increase_limit", source.get("max_increase_limit")),
+            "inflation_data_source": body.get("inflation_data_source") or source.get("inflation_data_source") or "tcmb_evds",
+            "inflation_source_name": body.get("inflation_source_name") or source.get("inflation_source_name") or "TCMB EVDS",
+            "inflation_source_institution": body.get("inflation_source_institution") or source.get("inflation_source_institution"),
+            "inflation_source_method": body.get("inflation_source_method") or source.get("inflation_source_method"),
+            "status": "draft",
+            "auto_renew_enabled": bool(body.get("auto_renew_enabled", source.get("auto_renew_enabled", False))),
+            "auto_renew_term_months": int(body.get("auto_renew_term_months") or source.get("auto_renew_term_months") or 12),
+            "renewed_from_contract_id": contract_id,
+        }
+
+        created = _supabase_insert_with_fallback("contracts", payload)
+        row = created.data[0]
+
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=user["id"],
+                user_name=user["full_name"],
+                action="create_contract_version",
+                entity_type="contract",
+                entity_id=row["id"],
+                details={"renewed_from_contract_id": contract_id},
+            )
+        except Exception as audit_err:
+            print(f"[create contract version] Audit error: {audit_err}")
+
+        return jsonify(row), 201
+    except Exception as e:
+        print(f"[create contract version] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -480,6 +661,37 @@ def approve_contract(contract_id):
             },
         )
 
+        try:
+            from services.notification_service import notify_company_users
+
+            tenant_company_id = contract.get("tenant_company_id") or user.get("company_id")
+            if next_status == "finance_approved":
+                notify_company_users(
+                    tenant_company_id,
+                    "Finance approval completed",
+                    "A contract renewal calculation is ready for admin approval.",
+                    roles=("company_admin",),
+                    contract_id=contract_id,
+                    action_url=f"/renewal-review/{contract_id}",
+                    category="contract_workflow",
+                    notification_type="success",
+                    event_key=f"finance-approved:{contract_id}",
+                )
+            elif next_status == "admin_approved":
+                notify_company_users(
+                    tenant_company_id,
+                    "Contract ready to send",
+                    "Admin approval is complete. Sales can now send the renewal to the client.",
+                    roles=("sales", "company_admin"),
+                    contract_id=contract_id,
+                    action_url=f"/renewal-review/{contract_id}",
+                    category="contract_workflow",
+                    notification_type="success",
+                    event_key=f"admin-approved:{contract_id}",
+                )
+        except Exception as notification_err:
+            print(f"[approve] Notification error: {notification_err}")
+
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[approve] Error: {e}")
@@ -560,6 +772,7 @@ def send_to_client(contract_id):
 
         try:
             from services.email_service import send_client_review_email
+            from services.notification_service import notify_company_users
 
             if client_email:
                 send_client_review_email(
@@ -576,6 +789,17 @@ def send_to_client(contract_id):
                     inflation_source_institution=contract.get("inflation_source_institution"),
                     inflation_source_method=contract.get("inflation_source_method"),
                 )
+            notify_company_users(
+                contract.get("company_id"),
+                "Contract ready for review",
+                f"{tenant_company or 'Your partner'} sent a contract renewal for your review.",
+                roles=("company_admin", "user"),
+                contract_id=contract_id,
+                action_url=f"/renewal-review/{contract_id}",
+                category="client_review",
+                notification_type="info",
+                event_key=f"sent-to-client:{contract_id}",
+            )
         except Exception as email_err:
             print(f"[send-to-client] Email send error (non-blocking): {email_err}")
 
@@ -638,6 +862,7 @@ def client_approve(contract_id):
         try:
             from services.calculation import calculate_renewal
             from services.email_service import send_mutual_approval_email
+            from services.notification_service import notify_company_users
             from services.pdf_generator import generate_addendum_pdf
 
             calc = calculate_renewal(contract_id)
@@ -654,6 +879,17 @@ def client_approve(contract_id):
                     pdf_filename=filename,
                     contract_id=contract_id,
                 )
+            notify_company_users(
+                contract.get("tenant_company_id"),
+                "Client approved the renewal",
+                f"{client_company or 'The client'} approved the contract renewal.",
+                roles=("company_admin", "finance", "sales"),
+                contract_id=contract_id,
+                action_url=f"/renewal-review/{contract_id}",
+                category="client_decision",
+                notification_type="success",
+                event_key=f"client-approved:{contract_id}",
+            )
         except Exception as email_err:
             print(f"[client-approve] Email send error (non-blocking): {email_err}")
 
@@ -678,7 +914,7 @@ def client_reject(contract_id):
         # Fetch contract to verify company ownership before mutating
         contract_res = (
             supabase.table("contracts")
-            .select("company_id")
+            .select("company_id, tenant_company_id")
             .eq("id", contract_id)
             .limit(1)
             .execute()
@@ -708,6 +944,23 @@ def client_reject(contract_id):
             entity_id=contract_id,
             details={"reason": reason},
         )
+
+        try:
+            from services.notification_service import notify_company_users
+
+            notify_company_users(
+                contract.get("tenant_company_id"),
+                "Client rejected the renewal",
+                "The client rejected the proposed renewal. Review the rejection reason and follow up.",
+                roles=("company_admin", "finance", "sales"),
+                contract_id=contract_id,
+                action_url=f"/renewal-review/{contract_id}",
+                category="client_decision",
+                notification_type="danger",
+                event_key=f"client-rejected:{contract_id}",
+            )
+        except Exception as notification_err:
+            print(f"[client-reject] Notification error: {notification_err}")
 
         return jsonify(result.data[0])
     except Exception as e:
@@ -770,6 +1023,22 @@ def notify_sales(contract_id):
                     )
                 except Exception as email_err:
                     print(f"[notify-sales] Email error for {su['email']}: {email_err}")
+                try:
+                    from services.notification_service import notify_user
+
+                    notify_user(
+                        su.get("id"),
+                        "Contract ready for sales action",
+                        f"Finance completed preparation for {client_company_name}.",
+                        company_id=user.get("company_id"),
+                        contract_id=contract_id,
+                        action_url=f"/renewal-review/{contract_id}",
+                        category="contract_workflow",
+                        notification_type="info",
+                        event_key=f"notify-sales:{contract_id}:user:{su.get('id')}",
+                    )
+                except Exception as notification_err:
+                    print(f"[notify-sales] Notification error for {su['email']}: {notification_err}")
 
         from routes.audit_logs import log_audit
 

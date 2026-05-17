@@ -1,14 +1,17 @@
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import requests
 
 from config import (
+    PRIVATE_SECTOR_INFLATION_EXPECTATION_SERIES,
+    PRIVATE_SECTOR_INFLATION_EXPECTATION_URL,
+    TCMB_API_KEY,
     WORLD_BANK_TURKEY_CPI_INDEX_URL,
     WORLD_BANK_TURKEY_INFLATION_URL,
     WORLD_BANK_TURKEY_WPI_URL,
 )
-from veri_cekme_tcmb import get_guaranteed_market_data
+from veri_cekme_tcmb import EVDS_BASE, get_guaranteed_market_data
 
 
 SOURCE_META = {
@@ -26,12 +29,24 @@ SOURCE_META = {
         "method": "World Bank API (v2)",
         "description": "Annual CPI inflation (%) and CPI/WPI index series are pulled from the World Bank API.",
     },
+    "private_sector_expectations": {
+        "key": "private_sector_expectations",
+        "name": "Private Sector Expectations",
+        "institution": "TCMB Survey of Market Participants",
+        "method": "Latest 12-month-ahead annual CPI expectation, arithmetic mean",
+        "description": "The app pulls the TCMB Survey of Market Participants series TP.BEK.S01.E.A from EVDS and uses the latest numeric value as the private-sector CPI expectation. This source does not provide a PPI expectation.",
+        "supports_ufe": False,
+    },
 }
 
 
 def available_sources():
     # TÜİK & Trading Economics intentionally removed (user request).
-    return [SOURCE_META["tcmb_evds"], SOURCE_META["world_bank"]]
+    return [
+        SOURCE_META["tcmb_evds"],
+        SOURCE_META["world_bank"],
+        SOURCE_META["private_sector_expectations"],
+    ]
 
 
 def normalize_source(source):
@@ -41,6 +56,11 @@ def normalize_source(source):
         "evds": "tcmb_evds",
         "worldbank": "world_bank",
         "wb": "world_bank",
+        "private_sector": "private_sector_expectations",
+        "private_sector_expectation": "private_sector_expectations",
+        "market_participants": "private_sector_expectations",
+        "piyasa_katilimcilari": "private_sector_expectations",
+        "piyasa_katilimcilari_anketi": "private_sector_expectations",
         # Back-compat: any old saved value falls back to EVDS.
         "tuik": "tcmb_evds",
         "turkstat": "tcmb_evds",
@@ -56,6 +76,8 @@ def get_market_data_from_source(source=None):
     source = normalize_source(source)
     if source == "world_bank":
         return _with_meta(_fetch_world_bank(), source)
+    if source == "private_sector_expectations":
+        return _with_meta(_fetch_private_sector_expectation(), source)
     return _with_meta(get_guaranteed_market_data(), "tcmb_evds")
 
 
@@ -70,9 +92,68 @@ def _with_meta(data, source):
     out["source_name"] = meta["name"]
     out["source_institution"] = meta["institution"]
     out["source_method"] = meta["method"]
+    out["source_description"] = meta.get("description", "")
     out["data_source"] = meta
+    out["supports_ufe"] = meta.get("supports_ufe", True)
     out["as_of"] = out.get("as_of") or date.today().isoformat()
     return out
+
+
+def _fetch_private_sector_expectation():
+    if PRIVATE_SECTOR_INFLATION_EXPECTATION_URL:
+        latest = _latest_numeric_from_url(
+            PRIVATE_SECTOR_INFLATION_EXPECTATION_URL,
+            "TCMB Survey of Market Participants CPI expectation",
+        )
+        return {
+            "tufe": float(latest),
+            "ufe": 0,
+            "usd": 0,
+            "eur": 0,
+            "as_of": date.today().isoformat(),
+        }
+
+    series = (PRIVATE_SECTOR_INFLATION_EXPECTATION_SERIES or "").strip()
+    if not series:
+        raise RuntimeError(
+            "PRIVATE_SECTOR_INFLATION_EXPECTATION_SERIES must be configured to use the private-sector expectation source."
+        )
+    if not TCMB_API_KEY:
+        raise RuntimeError(
+            "TCMB_API_KEY must be configured to use the TCMB Survey of Market Participants source."
+        )
+
+    end = date.today()
+    start = end - timedelta(days=460)
+    url = (
+        f"{EVDS_BASE}series={series}"
+        f"&startDate={start.strftime('%d-%m-%Y')}"
+        f"&endDate={end.strftime('%d-%m-%Y')}&type=json"
+    )
+    data = _get_tcmb_json(url, "TCMB Survey of Market Participants CPI expectation")
+    items = data.get("items", []) if isinstance(data, dict) else []
+    field = series.replace(".", "_")
+    latest = None
+    latest_date = None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        parsed = _try_float(item.get(field))
+        if parsed is None:
+            continue
+        latest = parsed
+        latest_date = _parse_evds_date(item.get("Tarih"))
+    if latest is None:
+        raise RuntimeError(
+            f"TCMB Survey of Market Participants response did not include a numeric value for {series}."
+        )
+    return {
+        "tufe": float(latest),
+        "ufe": 0,
+        "usd": 0,
+        "eur": 0,
+        "as_of": latest_date or date.today().isoformat(),
+    }
 
 
 def _fetch_world_bank():
@@ -157,6 +238,27 @@ def _get_json(url, label):
         return response.json()
     except Exception as exc:
         raise RuntimeError(f"{label} fetch failed: {exc}") from exc
+
+
+def _get_tcmb_json(url, label):
+    try:
+        response = requests.get(url, headers={"key": TCMB_API_KEY}, timeout=25)
+        response.raise_for_status()
+        return response.json()
+    except Exception as exc:
+        raise RuntimeError(f"{label} fetch failed: {exc}") from exc
+
+
+def _parse_evds_date(value):
+    if not value:
+        return None
+    text = str(value).strip()
+    for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%Y-%m"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return text
 
 
 def _walk_numbers(value):

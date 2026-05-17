@@ -43,9 +43,17 @@ create table public.notifications (
   message text not null,
   type character varying(50) null default 'warning'::character varying,
   is_read boolean null default false,
+  recipient_user_id uuid null,
+  recipient_company_id uuid null,
+  action_url text null,
+  category text not null default 'system'::text,
+  event_key text null,
+  metadata jsonb not null default '{}'::jsonb,
   created_at timestamp with time zone null default now(),
   constraint notifications_pkey primary key (id),
-  constraint notifications_contract_id_fkey foreign KEY (contract_id) references contracts (id) on delete CASCADE
+  constraint notifications_contract_id_fkey foreign KEY (contract_id) references contracts (id) on delete CASCADE,
+  constraint notifications_recipient_user_id_fkey foreign KEY (recipient_user_id) references users (id) on delete CASCADE,
+  constraint notifications_recipient_company_id_fkey foreign KEY (recipient_company_id) references companies (id) on delete CASCADE
 ) TABLESPACE pg_default;
 
 create table public.password_reset_codes (
@@ -100,6 +108,12 @@ create table public.contracts (
   constraint contracts_sales_rep_id_fkey foreign KEY (sales_rep_id) references users (id),
   constraint contracts_tenant_company_id_fkey foreign KEY (tenant_company_id) references companies (id)
 ) TABLESPACE pg_default;
+
+create index if not exists idx_contracts_renewed_from_contract_id on public.contracts using btree (renewed_from_contract_id) TABLESPACE pg_default;
+
+create index if not exists idx_contracts_tenant_client_lineage on public.contracts using btree (tenant_company_id, company_id, renewed_from_contract_id) TABLESPACE pg_default;
+
+create index if not exists idx_contracts_approved_lineage on public.contracts using btree (status, approved_at desc, renewed_from_contract_id) TABLESPACE pg_default;
 
 create trigger trigger_contract_history
 after INSERT

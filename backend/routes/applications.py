@@ -111,8 +111,21 @@ def create_application():
                 message=message,
                 application_id=application["id"],
             )
+            from services.notification_service import notify_company_users
+
+            notify_company_users(
+                target_company_id,
+                "New department application",
+                f"{user['full_name']} applied to join the {target_department} department.",
+                roles=("company_admin", "hr"),
+                action_url="/application-management",
+                category="application",
+                notification_type="info",
+                event_key=f"application-submitted:{application['id']}",
+                metadata={"application_id": application["id"], "department": target_department},
+            )
         except Exception as email_err:
-            print(f"[applications] Email error: {email_err}")
+            print(f"[applications] Notification/email error: {email_err}")
 
         return jsonify(application), 201
     except Exception as e:
@@ -159,6 +172,22 @@ def review_application(app_id):
             }).eq("id", application["applicant_user_id"]).execute()
 
         result = supabase.table("applications").update(update_data).eq("id", app_id).execute()
+        try:
+            from services.notification_service import notify_user
+
+            notify_user(
+                application.get("applicant_user_id"),
+                f"Application {status}",
+                f"Your application to the {application.get('target_department')} department has been {status}.",
+                company_id=application.get("target_company_id"),
+                action_url="/applications",
+                category="application",
+                notification_type="success" if status == "approved" else "warning",
+                event_key=f"application-reviewed:{app_id}:{status}",
+                metadata={"application_id": app_id, "status": status},
+            )
+        except Exception as notification_err:
+            print(f"[applications] Notification error: {notification_err}")
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[applications] review error: {e}")

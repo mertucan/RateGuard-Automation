@@ -33,6 +33,8 @@ def calculate_renewal(contract_id):
     tufe = _to_float(market.get("tufe"), 0)
     ufe = _to_float(market.get("ufe"), 0)
     rule = contract.get("inflation_base_rule", "TUFE")
+    if market.get("supports_ufe") is False and rule in ("UFE", "TUFE+UFE"):
+        rule = "TUFE"
     max_limit = contract.get("max_increase_limit")
     max_limit_num = _to_float(max_limit, None)
     status = contract.get("status", "active")
@@ -74,6 +76,8 @@ def calculate_renewal(contract_id):
         "inflation_source_name": contract.get("inflation_source_name") or market.get("source_name", "TCMB EVDS"),
         "inflation_source_institution": contract.get("inflation_source_institution") or market.get("source_institution", ""),
         "inflation_source_method": contract.get("inflation_source_method") or market.get("source_method", ""),
+        "inflation_source_description": market.get("source_description", ""),
+        "supports_ufe": market.get("supports_ufe", True),
         "previous_amount": round(amount, 2),
         "currency": contract.get("currency", "TRY"),
         "contract_type": contract.get("contract_type", "service_contract"),

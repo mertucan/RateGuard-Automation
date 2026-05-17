@@ -25,6 +25,8 @@ import {
   clientRejectContract,
   notifySales,
   getApprovedAgreements,
+  getContractVersions,
+  createContractVersion,
   downloadApprovedPdf,
 } from "../api";
 
@@ -62,7 +64,13 @@ const DEFAULT_MARKET_SOURCE = {
   name: "TCMB EVDS",
   institution: "Central Bank of the Republic of Turkiye (TCMB)",
   method: "Official EVDS API",
+  description: "CPI and domestic producer price index series are pulled from TCMB EVDS and converted to annual rates.",
+  supports_ufe: true,
 };
+
+function sourceSupportsUfe(source) {
+  return source?.supports_ufe !== false;
+}
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -282,6 +290,10 @@ function ContractList() {
   }, [load]);
 
   const handleRuleChange = (rule) => {
+    if (!sourceSupportsUfe(marketRates.source) && ["UFE", "TUFE+UFE"].includes(rule)) {
+      toastError("This source only provides CPI expectation, so TUFE is used.");
+      rule = "TUFE";
+    }
     // For preset rules, auto-fill max_increase_limit and lock it
     let suggested = "";
     if (rule === "TUFE" && marketRates.tufe != null) {
@@ -320,6 +332,11 @@ function ContractList() {
           md.data_source?.institution ||
           DEFAULT_MARKET_SOURCE.institution,
         method: md.source_method || md.data_source?.method || DEFAULT_MARKET_SOURCE.method,
+        description:
+          md.source_description ||
+          md.data_source?.description ||
+          DEFAULT_MARKET_SOURCE.description,
+        supports_ufe: md.supports_ufe ?? md.data_source?.supports_ufe ?? true,
       },
     });
   };
@@ -336,14 +353,19 @@ function ContractList() {
       const nextTufe = md.tufe ?? md.tufe_yoy;
       const nextUfe = md.ufe ?? md.ufe_yoy;
       setForm((prev) => {
-        if (prev.inflation_base_rule === "CUSTOM") return prev;
+        const nextSupportsUfe = md.supports_ufe ?? md.data_source?.supports_ufe ?? true;
+        const nextRule =
+          !nextSupportsUfe && ["UFE", "TUFE+UFE"].includes(prev.inflation_base_rule)
+            ? "TUFE"
+            : prev.inflation_base_rule;
+        if (nextRule === "CUSTOM") return { ...prev, inflation_base_rule: nextRule };
         let suggested = "";
-        if (prev.inflation_base_rule === "TUFE" && nextTufe != null) {
+        if (nextRule === "TUFE" && nextTufe != null) {
           suggested = String(parseFloat(nextTufe).toFixed(1));
-        } else if (prev.inflation_base_rule === "UFE" && nextUfe != null) {
+        } else if (nextRule === "UFE" && nextUfe != null) {
           suggested = String(parseFloat(nextUfe).toFixed(1));
         } else if (
-          prev.inflation_base_rule === "TUFE+UFE" &&
+          nextRule === "TUFE+UFE" &&
           nextTufe != null &&
           nextUfe != null
         ) {
@@ -351,7 +373,7 @@ function ContractList() {
             ((parseFloat(nextTufe) + parseFloat(nextUfe)) / 2).toFixed(1),
           );
         }
-        return { ...prev, max_increase_limit: suggested };
+        return { ...prev, inflation_base_rule: nextRule, max_increase_limit: suggested };
       });
     } catch (err) {
       toastError("Failed to load inflation source: " + err.message);
@@ -736,6 +758,11 @@ function ContractList() {
                     {marketRates.source?.name || "TCMB EVDS"} via{" "}
                     {marketRates.source?.method || "Official API"}.
                   </p>
+                  {marketRates.source?.description && (
+                    <p className="mt-1 text-[10px] leading-snug text-text-muted">
+                      {marketRates.source.description}
+                    </p>
+                  )}
                   </div>
                   <div>
                   <label className="mb-1 flex h-5 items-center text-xs font-semibold uppercase text-text-muted">
@@ -747,19 +774,19 @@ function ContractList() {
                     onChange={(e) => handleRuleChange(e.target.value)}
                   >
                     <option value="TUFE">
-                      TUFE
+                      CPI (TUFE)
                       {marketRates.tufe != null
                         ? ` (${parseFloat(marketRates.tufe).toFixed(1)}%)`
                         : ""}
                     </option>
-                    <option value="UFE">
-                      UFE
+                    <option value="UFE" disabled={!sourceSupportsUfe(marketRates.source)}>
+                      PPI (UFE)
                       {marketRates.ufe != null
                         ? ` (${parseFloat(marketRates.ufe).toFixed(1)}%)`
                         : ""}
                     </option>
-                    <option value="TUFE+UFE">
-                      TUFE + UFE — Average
+                    <option value="TUFE+UFE" disabled={!sourceSupportsUfe(marketRates.source)}>
+                      CPI + PPI Average
                       {marketRates.tufe != null && marketRates.ufe != null
                         ? ` (${((parseFloat(marketRates.tufe) + parseFloat(marketRates.ufe)) / 2).toFixed(1)}%)`
                         : ""}
@@ -1947,6 +1974,7 @@ function ContractDetail() {
   const [clientRejectReason, setClientRejectReason] = useState("");
   const [clientActing, setClientActing] = useState(false);
   const [showSendToClientModal, setShowSendToClientModal] = useState(false);
+  const [creatingVersion, setCreatingVersion] = useState(false);
 
   const { setActiveContractId } = useRateBot();
 
@@ -1956,7 +1984,7 @@ function ContractDetail() {
       setContract(c);
       setCalc(k);
       setEditAmount(c.previous_amount || "");
-      setEditRule(c.inflation_base_rule || "TUFE");
+      setEditRule(k.inflation_base_rule || c.inflation_base_rule || "TUFE");
       setEditMaxLimit(c.max_increase_limit ?? "");
       setEditEndDate(c.end_date || "");
     } catch (err) {
@@ -2017,8 +2045,10 @@ function ContractDetail() {
     calc?.inflation_source_method ||
     contract?.inflation_source_method ||
     "Official EVDS API";
+  const inflationSourceDescription = calc?.inflation_source_description || "";
   const inflationDataSource =
     calc?.inflation_data_source || contract?.inflation_data_source || "tcmb_evds";
+  const calculationSupportsUfe = calc?.supports_ufe !== false;
 
   const formatCurrency = useCallback(
     (n, curr = "TRY") =>
@@ -2251,6 +2281,19 @@ function ContractDetail() {
   }[contractStatus] || {
     text: "Draft",
     cls: "bg-amber-500/10 text-amber-500",
+  };
+
+  const handleCreateVersion = async () => {
+    setCreatingVersion(true);
+    try {
+      const next = await createContractVersion(id);
+      showToast("New contract version created");
+      navigate(`/renewal-review/${next.id}`);
+    } catch (err) {
+      showToast("Version could not be created: " + err.message, "error");
+    } finally {
+      setCreatingVersion(false);
+    }
   };
 
   const inputCls =
@@ -2694,12 +2737,22 @@ function ContractDetail() {
                             onChange={
                               isSalesReadonly
                                 ? undefined
-                                : handleFieldChange(setEditRule)
+                                : (e) => {
+                                    if (
+                                      !calculationSupportsUfe &&
+                                      ["UFE", "TUFE+UFE"].includes(e.target.value)
+                                    ) {
+                                      showToast("This source only provides CPI expectation, so TUFE is used.");
+                                      setEditRule("TUFE");
+                                      return;
+                                    }
+                                    handleFieldChange(setEditRule)(e);
+                                  }
                             }
                           >
                             <option value="TUFE">TUFE</option>
-                            <option value="UFE">UFE</option>
-                            <option value="TUFE+UFE">TUFE + UFE (Avg)</option>
+                            <option value="UFE" disabled={!calculationSupportsUfe}>UFE</option>
+                            <option value="TUFE+UFE" disabled={!calculationSupportsUfe}>CPI + PPI Average</option>
                             <option value="CUSTOM">Custom</option>
                           </select>
                         </div>
@@ -2727,8 +2780,13 @@ function ContractDetail() {
                               {inflationSourceName}
                             </p>
                             <p className="mt-1 text-[11px] leading-snug text-text-muted">
-                              {inflationSourceInstitution} · {inflationSourceMethod}
+                              {inflationSourceInstitution} / {inflationSourceMethod}
                             </p>
+                            {inflationSourceDescription && (
+                              <p className="mt-2 text-[11px] leading-snug text-text-muted">
+                                {inflationSourceDescription}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="h-px bg-border" />
@@ -2737,7 +2795,7 @@ function ContractDetail() {
                             className="text-text-muted"
                             title="Consumer Price Index (TCMB)"
                           >
-                            TUFE (CPI)
+                            CPI (TUFE)
                           </span>
                           <span className="font-medium">
                             +{tufe.toFixed(2)}%
@@ -2748,7 +2806,7 @@ function ContractDetail() {
                             className="text-text-muted"
                             title="Producer Price Index (TCMB)"
                           >
-                            UFE (PPI)
+                            PPI (UFE)
                           </span>
                           <span className="font-medium">
                             +{ufe.toFixed(2)}%
@@ -2852,13 +2910,14 @@ function ContractDetail() {
                       </p>
                     </div>
                     <button
-                      onClick={() => navigate("/renewal-review")}
+                      onClick={handleCreateVersion}
+                      disabled={creatingVersion}
                       className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-amber-600"
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         add_circle
                       </span>
-                      New Version
+                      {creatingVersion ? "Creating..." : "New Version"}
                     </button>
                   </div>
                 )}
@@ -3178,11 +3237,15 @@ function ContractDetail() {
 /* ─── APPROVED AGREEMENTS ─── */
 function ApprovedAgreements() {
   const { error: toastError } = useToast();
+  const navigate = useNavigate();
   const [agreements, setAgreements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [pdfLoadingId, setPdfLoadingId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [versionsById, setVersionsById] = useState({});
+  const [versionsLoadingId, setVersionsLoadingId] = useState(null);
+  const [creatingVersionId, setCreatingVersionId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -3209,6 +3272,45 @@ function ApprovedAgreements() {
       toastError("PDF could not be downloaded: " + err.message);
     } finally {
       setPdfLoadingId(null);
+    }
+  };
+
+  const loadVersions = useCallback(
+    async (contractId) => {
+      if (versionsById[contractId]) return;
+      setVersionsLoadingId(contractId);
+      try {
+        const data = await getContractVersions(contractId);
+        setVersionsById((prev) => ({
+          ...prev,
+          [contractId]: Array.isArray(data) ? data : [],
+        }));
+      } catch (err) {
+        toastError("Failed to load contract versions: " + err.message);
+      } finally {
+        setVersionsLoadingId(null);
+      }
+    },
+    [toastError, versionsById],
+  );
+
+  const toggleExpanded = (contractId) => {
+    setExpandedId((current) => {
+      const next = current === contractId ? null : contractId;
+      if (next) loadVersions(contractId);
+      return next;
+    });
+  };
+
+  const handleCreateNextVersion = async (contractId) => {
+    setCreatingVersionId(contractId);
+    try {
+      const next = await createContractVersion(contractId);
+      navigate(`/renewal-review/${next.id}`);
+    } catch (err) {
+      toastError("New version could not be created: " + err.message);
+    } finally {
+      setCreatingVersionId(null);
     }
   };
 
@@ -3416,9 +3518,7 @@ function ApprovedAgreements() {
                           )}
                         </button>
                         <button
-                          onClick={() =>
-                            setExpandedId(isExpanded ? null : a.id)
-                          }
+                          onClick={() => toggleExpanded(a.id)}
                           className="flex items-center justify-center rounded-lg border border-border p-1.5 text-text-muted transition-colors hover:bg-hover hover:text-text"
                           title={isExpanded ? "Collapse" : "Show details"}
                         >
@@ -3432,6 +3532,84 @@ function ApprovedAgreements() {
                     {/* Expanded details */}
                     {isExpanded && (
                       <div className="border-t border-border bg-surface-alt px-5 py-4">
+                        <div className="mb-5 rounded-lg border border-border bg-surface p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold">Contract versions</p>
+                              <p className="text-xs text-text-muted">
+                                Previous and current renewal periods in this agreement chain.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCreateNextVersion(a.id)}
+                              disabled={creatingVersionId === a.id}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-50"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">
+                                add_circle
+                              </span>
+                              {creatingVersionId === a.id ? "Creating..." : "New version"}
+                            </button>
+                          </div>
+                          {versionsLoadingId === a.id ? (
+                            <div className="flex items-center gap-2 py-3 text-xs text-text-muted">
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+                              Loading versions...
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {(versionsById[a.id] || []).map((v) => {
+                                const versionAmount = v.new_amount || v.previous_amount;
+                                const versionDate = v.approved_at || v.created_at;
+                                return (
+                                  <button
+                                    key={v.id}
+                                    type="button"
+                                    onClick={() => navigate(`/renewal-review/${v.id}`)}
+                                    className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary-soft ${
+                                      v.id === a.id ? "border-primary/30 bg-primary/5" : "border-border bg-surface-alt"
+                                    }`}
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-xs font-bold text-text">
+                                          Version {v.version_number || "-"}
+                                        </span>
+                                        {v.is_current_version && (
+                                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                                            Current
+                                          </span>
+                                        )}
+                                        {v.id === a.id && (
+                                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                            Selected
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="mt-0.5 truncate text-xs text-text-muted">
+                                        {v.status || "draft"} · {v.end_date || "No end date"} · {versionDate ? new Date(versionDate).toLocaleDateString("tr-TR") : "No date"}
+                                      </p>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                      <p className="text-xs font-bold text-text">
+                                        {formatCurrency(versionAmount, v.currency)}
+                                      </p>
+                                      <p className="font-mono text-[10px] text-text-muted">
+                                        {String(v.id).slice(0, 8)}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                              {!versionsLoadingId && (versionsById[a.id] || []).length === 0 && (
+                                <p className="py-2 text-xs text-text-muted">
+                                  No linked versions found yet.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                           <div>
                             <p className="text-xs text-text-muted uppercase tracking-wide font-semibold mb-1">

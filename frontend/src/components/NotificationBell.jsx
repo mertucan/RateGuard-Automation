@@ -1,19 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function NotificationBell() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
   const load = useCallback(async () => {
     try {
-      const params = { unread: 'true' }
-      if (user?.role === 'company_admin' && user?.company_id) {
-        params.tenant_company_id = user.company_id
-      }
+      const params = { unread: 'true', limit: 30 }
       const data = await getNotifications(params)
       setNotifications(data)
     } catch {
@@ -35,10 +34,15 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const handleMarkRead = async (id) => {
+  const handleNotificationClick = async (notification) => {
     try {
-      await markNotificationRead(id)
-      setNotifications((prev) => prev.filter((n) => n.id !== id))
+      await markNotificationRead(notification.id)
+      setNotifications((prev) => prev.filter((n) => n.id !== notification.id))
+      setOpen(false)
+      const url = notification.action_url || (notification.contract_id ? `/renewal-review/${notification.contract_id}` : '')
+      if (url && url.startsWith('/') && !url.startsWith('//')) {
+        navigate(url)
+      }
     } catch {
       /* silent */
     }
@@ -66,6 +70,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setOpen(!open)}
         className="relative flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-text"
+        title="Notifications"
       >
         <span className="material-symbols-outlined text-[20px]">notifications</span>
         {notifications.length > 0 && (
@@ -76,9 +81,12 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border bg-surface shadow-xl z-50">
+        <div className="absolute right-0 top-full mt-2 z-50 w-[22rem] overflow-hidden rounded-xl border border-border bg-surface shadow-xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h4 className="text-sm font-bold">Notifications</h4>
+            <div>
+              <h4 className="text-sm font-bold">Notifications</h4>
+              <p className="text-[11px] text-text-muted">Unread workflow updates</p>
+            </div>
             {notifications.length > 0 && (
               <button
                 onClick={handleMarkAll}
@@ -98,10 +106,11 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map((n) => (
-                <div
+                <button
                   key={n.id}
-                  className="flex gap-3 border-b border-border px-4 py-3 transition-colors hover:bg-hover cursor-pointer"
-                  onClick={() => handleMarkRead(n.id)}
+                  type="button"
+                  className="flex w-full gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-hover"
+                  onClick={() => handleNotificationClick(n)}
                 >
                   <span
                     className={`material-symbols-outlined text-lg shrink-0 mt-0.5 ${
@@ -111,18 +120,23 @@ export default function NotificationBell() {
                     {TYPE_ICON[n.type] || 'info'}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{n.title}</p>
+                    <p className="truncate text-sm font-semibold">{n.title}</p>
                     <p className="text-xs text-text-muted line-clamp-2">{n.message}</p>
-                    <p className="text-[10px] text-text-muted mt-1">
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-text-muted">
                       {new Date(n.created_at).toLocaleString('tr-TR', {
                         day: 'numeric',
                         month: 'short',
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
-                    </p>
+                      </p>
+                      {(n.action_url || n.contract_id) && (
+                        <span className="text-[10px] font-semibold text-primary">Open</span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>
