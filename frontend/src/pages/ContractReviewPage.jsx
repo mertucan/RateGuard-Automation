@@ -107,6 +107,39 @@ function urgencyBadge(days) {
   return { text: `${days}d left`, cls: "bg-emerald-500/10 text-emerald-500" };
 }
 
+function recommendationBadge(recommendation) {
+  const action = recommendation?.action || "none";
+  const map = {
+    renew: {
+      text: "Renew",
+      icon: "autorenew",
+      cls: "bg-emerald-500/10 text-emerald-600",
+    },
+    review: {
+      text: "Review",
+      icon: "manage_search",
+      cls: "bg-amber-500/10 text-amber-600",
+    },
+    cancel: {
+      text: "Cancel",
+      icon: "block",
+      cls: "bg-red-500/10 text-red-600",
+    },
+    none: {
+      text: "No action",
+      icon: "check_circle",
+      cls: "bg-surface-alt text-text-muted",
+    },
+  };
+  return map[action] || map.none;
+}
+
+function recommendationPriorityCls(priority) {
+  if (priority === "high") return "border-red-500/20 bg-red-500/5";
+  if (priority === "medium") return "border-amber-500/20 bg-amber-500/5";
+  return "border-border bg-surface-alt";
+}
+
 /* ─── GENERIC CONFIRM / DELETE MODAL ─── */
 function ConfirmModal({
   open,
@@ -250,6 +283,7 @@ function ContractList() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [creatingVersionId, setCreatingVersionId] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -469,6 +503,19 @@ function ContractList() {
     }
   };
 
+  const handleCreateRecommendedVersion = async (contractId) => {
+    setCreatingVersionId(contractId);
+    try {
+      const next = await createContractVersion(contractId);
+      toastSuccess("New renewal version created.");
+      navigate(`/renewal-review/${next.id}`);
+    } catch (err) {
+      toastError("New version could not be created: " + err.message);
+    } finally {
+      setCreatingVersionId(null);
+    }
+  };
+
   const handleExport = () => {
     if (filtered.length === 0) {
       toastError("No data to export.");
@@ -640,7 +687,7 @@ function ContractList() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="mx-auto max-w-6xl space-y-6">
+        <div className="mx-auto max-w-7xl space-y-6">
           {/* New Contract Form */}
           {showForm && (
             <div className="rounded-xl border border-primary/20 bg-primary-soft p-4 sm:p-6">
@@ -893,23 +940,32 @@ function ContractList() {
           )}
 
           {/* Filters Bar */}
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className="space-y-3">
             {/* Status Tabs */}
-            <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-surface p-1">
+            <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-2 shadow-sm sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
               {Object.entries(STATUS_MAP).map(([key, val]) => (
                 <button
                   key={key}
                   onClick={() => setStatusFilter(key)}
-                  className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
+                  className={`flex min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${
                     statusFilter === key
-                      ? "bg-primary text-white"
-                      : "text-text-muted hover:bg-hover hover:text-text"
+                      ? "bg-primary text-white shadow-sm"
+                      : "bg-surface-alt/60 text-text-muted hover:bg-hover hover:text-text"
                   }`}
                 >
-                  {val.label}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`material-symbols-outlined text-[16px] ${
+                        statusFilter === key ? "text-white" : val.cls || "text-text-muted"
+                      }`}
+                    >
+                      {val.icon}
+                    </span>
+                    <span className="truncate">{val.label}</span>
+                  </span>
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                      statusFilter === key ? "bg-white/20" : "bg-surface-alt"
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      statusFilter === key ? "bg-white/20 text-white" : "bg-bg text-text"
                     }`}
                   >
                     {statusCounts[key] ?? 0}
@@ -918,18 +974,19 @@ function ContractList() {
               ))}
             </div>
 
-            {/* Rule Filter */}
-            <select
-              value={ruleFilter}
-              onChange={(e) => setRuleFilter(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
-            >
-              {RULE_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r === "All" ? "All Rules" : r}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+              {/* Rule Filter */}
+              <select
+                value={ruleFilter}
+                onChange={(e) => setRuleFilter(e.target.value)}
+                className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
+              >
+                {RULE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r === "All" ? "All Rules" : r}
+                  </option>
+                ))}
+              </select>
 
             {/* Search */}
             <div className="w-full sm:flex-1">
@@ -947,45 +1004,75 @@ function ContractList() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-3 sm:p-4">
-            <div>
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                End date from
-              </label>
-              <input
-                type="date"
-                value={endDateFrom}
-                onChange={(e) => setEndDateFrom(e.target.value)}
-                className={`${inputCls} w-auto min-w-[10.5rem]`}
-              />
+          <div className="rounded-xl border border-border bg-surface p-3 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
+                  <span className="material-symbols-outlined text-[18px]">
+                    event
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                    End date window
+                  </p>
+                  <p className="truncate text-xs text-text-muted">
+                    Narrow contracts by renewal deadline.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end lg:max-w-3xl lg:justify-end">
+                <label className="min-w-0 flex-1">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                    From
+                  </span>
+                  <input
+                    type="date"
+                    value={endDateFrom}
+                    onChange={(e) => setEndDateFrom(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none [color-scheme:dark] focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </label>
+                <label className="min-w-0 flex-1">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                    Through
+                  </span>
+                  <input
+                    type="date"
+                    value={endDateTo}
+                    onChange={(e) => setEndDateTo(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none [color-scheme:dark] focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </label>
+
+                <div className="flex items-center gap-2 sm:pb-0.5">
+                  {(endDateFrom || endDateTo || calendarSelectedDay) && (
+                    <span className="hidden rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary sm:inline-flex">
+                      Active
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEndDateFrom("");
+                      setEndDateTo("");
+                      setCalendarSelectedDay(null);
+                    }}
+                    disabled={!endDateFrom && !endDateTo && !calendarSelectedDay}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-muted transition-colors hover:bg-hover hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">
+                      close
+                    </span>
+                    Clear
+                  </button>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                End date through
-              </label>
-              <input
-                type="date"
-                value={endDateTo}
-                onChange={(e) => setEndDateTo(e.target.value)}
-                className={`${inputCls} w-auto min-w-[10.5rem]`}
-              />
-            </div>
-            {(endDateFrom || endDateTo || calendarSelectedDay) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEndDateFrom("");
-                  setEndDateTo("");
-                  setCalendarSelectedDay(null);
-                }}
-                className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-muted transition-colors hover:bg-hover hover:text-text"
-              >
-                Clear dates
-              </button>
-            )}
           </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_290px] xl:items-start">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_260px] xl:items-start">
             <div>
           {/* Contract Table */}
           {filtered.length === 0 ? (
@@ -999,20 +1086,31 @@ function ContractList() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border bg-surface">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
+                <table className="w-full table-fixed border-collapse text-left">
+                  <colgroup>
+                    <col className="w-[20%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[14%]" />
+                  </colgroup>
                   <thead>
-                    <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">Company</th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">Amount</th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">
+                    <tr className="border-b border-border bg-surface-alt text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                      <th className="px-3 py-3">Company</th>
+                      <th className="px-3 py-3">Amount</th>
+                      <th className="px-3 py-3">
                         Rule & Limit
                       </th>
-                      <th className="hidden px-4 py-3 sm:table-cell sm:px-6 sm:py-4">
+                      <th className="hidden px-3 py-3 md:table-cell">
                         End Date
                       </th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4">Status</th>
-                      <th className="px-4 py-3 text-right sm:px-6 sm:py-4">
+                      <th className="px-3 py-3">
+                        Suggestion
+                      </th>
+                      <th className="px-3 py-3">Status</th>
+                      <th className="px-3 py-3 text-right">
                         Actions
                       </th>
                     </tr>
@@ -1022,20 +1120,27 @@ function ContractList() {
                       const days = daysUntil(c.end_date);
                       const urgency = urgencyBadge(days);
                       const st = c.status || "draft";
+                      const recommendation = c.renewal_recommendation;
+                      const recBadge = recommendationBadge(recommendation);
+                      const canCreateRecommendedVersion =
+                        recommendation?.eligible_for_new_version &&
+                        ["finance", "company_admin", "super_admin", "sales"].includes(
+                          user?.role,
+                        );
 
                       return (
                         <tr
                           className="group transition-colors hover:bg-hover"
                           key={c.id}
                         >
-                          <td className="px-4 py-3 sm:px-6 sm:py-4">
+                          <td className="px-3 py-3">
                             <div className="flex items-center gap-3">
                               <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary sm:flex">
                                 {(c.companies?.company_name ||
                                   "?")[0].toUpperCase()}
                               </div>
-                              <div>
-                                <p className="font-semibold text-sm">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold">
                                   {c.companies?.company_name || "—"}
                                 </p>
                                 <p className="text-xs text-text-muted">
@@ -1044,12 +1149,12 @@ function ContractList() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm font-medium sm:px-6 sm:py-4">
+                          <td className="truncate px-3 py-3 text-sm font-medium">
                             {formatCurrency(c.previous_amount, c.currency)}
                           </td>
-                          <td className="px-4 py-3 text-sm sm:px-6 sm:py-4">
+                          <td className="px-3 py-3 text-sm">
                             <div className="space-y-0.5">
-                              <p>
+                              <p className="truncate">
                                 <span className="font-medium">
                                   {c.inflation_base_rule || "—"}
                                 </span>
@@ -1059,15 +1164,48 @@ function ContractList() {
                                   </span>
                                 )}
                               </p>
-                              <p className="text-[11px] text-text-muted">
+                              <p className="truncate text-[11px] text-text-muted">
                                 {c.inflation_source_name || "TCMB EVDS"}
                               </p>
                             </div>
                           </td>
-                          <td className="hidden px-4 py-3 text-sm sm:table-cell sm:px-6 sm:py-4">
+                          <td className="hidden truncate px-3 py-3 text-sm md:table-cell">
                             {c.end_date || "—"}
                           </td>
-                          <td className="px-4 py-3 sm:px-6 sm:py-4">
+                          <td className="px-3 py-3">
+                            <div className="flex flex-col items-start gap-1.5">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${recBadge.cls}`}
+                                title={recommendation?.reason || ""}
+                              >
+                                <span className="material-symbols-outlined text-[13px]">
+                                  {recBadge.icon}
+                                </span>
+                                {recBadge.text}
+                              </span>
+                              {canCreateRecommendedVersion && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleCreateRecommendedVersion(c.id)
+                                  }
+                                  disabled={creatingVersionId === c.id}
+                                  className="group inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[10px] font-bold text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white disabled:cursor-wait disabled:opacity-60"
+                                  title="Create a revised renewal version"
+                                >
+                                  <span className="material-symbols-outlined text-[14px] transition-transform group-hover:rotate-90">
+                                    add
+                                  </span>
+                                  <span className="truncate">
+                                    {creatingVersionId === c.id
+                                      ? "Creating"
+                                      : "Version"}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
                             <div className="flex flex-col items-start gap-1">
                               <span
                                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge(st)}`}
@@ -1083,7 +1221,7 @@ function ContractList() {
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right sm:px-6 sm:py-4">
+                          <td className="px-3 py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() =>
@@ -1111,7 +1249,6 @@ function ContractList() {
                     })}
                   </tbody>
                 </table>
-              </div>
             </div>
           )}
             </div>
@@ -1132,6 +1269,7 @@ function ContractList() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -2455,6 +2593,12 @@ function ContractDetail() {
     text: "Draft",
     cls: "bg-amber-500/10 text-amber-500",
   };
+  const renewalRecommendation = contract.renewal_recommendation;
+  const renewalRecBadge = recommendationBadge(renewalRecommendation);
+  const canCreateRecommendedVersion =
+    renewalRecommendation?.eligible_for_new_version &&
+    isTenantSide &&
+    ["finance", "company_admin", "super_admin", "sales"].includes(user?.role);
 
   const handleCreateVersion = async () => {
     setCreatingVersion(true);
@@ -2728,6 +2872,68 @@ function ContractDetail() {
               {contract.id.slice(0, 8)}
             </p>
           </div>
+
+          {renewalRecommendation && renewalRecommendation.action !== "none" && (
+            <div
+              className={`mb-6 flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between ${recommendationPriorityCls(
+                renewalRecommendation.priority,
+              )}`}
+            >
+              <div className="flex min-w-0 items-start gap-3">
+                <span
+                  className={`material-symbols-outlined mt-0.5 rounded-full p-2 text-[20px] ${renewalRecBadge.cls}`}
+                >
+                  {renewalRecBadge.icon}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-text">Smart renewal suggestion</p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${renewalRecBadge.cls}`}
+                    >
+                      {renewalRecBadge.text}
+                    </span>
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold uppercase text-text-muted">
+                      {renewalRecommendation.source === "gemini"
+                        ? "AI"
+                        : "Rules"}
+                      {renewalRecommendation.confidence != null
+                        ? ` ${renewalRecommendation.confidence}%`
+                        : ""}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-text-muted">
+                    {renewalRecommendation.reason}
+                  </p>
+                  {renewalRecommendation.next_steps?.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {renewalRecommendation.next_steps.slice(0, 3).map((step) => (
+                        <span
+                          key={step}
+                          className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-text-muted"
+                        >
+                          {step}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {canCreateRecommendedVersion && (
+                <button
+                  type="button"
+                  onClick={handleCreateVersion}
+                  disabled={creatingVersion}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    add_circle
+                  </span>
+                  {creatingVersion ? "Creating..." : "Create renewal version"}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Stats Row */}
           <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 md:grid-cols-4">

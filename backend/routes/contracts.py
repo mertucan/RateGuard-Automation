@@ -6,6 +6,10 @@ import re
 from flask import Blueprint, g, jsonify, request, send_file
 from services.auth_middleware import login_required, role_required
 from services.pdf_naming import addendum_download_name
+from services.renewal_recommendations import (
+    attach_renewal_recommendation,
+    attach_renewal_recommendations,
+)
 from services.supabase_client import supabase
 
 contracts_bp = Blueprint("contracts", __name__)
@@ -200,7 +204,7 @@ def list_contracts():
             query = query.lte("end_date", end_date_to)
 
         result = query.order("end_date", desc=False).execute()
-        return jsonify(result.data)
+        return jsonify(attach_renewal_recommendations(result.data))
     except Exception as e:
         print(f"[contracts] Supabase error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -228,7 +232,7 @@ def list_approved_agreements():
             )
 
         result = query.order("approved_at", desc=True).execute()
-        return jsonify(result.data), 200
+        return jsonify(attach_renewal_recommendations(result.data)), 200
     except Exception as e:
         print(f"[approved-agreements] Error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -439,7 +443,11 @@ def get_contract(contract_id):
             .limit(1)
             .execute()
         )
-        return jsonify(result.data[0] if result.data else None)
+        return jsonify(
+            attach_renewal_recommendation(result.data[0], use_ai=True)
+            if result.data
+            else None
+        )
     except Exception as e:
         print(f"[contract detail] Supabase error: {e}")
         return jsonify({"error": str(e)}), 500

@@ -305,6 +305,92 @@ Rules:
     raise RuntimeError("Gemini API quota exhausted. Please try again in a few minutes.")
 
 
+def generate_renewal_recommendation(context: dict) -> dict:
+    """Generate an AI decision layer for a contract renewal recommendation."""
+    if not client:
+        raise RuntimeError("Gemini API is not configured. GEMINI_API_KEY is missing.")
+
+    compact_payload = {
+        "rule_recommendation": context.get("rule_recommendation", {}),
+        "contract": context.get("contract", {}),
+        "calculation": context.get("calculation", {}),
+    }
+
+    system_prompt = """You are RateGuard's AI renewal decision analyst.
+
+Return ONLY a valid JSON object with these keys:
+- action: exactly one of renew, review, cancel, none
+- label: short human label
+- priority: exactly one of high, medium, low
+- confidence: number from 0 to 100
+- reason: one concise business explanation
+- next_steps: array of 2 to 4 short operational actions
+- risk_flags: array of short risk flags, can be empty
+
+Rules:
+- Stay grounded in the input. Do not invent missing contract terms.
+- Treat the rule_recommendation as the guardrail. Only override it when the supplied data clearly supports a better action.
+- Prefer review over cancel when evidence is ambiguous.
+- Use English because the current UI is English.
+- Do not use Markdown or code fences."""
+
+    user_prompt = "Recommend the best renewal action for this contract:\n" + json.dumps(
+        compact_payload,
+        ensure_ascii=False,
+    )
+
+    contents = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
+    config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        temperature=0.2,
+        max_output_tokens=900,
+    )
+
+    for model_name in [GEMINI_MODEL, FALLBACK_MODEL]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
+            parsed = _parse_json_object(response.text)
+            action = parsed.get("action")
+            priority = parsed.get("priority")
+            if action not in {"renew", "review", "cancel", "none"}:
+                action = (context.get("rule_recommendation") or {}).get("action", "review")
+            if priority not in {"high", "medium", "low"}:
+                priority = (context.get("rule_recommendation") or {}).get("priority", "medium")
+            confidence = parsed.get("confidence", 70)
+            try:
+                confidence = max(0, min(100, int(confidence)))
+            except (TypeError, ValueError):
+                confidence = 70
+            return {
+                "action": action,
+                "label": parsed.get("label")
+                or {
+                    "renew": "Renew",
+                    "review": "Review",
+                    "cancel": "Cancel",
+                    "none": "No action",
+                }.get(action, action.title()),
+                "priority": priority,
+                "confidence": confidence,
+                "reason": parsed.get("reason") or (context.get("rule_recommendation") or {}).get("reason", ""),
+                "next_steps": parsed.get("next_steps") or [],
+                "risk_flags": parsed.get("risk_flags") or [],
+            }
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                print(f"[renewal-recommendation] Quota exhausted ({model_name}), trying fallback...")
+                continue
+            print(f"[renewal-recommendation] API Error ({model_name}): {e}")
+            continue
+
+    raise RuntimeError("Gemini API quota exhausted. Please try again in a few minutes.")
+
+
 def ratebot_respond(
     message: str, contract_id: Optional[str] = None, history: Optional[list] = None
 ) -> str:
