@@ -12,8 +12,19 @@ jobs:
     steps:
       - name: Trigger contract expiry reminders
         run: |
-          curl -fsS -X POST "$APP_URL/api/cron/expiry-reminders" \
-            -H "X-Cron-Secret: $CRON_SECRET"
+          response_file="$(mktemp)"
+          http_code="$(
+            curl -sS -o "$response_file" -w "%{http_code}" -X POST "$APP_URL/api/cron/expiry-reminders" \
+              -H "X-Cron-Secret: $CRON_SECRET"
+          )"
+
+          cat "$response_file"
+          echo
+          echo "HTTP status: $http_code"
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            exit 1
+          fi
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
