@@ -123,6 +123,7 @@ def check_expiring_contracts():
         "checked": 0,
         "notifications_created": 0,
         "emails_sent": 0,
+        "emails_failed": 0,
         "today": today.isoformat(),
         "timezone": APP_TIMEZONE,
         "thresholds": ALERT_THRESHOLDS,
@@ -200,6 +201,8 @@ def check_expiring_contracts():
                 sent = send_contract_notification(company_email, company_name, threshold, contract["id"])
                 if sent:
                     results["emails_sent"] += 1
+                else:
+                    results["emails_failed"] += 1
             else:
                 results["matched_without_email"] += 1
 
