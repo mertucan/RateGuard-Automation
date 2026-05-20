@@ -6,7 +6,15 @@ from email.mime.text import MIMEText
 from html import escape
 from urllib.parse import quote
 
-from config import APP_BASE_URL, SMTP_FROM_EMAIL, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_USER
+from config import (
+    APP_BASE_URL,
+    SMTP_FROM_EMAIL,
+    SMTP_HOST,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_TIMEOUT_SECONDS,
+    SMTP_USER,
+)
 
 
 def _safe_portal_path(path):
@@ -152,7 +160,7 @@ def send_email(to_email, subject, body_html, body_text=None, attachment=None, at
         msg.attach(att)
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg, to_addrs=rcpt)
