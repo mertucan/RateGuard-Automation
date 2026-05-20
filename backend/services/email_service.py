@@ -13,6 +13,7 @@ from config import (
     SMTP_PASSWORD,
     SMTP_PORT,
     SMTP_TIMEOUT_SECONDS,
+    SMTP_USE_SSL,
     SMTP_USER,
 )
 
@@ -160,8 +161,10 @@ def send_email(to_email, subject, body_html, body_text=None, attachment=None, at
         msg.attach(att)
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
-            server.starttls()
+        smtp_class = smtplib.SMTP_SSL if SMTP_USE_SSL else smtplib.SMTP
+        with smtp_class(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT_SECONDS) as server:
+            if not SMTP_USE_SSL:
+                server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg, to_addrs=rcpt)
         print(f"[Email] Sent to {to_email} (CC: {cc_email}): {subject}")
