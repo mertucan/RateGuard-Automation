@@ -53,6 +53,7 @@ ALLOW_INSECURE_DEV_AUTH = os.getenv("ALLOW_INSECURE_DEV_AUTH", "").lower() in (
     "yes",
 )
 CRON_SECRET = os.getenv("CRON_SECRET", "")
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Europe/Istanbul")
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(

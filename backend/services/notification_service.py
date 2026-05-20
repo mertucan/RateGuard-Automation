@@ -1,10 +1,20 @@
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from config import APP_TIMEZONE
 from services.email_service import send_contract_notification
 from services.supabase_client import supabase
 
 ALERT_THRESHOLDS = [30, 15, 7, 3, 1]
 FINAL_STATUSES = {"client_approved", "client_rejected", "cancelled", "approved", "rejected"}
+
+
+def _today():
+    try:
+        return datetime.now(ZoneInfo(APP_TIMEZONE)).date()
+    except ZoneInfoNotFoundError:
+        print(f"[Notifications] Unknown APP_TIMEZONE={APP_TIMEZONE!r}; falling back to UTC.")
+        return datetime.utcnow().date()
 
 
 def _insert_notification(payload):
@@ -96,8 +106,21 @@ def notify_user(user_id, title, message, company_id=None, **kwargs):
 
 
 def check_expiring_contracts():
-    today = date.today()
-    results = {"checked": 0, "notifications_created": 0, "emails_sent": 0}
+    today = _today()
+    results = {
+        "checked": 0,
+        "notifications_created": 0,
+        "emails_sent": 0,
+        "today": today.isoformat(),
+        "timezone": APP_TIMEZONE,
+        "thresholds": ALERT_THRESHOLDS,
+        "days_remaining_counts": {},
+        "matched_contracts": 0,
+        "skipped_final_status": 0,
+        "skipped_missing_end_date": 0,
+        "skipped_invalid_end_date": 0,
+        "matched_without_email": 0,
+    }
 
     try:
         contracts = (
@@ -114,23 +137,31 @@ def check_expiring_contracts():
 
     for contract in contracts:
         if contract.get("status") in FINAL_STATUSES:
+            results["skipped_final_status"] += 1
             continue
 
         end_date_str = contract.get("end_date")
         if not end_date_str:
+            results["skipped_missing_end_date"] += 1
             continue
 
         try:
-            end_date = date.fromisoformat(end_date_str[:10])
+            end_date = datetime.fromisoformat(str(end_date_str)[:10]).date()
         except (ValueError, TypeError):
+            results["skipped_invalid_end_date"] += 1
             continue
 
         days_remaining = (end_date - today).days
+        day_key = str(days_remaining)
+        results["days_remaining_counts"][day_key] = (
+            results["days_remaining_counts"].get(day_key, 0) + 1
+        )
         results["checked"] += 1
 
         for threshold in ALERT_THRESHOLDS:
             if days_remaining != threshold:
                 continue
+            results["matched_contracts"] += 1
 
             company = contract.get("companies", {}) or {}
             company_name = company.get("company_name", "Unknown")
@@ -157,5 +188,7 @@ def check_expiring_contracts():
                 sent = send_contract_notification(company_email, company_name, threshold, contract["id"])
                 if sent:
                     results["emails_sent"] += 1
+            else:
+                results["matched_without_email"] += 1
 
     return results
