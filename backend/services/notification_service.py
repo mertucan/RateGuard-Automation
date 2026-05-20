@@ -1,5 +1,12 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import datetime, timedelta, timezone
+
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:  # Python < 3.9 fallback for hosted runtimes.
+    ZoneInfo = None
+
+    class ZoneInfoNotFoundError(Exception):
+        pass
 
 from config import APP_TIMEZONE
 from services.email_service import send_contract_notification
@@ -10,6 +17,11 @@ FINAL_STATUSES = {"client_approved", "client_rejected", "cancelled", "approved",
 
 
 def _today():
+    if ZoneInfo is None:
+        if APP_TIMEZONE == "Europe/Istanbul":
+            return datetime.now(timezone(timedelta(hours=3))).date()
+        return datetime.now(timezone.utc).date()
+
     try:
         return datetime.now(ZoneInfo(APP_TIMEZONE)).date()
     except ZoneInfoNotFoundError:
