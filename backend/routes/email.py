@@ -1,10 +1,12 @@
 from html import escape
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from services.calculation import calculate_renewal
+from services.auth_middleware import login_required
 from services.email_service import render_email, send_email
 from services.gemini_service import generate_email_draft
+from routes.contracts import _get_scoped_contract
 
 email_bp = Blueprint("email", __name__)
 
@@ -49,9 +51,13 @@ def contact_message():
 
 
 @email_bp.route("/api/contracts/<contract_id>/generate-email", methods=["POST"])
+@login_required
 def generate_email(contract_id):
     """Generate a contract renewal email draft with Gemini."""
     try:
+        _, error = _get_scoped_contract(contract_id, g.current_user)
+        if error:
+            return error
         calc = calculate_renewal(contract_id)
 
         body = request.get_json() or {}

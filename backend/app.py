@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+from config import CORS_ORIGINS
 
 from routes.companies import companies_bp
 from routes.contracts import contracts_bp
@@ -20,7 +21,7 @@ from services.scheduler import start_scheduler
 
 def create_app():
     app = Flask(__name__)
-    CORS(app)
+    CORS(app, origins=CORS_ORIGINS, supports_credentials=False)
 
     app.register_blueprint(companies_bp)
     app.register_blueprint(contracts_bp)
@@ -37,6 +38,17 @@ def create_app():
     app.register_blueprint(automation_bp)
     app.register_blueprint(internal_chat_bp)
     start_scheduler()
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=()",
+        )
+        return response
 
     @app.route("/api/health")
     def health():

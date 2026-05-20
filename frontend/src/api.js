@@ -3,6 +3,7 @@ const BASE = "/api";
 function getAuthHeaders() {
   try {
     const user = JSON.parse(localStorage.getItem("rg_user") || "null");
+    if (user?.access_token) return { Authorization: `Bearer ${user.access_token}` };
     if (user?.id) return { "X-User-Id": user.id };
   } catch {
     /* ignore */

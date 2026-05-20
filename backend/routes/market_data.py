@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from flask import Blueprint, jsonify, request, g
 from services.supabase_client import supabase
-from services.auth_middleware import login_required
+from services.auth_middleware import login_required, role_required
 from services.market_cache import get_cached_market_data, get_cached_history
 from services.market_sources import available_sources
 from veri_cekme_tcmb import get_guaranteed_market_data
@@ -36,6 +36,7 @@ def get_market_history():
 
 
 @market_data_bp.route("/api/market-data/save", methods=["POST"])
+@role_required("super_admin", "company_admin", "finance")
 def save_market_data():
     data = get_guaranteed_market_data()
     row = {

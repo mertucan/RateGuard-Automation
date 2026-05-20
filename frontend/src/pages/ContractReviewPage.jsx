@@ -1287,7 +1287,6 @@ function ContractDocumentPreview({
   inflationSourceName,
   inflationSourceInstitution,
   inflationSourceMethod,
-  contractId,
   formatCurrency,
 }) {
   const sigBlank = "____________________";

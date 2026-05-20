@@ -1,5 +1,6 @@
 from flask import Blueprint, g, jsonify, request
 
+from config import CRON_SECRET
 from services.auth_middleware import login_required
 from services.notification_service import create_notification
 from services.supabase_client import supabase
@@ -149,4 +150,20 @@ def check_expiring():
         return jsonify(results)
     except Exception as e:
         print(f"[check-expiring] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@notifications_bp.route("/api/cron/expiry-reminders", methods=["POST"])
+def cron_expiry_reminders():
+    """External cron hook for daily contract expiry reminders."""
+    if not CRON_SECRET:
+        return jsonify({"error": "Cron endpoint is not configured"}), 503
+    if request.headers.get("X-Cron-Secret") != CRON_SECRET:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        from services.notification_service import check_expiring_contracts
+
+        return jsonify(check_expiring_contracts())
+    except Exception as e:
+        print(f"[cron-expiry-reminders] Error: {e}")
         return jsonify({"error": str(e)}), 500

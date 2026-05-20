@@ -598,6 +598,8 @@ def get_company(company_id):
 def create_company():
     body = request.get_json()
     user = g.current_user
+    if user.get("role") not in ("super_admin", "company_admin"):
+        return jsonify({"error": "Insufficient permissions"}), 403
     
     data = {
         "company_name": body["company_name"],
@@ -618,8 +620,22 @@ def create_company():
 @login_required
 def update_company(company_id):
     body = request.get_json()
+    user = g.current_user
+    if user.get("role") not in ("super_admin", "company_admin"):
+        return jsonify({"error": "Insufficient permissions"}), 403
     allowed = ["company_name", "authorized_email", "communication_language"]
     data = {k: v for k, v in body.items() if k in allowed}
+    if user.get("role") == "company_admin":
+        visible = (
+            supabase.table("companies")
+            .select("id, created_by_tenant_id")
+            .eq("id", company_id)
+            .limit(1)
+            .execute()
+        )
+        row = visible.data[0] if visible.data else None
+        if not row or str(row.get("created_by_tenant_id")) != str(user.get("company_id")):
+            return jsonify({"error": "Insufficient permissions"}), 403
     result = supabase.table("companies").update(data).eq("id", company_id).execute()
     return jsonify(result.data[0])
 
@@ -628,7 +644,7 @@ def update_company(company_id):
 @login_required
 def delete_company(company_id):
     user = g.current_user
-    if user["role"] in ["company_admin", "finance", "sales"]:
+    if user["role"] == "company_admin":
         # Only delete contracts between this client and the user's company
         supabase.table("contracts").delete().eq("company_id", company_id).eq("tenant_company_id", user["company_id"]).execute()
 
@@ -639,6 +655,9 @@ def delete_company(company_id):
 
         return jsonify({"ok": True, "message": "Related contracts removed; client returned to directory when unused."})
         
+    if user["role"] != "super_admin":
+        return jsonify({"error": "Insufficient permissions"}), 403
+
     # Super admin deletes the whole company
     supabase.table("companies").delete().eq("id", company_id).execute()
     return jsonify({"ok": True})

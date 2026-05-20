@@ -17,6 +17,7 @@ const ALL_NAV_ITEMS = [
       "company_admin",
       "finance",
       "sales",
+      "user",
     ],
   },
   {
@@ -59,7 +60,7 @@ const ALL_NAV_ITEMS = [
     to: "/analytics",
     icon: "monitoring",
     label: "Analytics",
-    roles: ["super_admin", "company_admin", "finance", "sales", "user"],
+    roles: ["super_admin", "company_admin", "finance", "user"],
   },
 ];
 
@@ -71,9 +72,12 @@ export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { activeContractId } = useRateBot();
 
-  const navItems = ALL_NAV_ITEMS.filter(
-    (item) => !item.roles || (user && item.roles.includes(user.role)),
-  );
+  const navItems = ALL_NAV_ITEMS.filter((item) => {
+    if (item.to === "/renewal-review" && user?.role === "user" && !user?.company_id) {
+      return false;
+    }
+    return !item.roles || (user && item.roles.includes(user.role));
+  });
 
   const isActive = (path) =>
     path === "/renewal-review"

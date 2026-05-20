@@ -1,0 +1,19 @@
+name: Daily Expiry Reminders
+
+on:
+  schedule:
+    # GitHub Actions cron uses UTC. 05:00 UTC is 08:00 in Turkiye.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger-expiry-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger contract expiry reminders
+        run: |
+          curl -fsS -X POST "$APP_URL/api/cron/expiry-reminders" \
+            -H "X-Cron-Secret: $CRON_SECRET"
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

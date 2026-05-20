@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from services.supabase_client import supabase
+from services.auth_middleware import role_required
 
 renewals_bp = Blueprint("renewals", __name__)
 
 
 @renewals_bp.route("/api/renewals", methods=["GET"])
+@role_required("super_admin", "company_admin", "finance", "sales")
 def list_renewals():
     contract_id = request.args.get("contract_id")
     status = request.args.get("status")
@@ -26,6 +28,7 @@ def list_renewals():
 
 
 @renewals_bp.route("/api/renewals", methods=["POST"])
+@role_required("super_admin", "company_admin", "finance")
 def create_renewal():
     body = request.get_json()
     data = {
@@ -42,6 +45,7 @@ def create_renewal():
 
 
 @renewals_bp.route("/api/renewals/<renewal_id>", methods=["PUT"])
+@role_required("super_admin", "company_admin", "finance")
 def update_renewal(renewal_id):
     body = request.get_json()
     allowed = ["new_price", "ai_text_draft", "approval_status"]
@@ -59,6 +63,7 @@ def update_renewal(renewal_id):
 
 
 @renewals_bp.route("/api/renewals/<renewal_id>", methods=["DELETE"])
+@role_required("super_admin", "company_admin")
 def delete_renewal(renewal_id):
     try:
         supabase.table("renewals").delete().eq("id", renewal_id).execute()

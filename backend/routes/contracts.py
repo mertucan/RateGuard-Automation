@@ -1042,6 +1042,9 @@ def notify_sales(contract_id):
     """Finance notifies Sales team that contract preparation is done."""
     try:
         user = g.current_user
+        _, error = _get_scoped_contract(contract_id, user)
+        if error:
+            return error
 
         contract_res = (
             supabase.table("contracts")
@@ -1149,6 +1152,10 @@ def ratebot_chat():
 
         if not message:
             return jsonify({"error": "message is required"}), 400
+        if contract_id:
+            _, error = _get_scoped_contract(contract_id, g.current_user)
+            if error:
+                return error
 
         from services.gemini_service import ratebot_respond
 
@@ -1165,6 +1172,9 @@ def ratebot_chat():
 @login_required
 def get_approved_pdf(contract_id):
     try:
+        _, error = _get_scoped_contract(contract_id, g.current_user)
+        if error:
+            return error
         from services.calculation import calculate_renewal
         from services.pdf_generator import generate_addendum_pdf
 

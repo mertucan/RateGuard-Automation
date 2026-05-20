@@ -1,10 +1,12 @@
 from flask import Blueprint, request, jsonify
 from services.supabase_client import supabase
+from services.auth_middleware import role_required
 
 financial_logs_bp = Blueprint("financial_logs", __name__)
 
 
 @financial_logs_bp.route("/api/financial-logs", methods=["GET"])
+@role_required("super_admin", "company_admin", "finance")
 def list_logs():
     limit = request.args.get("limit", 50, type=int)
     result = (
@@ -18,6 +20,7 @@ def list_logs():
 
 
 @financial_logs_bp.route("/api/financial-logs", methods=["POST"])
+@role_required("super_admin", "company_admin", "finance")
 def create_log():
     body = request.get_json()
     data = {
@@ -31,6 +34,7 @@ def create_log():
 
 
 @financial_logs_bp.route("/api/financial-logs/<log_id>", methods=["DELETE"])
+@role_required("super_admin", "company_admin", "finance")
 def delete_log(log_id):
     supabase.table("financial_logs").delete().eq("id", log_id).execute()
     return jsonify({"ok": True})

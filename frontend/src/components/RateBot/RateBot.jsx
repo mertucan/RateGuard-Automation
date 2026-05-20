@@ -58,7 +58,7 @@ export default function RateBot({ contractId = null }) {
           ...historyRef.current,
           { role: "model", text: reply },
         ];
-      } catch (err) {
+      } catch {
         const errMsg = {
           id: newId(),
           role: "bot",

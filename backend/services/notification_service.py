@@ -3,7 +3,7 @@ from datetime import date
 from services.email_service import send_contract_notification
 from services.supabase_client import supabase
 
-ALERT_THRESHOLDS = [30, 15, 7]
+ALERT_THRESHOLDS = [30, 15, 7, 3, 1]
 FINAL_STATUSES = {"client_approved", "client_rejected", "cancelled", "approved", "rejected"}
 
 

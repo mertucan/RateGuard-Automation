@@ -42,6 +42,7 @@ export default function ApplicationsPage() {
         headers: (() => {
           try {
             const u = JSON.parse(localStorage.getItem('rg_user') || 'null')
+            if (u?.access_token) return { Authorization: `Bearer ${u.access_token}` }
             return u?.id ? { 'X-User-Id': u.id } : {}
           } catch { return {} }
         })(),
