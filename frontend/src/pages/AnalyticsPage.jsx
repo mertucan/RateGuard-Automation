@@ -147,7 +147,7 @@ export default function AnalyticsPage() {
           <h2 className="truncate text-xl font-bold sm:text-2xl">Analytics</h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">Historical market data and inflation trends.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
           <button
             onClick={handleExport}
             className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold transition-colors hover:bg-hover sm:px-4 sm:text-sm"
@@ -155,7 +155,7 @@ export default function AnalyticsPage() {
             <span className="material-symbols-outlined text-[18px]">download</span>
             Export
           </button>
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-alt p-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border border-border bg-surface-alt p-1 sm:flex-none">
             {periods.map((p) => (
               <button
                 key={p.value}
@@ -190,7 +190,7 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
               <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
                 <p className="text-xs font-medium text-text-muted">Active contracts</p>
-                <p className="mt-1 text-xl font-bold sm:text-2xl">
+                <p className="mt-1 break-words text-lg font-bold sm:text-xl xl:text-2xl">
                   {stats?.active_contracts_count ?? '—'}
                 </p>
                 <p className="mt-1 text-xs text-text-muted">Open pipeline (non-finalized)</p>
@@ -215,7 +215,7 @@ export default function AnalyticsPage() {
               </div>
               <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
                 <p className="text-xs font-medium text-text-muted">Estimated uplift (TRY)</p>
-                <p className="mt-1 text-xl font-bold text-amber-500 sm:text-2xl">
+                <p className="mt-1 break-words text-lg font-bold text-amber-500 sm:text-xl xl:text-2xl">
                   {stats?.renewed_uplift_in_period_try != null
                     ? new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(stats.renewed_uplift_in_period_try)
                     : revenue?.portfolio?.estimated_renewal_uplift_try != null

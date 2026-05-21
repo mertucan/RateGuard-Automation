@@ -157,7 +157,7 @@ export default function MainDashboardPage() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
                 {(showRenewals || role === 'user') && (
                   <button
                     type="button"
@@ -492,7 +492,7 @@ export default function MainDashboardPage() {
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
+                <table className="w-full min-w-[760px] border-collapse text-left">
                   <thead className="bg-surface-alt">
                     <tr>
                       <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted sm:px-6 sm:py-4">
@@ -583,7 +583,7 @@ export default function MainDashboardPage() {
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
+                <table className="w-full min-w-[620px] border-collapse text-left">
                   <thead className="bg-surface-alt">
                     <tr>
                       <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-muted sm:px-6 sm:py-4">

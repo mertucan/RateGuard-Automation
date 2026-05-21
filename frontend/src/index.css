@@ -82,6 +82,17 @@ body {
   overflow-x: hidden;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
 /* Better readability for highlighted text on auth pages */
 ::selection {
   background: #93c5fd;

@@ -480,7 +480,7 @@ export default function ClientManagementPage() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-surface">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left">
+              <table className="w-full min-w-[620px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
                     <th className="px-4 py-3 sm:px-6 sm:py-4">Company Name</th>
@@ -505,7 +505,7 @@ export default function ClientManagementPage() {
                           <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary sm:flex">
                             {(c.company_name || '?')[0].toUpperCase()}
                           </div>
-                          <span>{c.company_name}</span>
+                          <span className="min-w-0 truncate">{c.company_name}</span>
                         </div>
                       </td>
                       <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">{c.authorized_email}</td>

@@ -652,7 +652,7 @@ function ContractList() {
         loading={deleting}
       />
 
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-border bg-surface px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-bold sm:text-2xl">
             Renewal Review
@@ -662,7 +662,7 @@ function ContractList() {
           </p>
         </div>
         {user?.role !== "user" && (
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
             <button
               onClick={handleExport}
               className="shrink-0 flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold transition-colors hover:bg-hover sm:px-4 sm:text-sm"
@@ -942,7 +942,7 @@ function ContractList() {
           {/* Filters Bar */}
           <div className="space-y-3">
             {/* Status Tabs */}
-            <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-2 shadow-sm sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+            <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-2 shadow-sm sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
               {Object.entries(STATUS_MAP).map(([key, val]) => (
                 <button
                   key={key}
@@ -1086,7 +1086,8 @@ function ContractList() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border bg-surface">
-                <table className="w-full table-fixed border-collapse text-left">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
                   <colgroup>
                     <col className="w-[20%]" />
                     <col className="w-[13%]" />
@@ -1249,6 +1250,7 @@ function ContractList() {
                     })}
                   </tbody>
                 </table>
+              </div>
             </div>
           )}
             </div>
@@ -3091,7 +3093,7 @@ function ContractDetail() {
                         )}
                       </div>
                       <div className="space-y-5 p-4 text-sm sm:p-6">
-                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-center sm:gap-4">
                           <span className="text-text-muted">
                             Base Rate (TRY)
                           </span>
@@ -3107,7 +3109,7 @@ function ContractDetail() {
                             }
                           />
                         </div>
-                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-center sm:gap-4">
                           <span className="text-text-muted">End Date</span>
                           <input
                             type="date"
@@ -3121,7 +3123,7 @@ function ContractDetail() {
                             }
                           />
                         </div>
-                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-center sm:gap-4">
                           <span className="text-text-muted">
                             Inflation Rule
                           </span>
@@ -3151,7 +3153,7 @@ function ContractDetail() {
                             <option value="CUSTOM">Custom</option>
                           </select>
                         </div>
-                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-center gap-4">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-center sm:gap-4">
                           <span className="text-text-muted">
                             Max Increase Limit (%)
                           </span>
@@ -3168,7 +3170,7 @@ function ContractDetail() {
                             }
                           />
                         </div>
-                        <div className="grid grid-cols-[minmax(0,1fr)_200px] items-start gap-4">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_200px] sm:items-start sm:gap-4">
                           <span className="text-text-muted">Data Source</span>
                           <div className="rounded-md border border-border bg-surface-alt px-3 py-2 text-right">
                             <p className="text-sm font-semibold text-text">
@@ -4160,10 +4162,10 @@ function ContractReviewTabs({ activeTab, setActiveTab }) {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg text-text">
       {/* Tab bar */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border bg-surface px-4 sm:px-8">
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-surface px-4 sm:px-8">
         <button
           onClick={() => setActiveTab("renewals")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+          className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
             activeTab === "renewals"
               ? "border-primary text-primary"
               : "border-transparent text-text-muted hover:text-text"
@@ -4176,7 +4178,7 @@ function ContractReviewTabs({ activeTab, setActiveTab }) {
         </button>
         <button
           onClick={() => setActiveTab("agreements")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+          className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
             activeTab === "agreements"
               ? "border-primary text-primary"
               : "border-transparent text-text-muted hover:text-text"

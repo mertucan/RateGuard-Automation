@@ -145,18 +145,18 @@ export default function TeamManagementPage() {
         </div>
       )}
 
-      <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-4 sm:px-8 sm:py-5">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-border bg-surface px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-bold sm:text-2xl">Team Management</h2>
           <p className="mt-1 hidden text-sm text-text-muted sm:block">
             Manage your team members and their roles.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary sm:flex-none"
           >
             <option value="all">All Roles</option>
             {TEAM_ROLE_OPTIONS.map((r) => (
@@ -269,7 +269,8 @@ export default function TeamManagementPage() {
           )}
 
           <div className="overflow-hidden rounded-xl border border-border bg-surface">
-            <table className="w-full border-collapse text-left">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-surface-alt text-xs font-semibold uppercase tracking-wider text-text-muted">
                   <th className="px-4 py-3 sm:px-6 sm:py-4">Name</th>
@@ -319,6 +320,7 @@ export default function TeamManagementPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </div>

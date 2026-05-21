@@ -99,26 +99,26 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-bg text-text">
+    <div className="flex h-screen w-full min-w-0 flex-col overflow-hidden bg-bg text-text">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
-        <div className="flex items-center gap-4 sm:gap-8">
+        <div className="flex min-w-0 items-center gap-4 lg:gap-8">
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover sm:hidden"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover lg:hidden"
           >
             <span className="material-symbols-outlined text-[22px]">
               {mobileOpen ? "close" : "menu"}
             </span>
           </button>
 
-          <Link to="/dashboard" className="flex items-center gap-2">
+          <Link to="/dashboard" className="flex min-w-0 shrink-0 items-center gap-2">
             <span className="material-symbols-outlined text-primary filled text-xl">
               security
             </span>
             <span className="text-lg font-bold tracking-tight">RateGuard</span>
           </Link>
 
-          <nav className="hidden items-center gap-1 sm:flex">
+          <nav className="hidden min-w-0 items-center gap-1 lg:flex">
             {navItems.map((item) => (
               <Link
                 key={item.to}
@@ -140,7 +140,7 @@ export default function Layout({ children }) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <NotificationBell />
           <button
             onClick={toggle}
@@ -175,7 +175,7 @@ export default function Layout({ children }) {
       </header>
 
       {mobileOpen && (
-        <nav className="flex flex-col border-b border-border bg-surface px-4 py-2 sm:hidden">
+        <nav className="flex flex-col border-b border-border bg-surface px-4 py-2 lg:hidden">
           {navItems.map((item) => (
             <Link
               key={item.to}
@@ -207,7 +207,7 @@ export default function Layout({ children }) {
         </nav>
       )}
 
-      <main className="flex h-full flex-1 flex-col overflow-hidden">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         {children}
       </main>
       <RateBot contractId={activeContractId} />
