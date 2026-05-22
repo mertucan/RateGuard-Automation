@@ -23,11 +23,11 @@ export default function SplashScreen({ children }) {
         }`}
       >
         <div className="flex flex-col items-center gap-5">
-          <div className="splash-logo flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-soft">
-            <span className="material-symbols-outlined filled text-5xl text-primary">security</span>
+          <div className="splash-logo flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-soft" translate="no">
+            <span className="material-symbols-outlined notranslate filled text-5xl text-primary" translate="no">security</span>
           </div>
           <div className="splash-text flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight text-text">RateGuard</span>
+            <span className="rg-notranslate notranslate text-xl font-bold tracking-tight text-text" translate="no">RateGuard</span>
           </div>
           <div className="splash-spinner mt-2">
             <div className="h-6 w-6 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />

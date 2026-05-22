@@ -17,9 +17,9 @@ export default function MarketingLayout({ children }) {
       <nav className="fixed top-0 z-50 w-full border-b border-border bg-surface/95 shadow-sm backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 md:px-10">
           <div className="flex min-w-0 items-center gap-5 lg:gap-8">
-            <Link to="/" className="flex shrink-0 items-center gap-2">
-              <span className="material-symbols-outlined text-2xl text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
-              <span className="text-xl font-extrabold tracking-tight sm:text-2xl">RateGuard</span>
+            <Link to="/" className="flex shrink-0 items-center gap-2" translate="no">
+              <span className="material-symbols-outlined notranslate text-2xl text-primary" translate="no" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
+              <span className="rg-notranslate notranslate text-xl font-extrabold tracking-tight sm:text-2xl" translate="no">RateGuard</span>
             </Link>
             <div className="hidden items-center gap-5 md:flex">
               {NAV_ITEMS.map((item) => {
@@ -65,9 +65,9 @@ export default function MarketingLayout({ children }) {
       <footer className="border-t border-border bg-surface">
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-6 py-12 md:grid-cols-2 md:px-10 lg:grid-cols-4">
           <div className="flex flex-col gap-4 pr-8">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-xl text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
-              <span className="text-xl font-extrabold tracking-tight">RateGuard</span>
+            <div className="flex items-center gap-2" translate="no">
+              <span className="material-symbols-outlined notranslate text-xl text-primary" translate="no" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
+              <span className="rg-notranslate notranslate text-xl font-extrabold tracking-tight" translate="no">RateGuard</span>
             </div>
             <p className="text-sm leading-relaxed text-text-muted">
               AI-assisted contract renewal, inflation adjustment, approval workflow, and team access management in one secure workspace.

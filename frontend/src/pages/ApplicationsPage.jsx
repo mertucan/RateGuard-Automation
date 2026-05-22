@@ -116,7 +116,7 @@ export default function ApplicationsPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Company</label>
                 <select
-                  className={inputCls}
+                  className={`${inputCls} rg-select`}
                   value={form.target_company_id}
                   onChange={(e) => setForm({ ...form, target_company_id: e.target.value })}
                   required
@@ -131,7 +131,7 @@ export default function ApplicationsPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase text-text-muted">Department</label>
                 <select
-                  className={inputCls}
+                  className={`${inputCls} rg-select`}
                   value={form.target_department}
                   onChange={(e) => setForm({ ...form, target_department: e.target.value })}
                 >

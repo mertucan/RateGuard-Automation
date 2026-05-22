@@ -699,7 +699,7 @@ function ContractList() {
                     Company
                   </label>
                   <select
-                    className={inputCls}
+                    className={`${inputCls} rg-select`}
                     value={form.company_id}
                     onChange={(e) =>
                       setForm({ ...form, company_id: e.target.value })
@@ -741,7 +741,7 @@ function ContractList() {
                       }
                     />
                     <select
-                      className="w-24 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text outline-none focus:border-primary"
+                      className="rg-select w-24 shrink-0 rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text outline-none focus:border-primary"
                       value={form.currency}
                       onChange={(e) =>
                         setForm({ ...form, currency: e.target.value })
@@ -758,7 +758,7 @@ function ContractList() {
                     Contract Type
                   </label>
                   <select
-                    className={inputCls}
+                    className={`${inputCls} rg-select`}
                     value={form.contract_type}
                     onChange={(e) =>
                       setForm({ ...form, contract_type: e.target.value })
@@ -793,7 +793,7 @@ function ContractList() {
                     Inflation Data Source
                   </label>
                   <select
-                    className={inputCls}
+                    className={`${inputCls} rg-select`}
                     value={form.inflation_data_source}
                     onChange={(e) => handleSourceChange(e.target.value)}
                   >
@@ -818,7 +818,7 @@ function ContractList() {
                     Inflation Rule
                   </label>
                   <select
-                    className={inputCls}
+                    className={`${inputCls} rg-select`}
                     value={form.inflation_base_rule}
                     onChange={(e) => handleRuleChange(e.target.value)}
                   >
@@ -908,7 +908,7 @@ function ContractList() {
                     <label className="flex shrink-0 items-center gap-2 text-xs font-semibold uppercase text-text-muted">
                       Renewal term
                       <select
-                        className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-text outline-none focus:border-primary disabled:opacity-50"
+                        className="rg-select rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-text outline-none focus:border-primary disabled:opacity-50"
                         value={form.auto_renew_term_months}
                         disabled={!form.auto_renew_enabled}
                         onChange={(e) =>
@@ -979,7 +979,7 @@ function ContractList() {
               <select
                 value={ruleFilter}
                 onChange={(e) => setRuleFilter(e.target.value)}
-                className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
+                className="rg-select rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary"
               >
                 {RULE_OPTIONS.map((r) => (
                   <option key={r} value={r}>
@@ -3128,7 +3128,7 @@ function ContractDetail() {
                             Inflation Rule
                           </span>
                           <select
-                            className={`w-full ${inputCls} ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
+                            className={`w-full ${inputCls} rg-select ${isSalesReadonly ? "cursor-not-allowed opacity-70" : ""}`}
                             value={editRule}
                             disabled={isSalesReadonly}
                             onChange={

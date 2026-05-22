@@ -195,6 +195,35 @@ def send_contract_created_email(to_email, tenant_name, company_name, contract_id
     return send_email(to_email, subject, body_html)
 
 
+def send_welcome_email(to_email, full_name=None, role=None):
+    display_name = full_name or "there"
+    role_label = {
+        "company_admin": "Company administrator",
+        "finance": "Finance team member",
+        "sales": "Sales team member",
+        "hr": "HR team member",
+        "user": "User",
+        "super_admin": "Administrator",
+    }.get(role, "User")
+
+    subject = "Welcome to RateGuard"
+    body_html = render_email(
+        title="Welcome to RateGuard",
+        intro=[
+            f"Hello <strong>{escape(str(display_name))}</strong>,",
+            "Your RateGuard account has been created successfully.",
+            "RateGuard helps you follow contract deadlines, renewal workflows, approval decisions, and operational notifications from one workspace.",
+            "You can sign in with the email address used during registration whenever you are ready to continue.",
+        ],
+        details=[
+            ("Account email", escape(str(to_email))),
+            ("Role", escape(role_label)),
+        ],
+        footer_note="If you did not create this account, please ignore this email or contact your RateGuard administrator.",
+    )
+    return send_email(to_email, subject, body_html)
+
+
 def send_contract_notification(to_email, company_name, days_remaining, contract_id):
     subject = f"Contract expires in {days_remaining} days - {company_name}"
     body_html = render_email(

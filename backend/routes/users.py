@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from services.auth_middleware import issue_auth_token, login_required, role_required
-from services.email_service import render_email, send_email
+from services.email_service import render_email, send_email, send_welcome_email
 from services.supabase_client import supabase
 
 users_bp = Blueprint("users", __name__)
@@ -75,6 +75,11 @@ def register():
         }
         created = supabase.table("users").insert(data).execute()
         user = _sanitize_user(created.data[0]) if created.data else None
+        if user:
+            try:
+                send_welcome_email(email, full_name=full_name, role=role)
+            except Exception as email_err:
+                print(f"[auth/register] Welcome email error: {email_err}")
         return jsonify(user), 201
     except Exception as e:
         print(f"[auth/register] Error: {e}")

@@ -93,15 +93,16 @@ export default function RegisterPage() {
 
       <header className="relative z-10 mb-8 text-center mt-8">
         <div className="flex flex-col items-center gap-2">
-          <Link to="/" className="text-3xl font-bold tracking-tighter text-primary font-headline flex items-center gap-3">
+          <Link to="/" className="rg-notranslate notranslate text-3xl font-bold tracking-tighter text-primary font-headline flex items-center gap-3" translate="no">
             <span
-              className="material-symbols-outlined text-4xl"
+              className="material-symbols-outlined notranslate text-4xl"
+              translate="no"
               data-icon="security"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               security
             </span>
-            RateGuard
+            <span translate="no">RateGuard</span>
           </Link>
           <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-on-surface-variant font-semibold opacity-70">
             Renewal Intelligence Platform
@@ -126,6 +127,9 @@ export default function RegisterPage() {
             {[
               ['Company admin', 'Create and manage a company workspace.'],
               ['User', 'Apply to join company departments after sign in.'],
+              ['Finance', 'Validate renewal calculations and market-based adjustments.'],
+              ['Sales', 'Prepare client communication and manage renewal follow-up.'],
+              ['HR', 'Review department applications and team access requests.'],
             ].map(([title, text]) => (
               <div key={title} className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
                 <p className="text-sm font-bold text-on-surface">{title}</p>
@@ -143,7 +147,7 @@ export default function RegisterPage() {
                 Create Account
               </h2>
               <p className="text-sm text-on-surface-variant mt-2">
-                Set up your RateGuard credentials.
+                Set up your RateGuard account.
               </p>
             </div>
 
@@ -157,7 +161,7 @@ export default function RegisterPage() {
                   badge
                 </span>
                 <select
-                  className={inputCls}
+                  className={`${inputCls} rg-select`}
                   value={form.role}
                   onChange={onChange("role")}
                 >
@@ -208,7 +212,7 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
-                Institutional Email
+                Email
               </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
@@ -227,7 +231,7 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
-                Secure Access Key
+                Password
               </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
@@ -289,7 +293,7 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
-                Confirm Access Key
+                Confirm Password
               </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">

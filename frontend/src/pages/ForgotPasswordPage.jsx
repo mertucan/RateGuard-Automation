@@ -68,14 +68,15 @@ export default function ForgotPasswordPage() {
 
       {/* Logo */}
       <div className="relative z-10 mb-10 flex flex-col items-center">
-        <div className="text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3">
+        <div className="rg-notranslate notranslate text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3" translate="no">
           <span
-            className="material-symbols-outlined text-4xl"
+            className="material-symbols-outlined notranslate text-4xl"
+            translate="no"
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
             security
           </span>
-          RateGuard
+          <span translate="no">RateGuard</span>
         </div>
         <div className="mt-2 text-xs uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
           Contract Management Platform

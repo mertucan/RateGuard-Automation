@@ -156,7 +156,7 @@ export default function TeamManagementPage() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary sm:flex-none"
+            className="rg-select min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-text outline-none focus:border-primary sm:flex-none"
           >
             <option value="all">All Roles</option>
             {TEAM_ROLE_OPTIONS.map((r) => (
@@ -246,7 +246,7 @@ export default function TeamManagementPage() {
                     Assign Role
                   </label>
                   <select
-                    className={inputCls}
+                    className={`${inputCls} rg-select`}
                     value={form.role}
                     onChange={(e) => setForm({ ...form, role: e.target.value })}
                   >

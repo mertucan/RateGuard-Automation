@@ -47,15 +47,16 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-primary/10 to-transparent" />
 
       <div className="relative z-10 mb-8 flex flex-col items-center">
-        <Link to="/" className="text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3">
+        <Link to="/" className="rg-notranslate notranslate text-3xl font-bold tracking-tighter text-primary headline-font flex items-center gap-3" translate="no">
           <span
-            className="material-symbols-outlined text-4xl"
+            className="material-symbols-outlined notranslate text-4xl"
+            translate="no"
             data-icon="security"
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
             security
           </span>
-          RateGuard
+          <span translate="no">RateGuard</span>
         </Link>
         <div className="mt-2 text-xs uppercase tracking-[0.3em] text-on-surface font-semibold opacity-80">
           Renewal Intelligence Platform

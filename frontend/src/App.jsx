@@ -244,6 +244,23 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    const protectNonTranslatableUi = () => {
+      document
+        .querySelectorAll(".material-symbols-outlined, .rg-notranslate")
+        .forEach((node) => {
+          node.classList.add("notranslate");
+          node.setAttribute("translate", "no");
+        });
+    };
+
+    protectNonTranslatableUi();
+    const observer = new MutationObserver(protectNonTranslatableUi);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <BrowserRouter>
       <ToastProvider>

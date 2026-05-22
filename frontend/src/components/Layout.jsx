@@ -111,11 +111,11 @@ export default function Layout({ children }) {
             </span>
           </button>
 
-          <Link to="/dashboard" className="flex min-w-0 shrink-0 items-center gap-2">
-            <span className="material-symbols-outlined text-primary filled text-xl">
+          <Link to="/dashboard" className="flex min-w-0 shrink-0 items-center gap-2" translate="no">
+            <span className="material-symbols-outlined notranslate text-primary filled text-xl" translate="no">
               security
             </span>
-            <span className="text-lg font-bold tracking-tight">RateGuard</span>
+            <span className="rg-notranslate notranslate text-lg font-bold tracking-tight" translate="no">RateGuard</span>
           </Link>
 
           <nav className="hidden min-w-0 items-center gap-1 lg:flex">
