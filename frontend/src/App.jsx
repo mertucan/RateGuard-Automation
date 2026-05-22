@@ -230,7 +230,6 @@ function AppRoutes() {
               "finance",
               "sales",
               "hr",
-              "user",
             ]}
           >
             <Layout>

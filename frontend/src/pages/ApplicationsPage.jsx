@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { getApplications, createApplication } from '../api'
 import Spinner from '../components/Spinner'
@@ -12,6 +13,7 @@ const STATUS_BADGES = {
 
 export default function ApplicationsPage() {
   const { success: toastSuccess, error: toastError } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [applications, setApplications] = useState([])
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -60,6 +62,13 @@ export default function ApplicationsPage() {
     loadApps()
     loadCompanies()
   }, [loadApps, loadCompanies])
+
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setShowForm(true)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

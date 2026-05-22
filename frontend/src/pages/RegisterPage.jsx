@@ -212,7 +212,7 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <label className="block text-xs font-medium text-on-surface-variant uppercase tracking-wider">
-                Email
+                Email Address
               </label>
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
@@ -346,9 +346,14 @@ export default function RegisterPage() {
         </div>
       </main>
 
-      <footer className="mt-auto w-full py-10 flex justify-center items-center px-12 opacity-40">
-        <div className="text-[10px] font-headline uppercase tracking-[0.2em] text-on-surface-variant">
-          &copy; 2026 RateGuard
+      <footer className="mt-auto pt-16 pb-8 w-full flex flex-col md:flex-row justify-between items-center px-12 text-on-surface-variant font-['Inter'] text-[10px] uppercase tracking-[0.2em] opacity-50 hover:opacity-80 transition-opacity duration-500">
+        <div className="mb-6 md:mb-0">
+          &copy; 2026 RateGuard Intelligence
+        </div>
+        <div className="flex flex-wrap justify-center gap-8">
+          <Link className="hover:text-primary transition-colors" to="/privacy-policy">Privacy</Link>
+          <Link className="hover:text-primary transition-colors" to="/terms-of-service">Terms</Link>
+          <Link className="hover:text-primary transition-colors" to="/contact">Contact</Link>
         </div>
       </footer>
     </div>

@@ -48,7 +48,7 @@ const ALL_NAV_ITEMS = [
     to: "/internal-chat",
     icon: "forum",
     label: "Chat",
-    roles: ["super_admin", "company_admin", "finance", "sales", "hr", "user"],
+    roles: ["super_admin", "company_admin", "finance", "sales", "hr"],
   },
   {
     to: "/audit-log",

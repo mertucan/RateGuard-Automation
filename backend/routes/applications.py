@@ -101,7 +101,7 @@ def create_application():
             )
             admin_email = admin_res.data[0]["email"] if admin_res.data else "mertucan44@gmail.com"
 
-            from services.email_service import send_application_notification_email
+            from services.email_service import send_application_notification_email, send_application_submitted_email
             send_application_notification_email(
                 to_email=admin_email,
                 applicant_name=user["full_name"],
@@ -110,6 +110,13 @@ def create_application():
                 department=target_department,
                 message=message,
                 application_id=application["id"],
+            )
+            send_application_submitted_email(
+                to_email=user["email"],
+                applicant_name=user["full_name"],
+                company_name=company["company_name"],
+                department=target_department,
+                message=message,
             )
             from services.notification_service import notify_company_users
 

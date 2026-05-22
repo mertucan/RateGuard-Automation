@@ -206,9 +206,9 @@ def send_welcome_email(to_email, full_name=None, role=None):
         "super_admin": "Administrator",
     }.get(role, "User")
 
-    subject = "Welcome to RateGuard"
+    subject = "Welcome to RateGuard!"
     body_html = render_email(
-        title="Welcome to RateGuard",
+        title="Welcome to RateGuard!",
         intro=[
             f"Hello <strong>{escape(str(display_name))}</strong>,",
             "Your RateGuard account has been created successfully.",
@@ -399,10 +399,35 @@ def send_application_notification_email(
             ("Applicant email", escape(str(applicant_email))),
             ("Company", escape(str(company_name))),
             ("Department", escape(dept_label)),
-            ("Reference", escape(str(application_id))),
         ],
         action_label="Review application",
         action_path="/application-management",
+        recipient_email=to_email,
+    )
+    return send_email(to_email, subject, body_html)
+
+
+def send_application_submitted_email(to_email, applicant_name, company_name, department, message=None):
+    dept_label = {"sales": "Sales", "finance": "Finance", "hr": "HR"}.get(department, str(department).capitalize())
+    subject = f"Application received - {company_name} {dept_label}"
+    intro = [
+        f"Hi {escape(str(applicant_name or 'there'))},",
+        f"We received your application to join the <strong>{escape(dept_label)}</strong> department at <strong>{escape(str(company_name))}</strong>.",
+        "The company team will review your application and you can track the status in RateGuard.",
+    ]
+    if message:
+        intro.append(f"<strong>Your message:</strong><br>{escape(str(message)).replace(chr(10), '<br>')}")
+
+    body_html = render_email(
+        title="Application submitted",
+        intro=intro,
+        details=[
+            ("Company", escape(str(company_name))),
+            ("Department", escape(dept_label)),
+            ("Status", "Pending review"),
+        ],
+        action_label="View application status",
+        action_path="/applications",
         recipient_email=to_email,
     )
     return send_email(to_email, subject, body_html)

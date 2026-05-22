@@ -66,6 +66,7 @@ function EmptyState({ icon, title, subtitle }) {
 
 export default function AnalyticsPage() {
   const { user } = useAuth()
+  const showContractMetrics = user?.role !== 'user'
   const [period, setPeriod] = useState(30)
   const [history, setHistory] = useState(null)
   const [stats, setStats] = useState(null)
@@ -187,6 +188,7 @@ export default function AnalyticsPage() {
         ) : (
           <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
             {/* Contract KPI Strip */}
+            {showContractMetrics && (
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
               <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
                 <p className="text-xs font-medium text-text-muted">Active contracts</p>
@@ -227,6 +229,7 @@ export default function AnalyticsPage() {
                 <p className="mt-1 text-xs text-text-muted">Rule-based renewal estimate</p>
               </div>
             </div>
+            )}
 
             {/* Summary KPI Strip */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">

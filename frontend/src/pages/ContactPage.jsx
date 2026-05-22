@@ -1,26 +1,35 @@
 import { useState } from 'react'
 import MarketingLayout from '../components/MarketingLayout'
 import { sendContactMessage } from '../api'
+import { useToast } from '../contexts/ToastContext'
 
 const initialForm = { name: '', email: '', company: '', message: '' }
 
 export default function ContactPage() {
+  const { success: toastSuccess, error: toastError } = useToast()
   const [form, setForm] = useState(initialForm)
-  const [status, setStatus] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
   const inputCls = 'w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary'
+  const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 
   const submit = async (e) => {
     e.preventDefault()
+    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
+      toastError('Please fill in your name, email, and message.')
+      return
+    }
+    if (!isValidEmail(form.email)) {
+      toastError('Please enter a valid email address.')
+      return
+    }
     setSubmitting(true)
-    setStatus(null)
     try {
       await sendContactMessage(form)
       setForm(initialForm)
-      setStatus({ type: 'success', text: 'Your message has been sent to mertucan44@gmail.com.' })
+      toastSuccess('Your message has been sent to the RateGuard team.')
     } catch (err) {
-      setStatus({ type: 'error', text: err.message || 'Message could not be sent.' })
+      toastError(err.message || 'Message could not be sent.')
     } finally {
       setSubmitting(false)
     }
@@ -61,7 +70,7 @@ export default function ContactPage() {
             </div>
           </div>
 
-          <form onSubmit={submit} className="rounded-xl border border-border bg-surface p-5 shadow-sm sm:p-6">
+          <form noValidate onSubmit={submit} className="rounded-xl border border-border bg-surface p-5 shadow-sm sm:p-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-text-muted">Name</label>
@@ -85,15 +94,6 @@ export default function ContactPage() {
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
               />
             </div>
-            {status && (
-              <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
-                status.type === 'success'
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
-                  : 'border-red-500/30 bg-red-500/10 text-red-500'
-              }`}>
-                {status.text}
-              </div>
-            )}
             <div className="mt-5 flex justify-center">
               <button
                 type="submit"
