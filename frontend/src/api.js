@@ -39,13 +39,18 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const text = await res.text();
     let message = text;
+    let payload = null;
     try {
       const json = JSON.parse(text);
+      payload = json;
       message = json.error || json.message || json.detail || text;
     } catch {
       // plain text error
     }
-    throw new Error(message || `Request failed (${res.status})`);
+    const error = new Error(message || `Request failed (${res.status})`);
+    error.status = res.status;
+    error.data = payload;
+    throw error;
   }
   return res.json();
 }

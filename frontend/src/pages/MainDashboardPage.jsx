@@ -120,6 +120,8 @@ export default function MainDashboardPage() {
   const showMarket = ['super_admin', 'company_admin', 'finance'].includes(role)
   const showRenewals = ['super_admin', 'company_admin', 'finance', 'sales'].includes(role)
   const canCreateContract = ['super_admin', 'company_admin', 'sales'].includes(role)
+  const showQuickLinks =
+    ['super_admin', 'company_admin'].includes(role) || role === 'user'
 
   const activeCount = stats?.active_contracts_count ?? 0
   const expiringCount = stats?.expiring_30 ?? 0
@@ -215,19 +217,8 @@ export default function MainDashboardPage() {
 
         <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 sm:px-8 sm:py-8">
           {/* Quick links */}
-          {(showRenewals || role === 'user') && (
+          {showQuickLinks && (
             <nav className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => navigate('/renewal-review')}
-                className="flex min-h-16 items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary-soft"
-              >
-                <span>
-                  <span className="block text-sm font-bold">Contracts</span>
-                  <span className="mt-0.5 block text-xs text-text-muted">Review renewals and drafts</span>
-                </span>
-                <span className="material-symbols-outlined text-primary text-[22px]">description</span>
-              </button>
               {['super_admin', 'company_admin'].includes(role) && (
                 <button
                   type="button"
@@ -241,7 +232,7 @@ export default function MainDashboardPage() {
                   <span className="material-symbols-outlined text-primary text-[22px]">group</span>
                 </button>
               )}
-              {['super_admin', 'company_admin', 'finance', 'user'].includes(role) && (
+              {['super_admin', 'company_admin', 'user'].includes(role) && (
                 <button
                   type="button"
                   onClick={() => navigate('/analytics')}
@@ -418,8 +409,8 @@ export default function MainDashboardPage() {
 
           {/* Market Data + Alerts (visible to admin/finance roles) */}
           {showMarket && (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:gap-6">
-              <section className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-6 lg:col-span-2">
+            <div>
+              <section className="rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-6">
                 <h3 className="text-lg font-bold">Market Snapshot</h3>
                 <p className="text-sm text-text-muted">Live data from TCMB (Central Bank of Turkey) EVDS API. Rates are updated daily.</p>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 md:grid-cols-4">
@@ -447,36 +438,6 @@ export default function MainDashboardPage() {
                       %{ufe.toFixed(1)}
                     </p>
                   </div>
-                </div>
-              </section>
-
-              <section className="rounded-xl border border-primary/25 bg-primary-soft p-4 shadow-sm sm:p-6">
-                <h3 className="text-lg font-bold text-primary">Market Alerts</h3>
-                <div className="mt-4 space-y-3">
-                  {tufe > 40 && (
-                    <div className="rounded-lg border border-border bg-surface p-4">
-                      <p className="text-sm font-semibold">High CPI Alert</p>
-                      <p className="mt-1 text-xs text-text-muted">
-                        TUFE is at %{tufe.toFixed(1)} - contract adjustments may be significant.
-                      </p>
-                    </div>
-                  )}
-                  {stats?.usd > 35 && (
-                    <div className="rounded-lg border border-border bg-surface p-4">
-                      <p className="text-sm font-semibold">Exchange Rate Warning</p>
-                      <p className="mt-1 text-xs text-text-muted">
-                        USD/TRY is at {stats.usd.toFixed(2)} - review FX-linked contracts.
-                      </p>
-                    </div>
-                  )}
-                  {tufe <= 40 && (!stats?.usd || stats.usd <= 35) && (
-                    <div className="rounded-lg border border-border bg-surface p-4">
-                      <p className="text-sm font-semibold">All Clear</p>
-                      <p className="mt-1 text-xs text-text-muted">
-                        No critical market alerts at this time.
-                      </p>
-                    </div>
-                  )}
                 </div>
               </section>
             </div>

@@ -26,6 +26,10 @@ def _user_is_super_admin(user):
     return user.get("role") == "super_admin"
 
 
+def _user_is_company_admin(user):
+    return user.get("role") == "company_admin"
+
+
 def _is_current_user(candidate, current_user):
     if not candidate or not current_user:
         return False
@@ -35,6 +39,18 @@ def _is_current_user(candidate, current_user):
     candidate_email = (candidate.get("email") or "").strip().lower()
     current_email = (current_user.get("email") or "").strip().lower()
     return bool(candidate_email and current_email and candidate_email == current_email)
+
+
+def _user_is_participant(conversation_id, user):
+    participant = (
+        supabase.table("internal_chat_participants")
+        .select("id")
+        .eq("conversation_id", conversation_id)
+        .eq("user_id", user.get("id"))
+        .limit(1)
+        .execute()
+    )
+    return bool(participant.data)
 
 
 def _conversation_for_user(conversation_id, user):
@@ -52,15 +68,10 @@ def _conversation_for_user(conversation_id, user):
     if _user_is_super_admin(user):
         return conversation, None
 
-    participant = (
-        supabase.table("internal_chat_participants")
-        .select("id")
-        .eq("conversation_id", conversation_id)
-        .eq("user_id", user.get("id"))
-        .limit(1)
-        .execute()
-    )
-    if not participant.data:
+    if _user_is_company_admin(user) and conversation.get("company_id") == user.get("company_id"):
+        return conversation, None
+
+    if not _user_is_participant(conversation_id, user):
         return None, (jsonify({"error": "Insufficient permissions"}), 403)
     return conversation, None
 
@@ -164,6 +175,14 @@ def list_conversations():
             conversations = (
                 supabase.table("internal_chat_conversations")
                 .select("*, companies!internal_chat_conversations_company_id_fkey(id, company_name)")
+                .order("updated_at", desc=True)
+                .execute()
+            ).data or []
+        elif _user_is_company_admin(user):
+            conversations = (
+                supabase.table("internal_chat_conversations")
+                .select("*, companies!internal_chat_conversations_company_id_fkey(id, company_name)")
+                .eq("company_id", user.get("company_id"))
                 .order("updated_at", desc=True)
                 .execute()
             ).data or []
@@ -271,6 +290,8 @@ def send_message(conversation_id):
     _, error = _conversation_for_user(conversation_id, user)
     if error:
         return error
+    if not _user_is_participant(conversation_id, user):
+        return jsonify({"error": "Only conversation participants can post messages."}), 403
 
     body = request.get_json() or {}
     message_text = (body.get("message_text") or "").strip()

@@ -162,6 +162,35 @@ def _build_contract_lineage(all_contracts, contract_id):
     return chain
 
 
+def _filter_current_versions(contracts):
+    if not contracts:
+        return []
+
+    ids = [c.get("id") for c in contracts if c.get("id")]
+    if not ids:
+        return contracts
+
+    children = (
+        supabase.table("contracts")
+        .select("renewed_from_contract_id")
+        .in_("renewed_from_contract_id", ids)
+        .execute()
+    ).data or []
+    renewed_parent_ids = {
+        str(child.get("renewed_from_contract_id"))
+        for child in children
+        if child.get("renewed_from_contract_id")
+    }
+    if not renewed_parent_ids:
+        return contracts
+
+    return [
+        contract
+        for contract in contracts
+        if str(contract.get("id") or "") not in renewed_parent_ids
+    ]
+
+
 @contracts_bp.route("/api/contracts", methods=["GET"])
 @login_required
 def list_contracts():
@@ -204,7 +233,8 @@ def list_contracts():
             query = query.lte("end_date", end_date_to)
 
         result = query.order("end_date", desc=False).execute()
-        return jsonify(attach_renewal_recommendations(result.data))
+        current_contracts = _filter_current_versions(result.data or [])
+        return jsonify(attach_renewal_recommendations(current_contracts))
     except Exception as e:
         print(f"[contracts] Supabase error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -538,6 +568,43 @@ def create_contract():
                     new_contract["previous_amount"],
                     new_contract["end_date"],
                 )
+
+            if user.get("role") == "sales":
+                finance_users = (
+                    supabase.table("users")
+                    .select("id, email, full_name")
+                    .eq("company_id", new_contract.get("tenant_company_id") or user.get("company_id"))
+                    .eq("role", "finance")
+                    .execute()
+                    .data
+                    or []
+                )
+                from services.email_service import send_finance_contract_created_email
+                from services.notification_service import notify_user
+
+                for finance_user in finance_users:
+                    if finance_user.get("email"):
+                        send_finance_contract_created_email(
+                            finance_user.get("email"),
+                            finance_user.get("full_name"),
+                            user.get("full_name"),
+                            tenant_company_name,
+                            client_company_name,
+                            new_contract["id"],
+                            new_contract["previous_amount"],
+                            new_contract["end_date"],
+                        )
+                    notify_user(
+                        finance_user.get("id"),
+                        "New contract ready for finance review",
+                        f"{client_company_name or 'A client'} contract was created by Sales.",
+                        company_id=new_contract.get("tenant_company_id") or user.get("company_id"),
+                        contract_id=new_contract["id"],
+                        action_url=f"/renewal-review/{new_contract['id']}",
+                        category="contract_workflow",
+                        notification_type="info",
+                        event_key=f"sales-created-contract:{new_contract['id']}:finance:{finance_user.get('id')}",
+                    )
         except Exception as email_err:
             print(f"[contracts create] Email send error: {email_err}")
 

@@ -224,6 +224,37 @@ def send_contract_created_email(to_email, tenant_name, company_name, contract_id
     return send_email(to_email, subject, body_html)
 
 
+def send_finance_contract_created_email(
+    to_email,
+    finance_name,
+    sales_name,
+    tenant_name,
+    company_name,
+    contract_id,
+    previous_amount,
+    end_date,
+):
+    subject = f"Finance review needed - {company_name}"
+    body_html = render_email(
+        title="New contract ready for finance review",
+        intro=[
+            f"Hello <strong>{escape(str(finance_name or 'Finance team'))}</strong>,",
+            f"<strong>{escape(str(sales_name or 'Sales'))}</strong> created a new contract for <strong>{escape(str(company_name))}</strong> under <strong>{escape(str(tenant_name))}</strong>.",
+            "Please review the contract values, renewal date, and inflation settings when you are ready.",
+        ],
+        details=[
+            ("Client company", escape(str(company_name))),
+            ("Current value", escape(_format_amount(previous_amount))),
+            ("End date", escape(str(end_date or "N/A"))),
+            ("Reference", escape(str(contract_id))),
+        ],
+        action_label="Review contract",
+        action_path=f"/renewal-review/{contract_id}",
+        recipient_email=to_email,
+    )
+    return send_email(to_email, subject, body_html)
+
+
 def send_welcome_email(to_email, full_name=None, role=None):
     display_name = full_name or "there"
     role_label = {

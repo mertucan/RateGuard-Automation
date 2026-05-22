@@ -93,6 +93,13 @@ export default function InternalChatPage() {
     [conversations, selectedId],
   );
 
+  const canPostToSelected = useMemo(() => {
+    if (!selectedConversation || isSuperAdmin) return false;
+    return (selectedConversation.participants || []).some((participant) =>
+      isCurrentChatUser(participant, user),
+    );
+  }, [isSuperAdmin, selectedConversation, user]);
+
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return conversations;
@@ -221,7 +228,7 @@ export default function InternalChatPage() {
   const handleSend = async (event) => {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || !selectedId || isSuperAdmin) return;
+    if (!text || !selectedId || !canPostToSelected) return;
     const tempId = `pending-${Date.now()}`;
     const optimisticMessage = {
       id: tempId,
@@ -360,7 +367,7 @@ export default function InternalChatPage() {
                   </p>
                 </div>
               </div>
-              {isSuperAdmin && (
+              {(isSuperAdmin || !canPostToSelected) && (
                 <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-600">
                   Read-only
                 </span>
@@ -428,20 +435,20 @@ export default function InternalChatPage() {
               <button
                 type="button"
                 className="flex h-10 w-10 items-center justify-center rounded-full text-text-muted hover:bg-hover"
-                disabled={isSuperAdmin}
+                disabled={!canPostToSelected}
               >
                 <span className="material-symbols-outlined text-[22px]">add_reaction</span>
               </button>
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                disabled={isSuperAdmin}
-                placeholder={isSuperAdmin ? "Super admins can read all chats" : "Type a message"}
+                disabled={!canPostToSelected}
+                placeholder={canPostToSelected ? "Type a message" : "Read-only conversation"}
                 className="min-w-0 flex-1 rounded-full border border-border bg-surface-alt px-4 py-3 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-70"
               />
               <button
                 type="submit"
-                disabled={!draft.trim() || isSuperAdmin}
+                disabled={!draft.trim() || !canPostToSelected}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white transition-colors hover:bg-primary-dark disabled:opacity-40"
               >
                 <span className="material-symbols-outlined text-[21px]">send</span>

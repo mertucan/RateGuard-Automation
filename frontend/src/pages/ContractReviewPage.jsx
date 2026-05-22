@@ -140,6 +140,10 @@ function recommendationPriorityCls(priority) {
   return "border-border bg-surface-alt";
 }
 
+function existingVersionIdFromError(err) {
+  return err?.status === 409 && err?.data?.contract_id ? err.data.contract_id : null;
+}
+
 /* ─── GENERIC CONFIRM / DELETE MODAL ─── */
 function ConfirmModal({
   open,
@@ -510,6 +514,12 @@ function ContractList() {
       toastSuccess("New renewal version created.");
       navigate(`/renewal-review/${next.id}`);
     } catch (err) {
+      const existingVersionId = existingVersionIdFromError(err);
+      if (existingVersionId) {
+        toastSuccess("A next version already exists. Opening it now.");
+        navigate(`/renewal-review/${existingVersionId}`);
+        return;
+      }
       toastError("New version could not be created: " + err.message);
     } finally {
       setCreatingVersionId(null);
@@ -949,14 +959,14 @@ function ContractList() {
                   onClick={() => setStatusFilter(key)}
                   className={`flex min-h-10 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${
                     statusFilter === key
-                      ? "bg-primary text-white shadow-sm"
-                      : "bg-surface-alt/60 text-text-muted hover:bg-hover hover:text-text"
+                      ? "border border-slate-400 bg-slate-700 text-white shadow-sm dark:border-slate-500 dark:bg-slate-600"
+                      : "border border-border bg-surface-alt/60 text-text-muted hover:bg-hover hover:text-text"
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <span
                       className={`material-symbols-outlined text-[16px] ${
-                        statusFilter === key ? "text-white" : val.cls || "text-text-muted"
+                        statusFilter === key ? "text-white" : "text-text-muted"
                       }`}
                     >
                       {val.icon}
@@ -965,7 +975,7 @@ function ContractList() {
                   </span>
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      statusFilter === key ? "bg-white/20 text-white" : "bg-bg text-text"
+                      statusFilter === key ? "bg-white/20 text-white" : "bg-bg text-text-muted"
                     }`}
                   >
                     {statusCounts[key] ?? 0}
@@ -1060,7 +1070,7 @@ function ContractList() {
                       setCalendarSelectedDay(null);
                     }}
                     disabled={!endDateFrom && !endDateTo && !calendarSelectedDay}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-muted transition-colors hover:bg-hover hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 px-3 py-2 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:border-border disabled:text-text-muted disabled:opacity-40"
                   >
                     <span className="material-symbols-outlined text-[15px]">
                       close
@@ -2157,7 +2167,7 @@ function AiChangeAnalysisPanel({
                 <p className="mt-1 text-sm font-bold">{changedClauses.length}</p>
               </div>
               <div className="rounded-lg border border-border bg-surface-alt p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Value Delta</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Price Change</p>
                 <p className="mt-1 text-sm font-bold">
                   {formatCurrency(financial.difference || 0, financial.currency || "TRY")}
                 </p>
@@ -2271,6 +2281,8 @@ function ContractDetail() {
   const [changeAnalysis, setChangeAnalysis] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisGenerating, setAnalysisGenerating] = useState(false);
+  const [versionHistory, setVersionHistory] = useState([]);
+  const [versionHistoryLoading, setVersionHistoryLoading] = useState(false);
 
   const { setActiveContractId } = useRateBot();
 
@@ -2309,6 +2321,26 @@ function ContractDetail() {
   useEffect(() => {
     loadChangeAnalysis();
   }, [loadChangeAnalysis]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadVersions() {
+      setVersionHistoryLoading(true);
+      try {
+        const data = await getContractVersions(id);
+        if (!cancelled) setVersionHistory(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Contract versions error:", err);
+        if (!cancelled) setVersionHistory([]);
+      } finally {
+        if (!cancelled) setVersionHistoryLoading(false);
+      }
+    }
+    loadVersions();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   // Set active contract context for RateBot
   useEffect(() => {
@@ -2608,6 +2640,12 @@ function ContractDetail() {
       showToast("New contract version created");
       navigate(`/renewal-review/${next.id}`);
     } catch (err) {
+      const existingVersionId = existingVersionIdFromError(err);
+      if (existingVersionId) {
+        showToast("A next version already exists. Opening it now.");
+        navigate(`/renewal-review/${existingVersionId}`);
+        return;
+      }
       showToast("Version could not be created: " + err.message, "error");
     } finally {
       setCreatingVersion(false);
@@ -3072,7 +3110,7 @@ function ContractDetail() {
               {/* Editable Calculation */}
               {isTenantSide && user?.role !== "user" &&
                 (() => {
-                  const isSalesReadonly = user?.role === "sales";
+                  const isSalesReadonly = user?.role === "sales" && contractStatus !== "draft";
                   return (
                     <section className="overflow-hidden rounded-xl border border-border bg-surface">
                       <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-3 sm:px-6 sm:py-4">
@@ -3458,10 +3496,10 @@ function ContractDetail() {
                     </button>
                   )}
 
-                  {/* Finance/Admin: Save Draft (not Sales) */}
-                  {isTenantSide && ["finance", "company_admin", "super_admin"].includes(
-                    user?.role,
-                  ) && (
+                  {/* Staff: Save Draft. Sales can only revise draft contracts. */}
+                  {isTenantSide &&
+                    (["finance", "company_admin", "super_admin"].includes(user?.role) ||
+                      (user?.role === "sales" && contractStatus === "draft")) && (
                     <div className="w-full">
                       <button
                         onClick={handleSaveDraft}
@@ -3478,10 +3516,78 @@ function ContractDetail() {
                 </div>
               </section>
 
+              <section className="overflow-hidden rounded-xl border border-border bg-surface">
+                <div className="border-b border-border bg-surface-alt px-4 py-3 sm:px-5">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted">
+                    Version History
+                  </h3>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Previous and current versions in this contract chain.
+                  </p>
+                </div>
+                <div className="space-y-2 p-4 sm:p-5">
+                  {versionHistoryLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-xs text-text-muted">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+                      Loading versions...
+                    </div>
+                  ) : versionHistory.length === 0 ? (
+                    <p className="text-xs text-text-muted">No linked versions yet.</p>
+                  ) : (
+                    versionHistory.map((version) => {
+                      const active = String(version.id) === String(id);
+                      const versionAmount = version.new_amount || version.previous_amount;
+                      const versionDate = version.approved_at || version.created_at;
+                      return (
+                        <button
+                          key={version.id}
+                          type="button"
+                          onClick={() => navigate(`/renewal-review/${version.id}`)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
+                            active
+                              ? "border-primary/40 bg-primary/10"
+                              : "border-border bg-surface-alt hover:border-primary/40 hover:bg-primary-soft"
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-text">
+                                Version {version.version_number || "-"}
+                              </span>
+                              {version.is_current_version && (
+                                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                                  Current
+                                </span>
+                              )}
+                              {active && (
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                  Open
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-text-muted">
+                              {version.status || "draft"} · {version.end_date || "No end date"} · {versionDate ? new Date(versionDate).toLocaleDateString("tr-TR") : "No date"}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-right">
+                            <span className="block text-xs font-bold text-text">
+                              {formatCurrency(versionAmount, version.currency)}
+                            </span>
+                            <span className="font-mono text-[10px] text-text-muted">
+                              {String(version.id).slice(0, 8)}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
               {/* AI Email Composer — only for Sales and Admin roles */}
-              {isTenantSide && ["sales", "company_admin", "super_admin"].includes(
-                user?.role,
-              ) && (
+              {isTenantSide &&
+                !isEmailLocked &&
+                ["sales", "company_admin", "super_admin"].includes(user?.role) && (
                 <section className="rounded-xl border border-border bg-surface">
                   <div className="flex items-center justify-between border-b border-border bg-primary-soft px-4 py-3 sm:px-6 sm:py-4">
                     <h3 className="text-lg font-bold text-primary">
@@ -3713,6 +3819,11 @@ function ApprovedAgreements() {
       const next = await createContractVersion(contractId);
       navigate(`/renewal-review/${next.id}`);
     } catch (err) {
+      const existingVersionId = existingVersionIdFromError(err);
+      if (existingVersionId) {
+        navigate(`/renewal-review/${existingVersionId}`);
+        return;
+      }
       toastError("New version could not be created: " + err.message);
     } finally {
       setCreatingVersionId(null);
