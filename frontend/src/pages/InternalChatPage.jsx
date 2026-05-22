@@ -9,6 +9,8 @@ import {
 } from "../api";
 import { PageLoader } from "../components/Spinner";
 
+const MESSAGE_POLL_INTERVAL_MS = 2000;
+
 const ROLE_LABELS = {
   super_admin: "Super Admin",
   company_admin: "Company Admin",
@@ -53,7 +55,6 @@ export default function InternalChatPage() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
@@ -101,7 +102,11 @@ export default function InternalChatPage() {
     if (showLoading) setMessagesLoading(true);
     try {
       const data = await getInternalChatMessages(conversationId);
-      setMessages(Array.isArray(data) ? data : []);
+      const incomingMessages = Array.isArray(data) ? data : [];
+      setMessages((prev) => {
+        const pendingMessages = prev.filter((message) => message.delivery_status === "sending");
+        return [...incomingMessages, ...pendingMessages];
+      });
     } finally {
       if (showLoading) setMessagesLoading(false);
     }
@@ -142,7 +147,7 @@ export default function InternalChatPage() {
     const timer = setInterval(() => {
       loadMessages(selectedId);
       loadConversations().catch(() => {});
-    }, 8000);
+    }, MESSAGE_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [loadConversations, loadMessages, selectedId]);
 
@@ -181,17 +186,30 @@ export default function InternalChatPage() {
     event.preventDefault();
     const text = draft.trim();
     if (!text || !selectedId || isSuperAdmin) return;
-    setSending(true);
+    const tempId = `pending-${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      sender_user_id: user?.id,
+      sender: user,
+      message_text: text,
+      created_at: new Date().toISOString(),
+      delivery_status: "sending",
+    };
+    setDraft("");
     setError("");
+    setMessages((prev) => [...prev, optimisticMessage]);
     try {
       const message = await sendInternalChatMessage(selectedId, { message_text: text });
-      setDraft("");
-      setMessages((prev) => [...prev, { ...message, sender: user }]);
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === tempId ? { ...message, sender: user, delivery_status: "sent" } : item,
+        ),
+      );
       await loadConversations();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setSending(false);
+      setDraft(text);
+      setMessages((prev) => prev.filter((item) => item.id !== tempId));
     }
   };
 
@@ -320,7 +338,7 @@ export default function InternalChatPage() {
                 </div>
               ) : (
                 <div className="mx-auto flex max-w-4xl flex-col gap-2">
-                  {messages.length === 0 && (
+                  {messages.length === 0 && !draft.trim() && (
                     <div className="mx-auto mt-10 rounded-lg bg-white/80 px-4 py-2 text-xs font-medium text-slate-600 shadow-sm dark:bg-surface">
                       Messages in this conversation will appear here.
                     </div>
@@ -345,8 +363,21 @@ export default function InternalChatPage() {
                             </p>
                           )}
                           <p className="whitespace-pre-wrap text-sm leading-5">{message.message_text}</p>
-                          <p className="mt-1 text-right text-[10px] text-slate-500">
-                            {formatTime(message.created_at)}
+                          <p className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-500">
+                            <span>{formatTime(message.created_at)}</span>
+                            {mine && (
+                              <span
+                                className={`material-symbols-outlined notranslate inline-flex w-4 justify-end text-[15px] leading-none ${
+                                  message.delivery_status === "sending"
+                                    ? "text-slate-400"
+                                    : "text-primary"
+                                }`}
+                                translate="no"
+                                title={message.delivery_status === "sending" ? "Sending" : "Sent"}
+                              >
+                                {message.delivery_status === "sending" ? "done" : "done_all"}
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -374,7 +405,7 @@ export default function InternalChatPage() {
               />
               <button
                 type="submit"
-                disabled={sending || !draft.trim() || isSuperAdmin}
+                disabled={!draft.trim() || isSuperAdmin}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white transition-colors hover:bg-primary-dark disabled:opacity-40"
               >
                 <span className="material-symbols-outlined text-[21px]">send</span>
