@@ -92,17 +92,18 @@ export default function InternalChatPage() {
     setSelectedId((current) => current || data?.[0]?.id || null);
   }, []);
 
-  const loadMessages = useCallback(async (conversationId) => {
+  const loadMessages = useCallback(async (conversationId, options = {}) => {
+    const { showLoading = false } = options;
     if (!conversationId) {
       setMessages([]);
       return;
     }
-    setMessagesLoading(true);
+    if (showLoading) setMessagesLoading(true);
     try {
       const data = await getInternalChatMessages(conversationId);
       setMessages(Array.isArray(data) ? data : []);
     } finally {
-      setMessagesLoading(false);
+      if (showLoading) setMessagesLoading(false);
     }
   }, []);
 
@@ -133,7 +134,7 @@ export default function InternalChatPage() {
   }, []);
 
   useEffect(() => {
-    loadMessages(selectedId);
+    loadMessages(selectedId, { showLoading: true });
   }, [loadMessages, selectedId]);
 
   useEffect(() => {

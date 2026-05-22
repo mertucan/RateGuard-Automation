@@ -10,6 +10,12 @@ const STATUS_BADGES = {
   approved: 'bg-emerald-500/10 text-emerald-500',
   rejected: 'bg-red-500/10 text-red-500',
 }
+const FILTER_OPTIONS = [
+  { key: 'pending', label: 'Pending', icon: 'pending_actions' },
+  { key: 'approved', label: 'Approved', icon: 'check_circle' },
+  { key: 'rejected', label: 'Rejected', icon: 'cancel' },
+  { key: 'all', label: 'All', icon: 'apps' },
+]
 
 export default function ApplicationManagementPage() {
   const { user } = useAuth()
@@ -82,22 +88,25 @@ export default function ApplicationManagementPage() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-8">
         <div className="mx-auto max-w-4xl space-y-6">
           {/* Filter Tabs */}
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1 w-fit">
-            {[
-              { key: 'pending', label: 'Pending' },
-              { key: 'approved', label: 'Approved' },
-              { key: 'rejected', label: 'Rejected' },
-              { key: 'all', label: 'All' },
-            ].map(({ key, label }) => (
+          <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-2 shadow-sm sm:grid-cols-4">
+            {FILTER_OPTIONS.map(({ key, label, icon }) => (
               <button
                 key={key}
+                type="button"
                 onClick={() => setFilter(key)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  filter === key ? 'bg-primary text-white' : 'text-text-muted hover:bg-hover hover:text-text'
+                className={`flex min-h-12 min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors sm:px-4 ${
+                  filter === key
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-surface-alt/60 text-text-muted hover:bg-hover hover:text-text'
                 }`}
               >
-                {label}
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${filter === key ? 'bg-white/20' : 'bg-surface-alt'}`}>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="material-symbols-outlined shrink-0 text-[18px]">
+                    {icon}
+                  </span>
+                  <span className="truncate">{label}</span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${filter === key ? 'bg-white/20 text-white' : 'bg-bg text-text'}`}>
                   {counts[key]}
                 </span>
               </button>
