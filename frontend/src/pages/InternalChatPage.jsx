@@ -42,9 +42,31 @@ function formatDay(value) {
 }
 
 function participantSubtitle(participants = []) {
-  return participants
-    .map((p) => `${p.full_name || p.email} (${ROLE_LABELS[p.role] || p.role})`)
+  return (Array.isArray(participants) ? participants : [])
+    .filter(Boolean)
+    .map((p) => `${p.full_name || p.email || "Unknown user"} (${ROLE_LABELS[p.role] || p.role || "User"})`)
     .join(", ");
+}
+
+function normalizeChatUser(item) {
+  if (!item || !item.id) return null;
+  return {
+    id: item.id,
+    full_name: item.full_name || "",
+    email: item.email || "",
+    role: item.role || "user",
+    company_id: item.company_id || null,
+  };
+}
+
+function isCurrentChatUser(item, currentUser) {
+  if (!item || !currentUser) return false;
+  if (item.id && currentUser.id && String(item.id) === String(currentUser.id)) {
+    return true;
+  }
+  const itemEmail = String(item.email || "").trim().toLowerCase();
+  const currentEmail = String(currentUser.email || "").trim().toLowerCase();
+  return Boolean(itemEmail && currentEmail && itemEmail === currentEmail);
 }
 
 export default function InternalChatPage() {
@@ -60,6 +82,7 @@ export default function InternalChatPage() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [newTitle, setNewTitle] = useState("");
+  const [creatingConversation, setCreatingConversation] = useState(false);
   const [error, setError] = useState("");
   const messagesEndRef = useRef(null);
 
@@ -124,7 +147,13 @@ export default function InternalChatPage() {
         ]);
         if (cancelled) return;
         setConversations(Array.isArray(conversationData) ? conversationData : []);
-        setUsers(Array.isArray(userData) ? userData : []);
+        setUsers(
+          (Array.isArray(userData) ? userData : [])
+            .map(normalizeChatUser)
+            .filter((item) =>
+              item && !isCurrentChatUser(item, { id: user?.id, email: user?.email }),
+            ),
+        );
         setSelectedId(conversationData?.[0]?.id || null);
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -136,7 +165,7 @@ export default function InternalChatPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user?.email, user?.id]);
 
   useEffect(() => {
     loadMessages(selectedId, { showLoading: true });
@@ -162,14 +191,19 @@ export default function InternalChatPage() {
   };
 
   const handleCreateConversation = async () => {
-    if (!selectedUserIds.length) {
+    const teammateIds = selectedUserIds.filter((id) => {
+      const selectedUser = users.find((item) => String(item.id) === String(id));
+      return selectedUser && !isCurrentChatUser(selectedUser, user);
+    });
+    if (!teammateIds.length) {
       setError("Select at least one teammate.");
       return;
     }
     setError("");
+    setCreatingConversation(true);
     try {
       const conversation = await createInternalChatConversation({
-        participant_ids: selectedUserIds,
+        participant_ids: teammateIds,
         title: newTitle,
       });
       setConversations((prev) => [conversation, ...prev.filter((item) => item.id !== conversation.id)]);
@@ -179,6 +213,8 @@ export default function InternalChatPage() {
       setShowNewChat(false);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setCreatingConversation(false);
     }
   };
 
@@ -429,12 +465,13 @@ export default function InternalChatPage() {
                 <h2 className="text-lg font-bold">New chat</h2>
                 <p className="text-xs text-text-muted">Choose people from your company.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowNewChat(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-hover"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
+                <button
+                  type="button"
+                  onClick={() => setShowNewChat(false)}
+                  disabled={creatingConversation}
+                  className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-hover"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
             <div className="space-y-4 p-5">
@@ -475,16 +512,21 @@ export default function InternalChatPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewChat(false)}
-                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:bg-hover"
+                  disabled={creatingConversation}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleCreateConversation}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                  disabled={creatingConversation || !selectedUserIds.length}
+                  className="inline-flex min-w-[112px] items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Start chat
+                  {creatingConversation && (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  )}
+                  {creatingConversation ? "Starting..." : "Start chat"}
                 </button>
               </div>
             </div>

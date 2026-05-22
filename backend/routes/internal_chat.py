@@ -8,8 +8,33 @@ from services.supabase_client import supabase
 internal_chat_bp = Blueprint("internal_chat", __name__)
 
 
+def _chat_error_response(exc, context):
+    text = str(exc)
+    print(f"[internal-chat] {context} error: {text}")
+    lower = text.lower()
+    if "internal_chat_" in lower and (
+        "could not find" in lower
+        or "schema cache" in lower
+        or "does not exist" in lower
+        or "pgrst" in lower
+    ):
+        return jsonify({"error": "Internal chat database tables are not ready. Please apply migration 017_internal_chat.sql on Supabase and restart the backend."}), 500
+    return jsonify({"error": "Internal chat is temporarily unavailable. Please try again shortly."}), 500
+
+
 def _user_is_super_admin(user):
     return user.get("role") == "super_admin"
+
+
+def _is_current_user(candidate, current_user):
+    if not candidate or not current_user:
+        return False
+    if candidate.get("id") and current_user.get("id"):
+        if str(candidate.get("id")) == str(current_user.get("id")):
+            return True
+    candidate_email = (candidate.get("email") or "").strip().lower()
+    current_email = (current_user.get("email") or "").strip().lower()
+    return bool(candidate_email and current_email and candidate_email == current_email)
 
 
 def _conversation_for_user(conversation_id, user):
@@ -45,7 +70,7 @@ def _fetch_users_by_ids(user_ids):
         return []
     return (
         supabase.table("users")
-        .select("id, full_name, email, role, company_id, companies!users_company_id_fkey(id, company_name)")
+        .select("id, full_name, email, role, company_id")
         .in_("id", user_ids)
         .execute()
     ).data or []
@@ -117,18 +142,17 @@ def list_chat_users():
     user = g.current_user
     try:
         query = supabase.table("users").select(
-            "id, full_name, email, role, company_id, companies!users_company_id_fkey(id, company_name)"
+            "id, full_name, email, role, company_id"
         )
         if not _user_is_super_admin(user):
             if not user.get("company_id"):
                 return jsonify([])
             query = query.eq("company_id", user.get("company_id"))
         result = query.order("full_name").execute()
-        users = [u for u in (result.data or []) if u.get("id") != user.get("id")]
+        users = [u for u in (result.data or []) if not _is_current_user(u, user)]
         return jsonify(users)
     except Exception as exc:
-        print(f"[internal-chat] list users error: {exc}")
-        return jsonify({"error": str(exc)}), 500
+        return _chat_error_response(exc, "list users")
 
 
 @internal_chat_bp.route("/api/internal-chat/conversations", methods=["GET"])
@@ -162,8 +186,7 @@ def list_conversations():
             ).data or []
         return jsonify(_decorate_conversations(conversations, user))
     except Exception as exc:
-        print(f"[internal-chat] list conversations error: {exc}")
-        return jsonify({"error": str(exc)}), 500
+        return _chat_error_response(exc, "list conversations")
 
 
 @internal_chat_bp.route("/api/internal-chat/conversations", methods=["POST"])
@@ -171,22 +194,25 @@ def list_conversations():
 def create_conversation():
     user = g.current_user
     body = request.get_json() or {}
-    participant_ids = [pid for pid in body.get("participant_ids", []) if pid]
+    requested_participant_ids = [pid for pid in body.get("participant_ids", []) if pid]
     title = (body.get("title") or "").strip() or None
 
     if _user_is_super_admin(user):
         return jsonify({"error": "Super admins can read all chats, but cannot create company chats."}), 403
     if not user.get("company_id"):
         return jsonify({"error": "You must belong to a company to start a chat."}), 400
-    if not participant_ids:
-        return jsonify({"error": "At least one participant is required."}), 400
+    if not requested_participant_ids:
+        return jsonify({"error": "Select at least one teammate to start a chat."}), 400
 
-    participant_ids = sorted(set(participant_ids + [user["id"]]))
     try:
-        users = _fetch_users_by_ids(participant_ids)
-        if len(users) != len(participant_ids):
+        requested_users = _fetch_users_by_ids(requested_participant_ids)
+        participant_users = [u for u in requested_users if not _is_current_user(u, user)]
+        participant_ids = sorted({u["id"] for u in participant_users} | {user["id"]})
+        if not participant_users:
+            return jsonify({"error": "Select at least one teammate to start a chat."}), 400
+        if len(requested_users) != len(set(requested_participant_ids)):
             return jsonify({"error": "One or more participants were not found."}), 404
-        if any(str(u.get("company_id")) != str(user.get("company_id")) for u in users):
+        if any(str(u.get("company_id")) != str(user.get("company_id")) for u in participant_users):
             return jsonify({"error": "Chats can only include users from your company."}), 403
 
         conversation_payload = {
@@ -208,8 +234,7 @@ def create_conversation():
         supabase.table("internal_chat_participants").insert(participant_rows).execute()
         return jsonify(_decorate_conversations([conversation], user)[0]), 201
     except Exception as exc:
-        print(f"[internal-chat] create conversation error: {exc}")
-        return jsonify({"error": str(exc)}), 500
+        return _chat_error_response(exc, "create conversation")
 
 
 @internal_chat_bp.route("/api/internal-chat/conversations/<conversation_id>/messages", methods=["GET"])
@@ -233,8 +258,7 @@ def list_messages(conversation_id):
             ).eq("conversation_id", conversation_id).eq("user_id", user.get("id")).execute()
         return jsonify(messages)
     except Exception as exc:
-        print(f"[internal-chat] list messages error: {exc}")
-        return jsonify({"error": str(exc)}), 500
+        return _chat_error_response(exc, "list messages")
 
 
 @internal_chat_bp.route("/api/internal-chat/conversations/<conversation_id>/messages", methods=["POST"])
@@ -274,5 +298,4 @@ def send_message(conversation_id):
         ).eq("user_id", user.get("id")).execute()
         return jsonify(created.data[0]), 201
     except Exception as exc:
-        print(f"[internal-chat] send message error: {exc}")
-        return jsonify({"error": str(exc)}), 500
+        return _chat_error_response(exc, "send message")
