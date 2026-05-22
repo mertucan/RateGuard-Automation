@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { getApplications, createApplication } from '../api'
 import Spinner from '../components/Spinner'
+import { formatDisplayDate } from '../utils/dateFormat'
 
 const DEPT_LABELS = { sales: 'Sales', finance: 'Finance', hr: 'HR' }
 const STATUS_BADGES = {
@@ -267,7 +268,7 @@ export default function ApplicationsPage() {
                         <p className="mt-1 text-xs text-text-muted line-clamp-2">{app.message}</p>
                       )}
                       <p className="mt-1 text-[10px] text-text-muted">
-                        {new Date(app.created_at).toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {formatDisplayDate(app.created_at)}
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_BADGES[app.status] || ''}`}>

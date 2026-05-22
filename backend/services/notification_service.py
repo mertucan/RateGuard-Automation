@@ -187,7 +187,7 @@ def check_expiring_contracts():
                 contract_id=contract["id"],
                 recipient_company_id=tenant_company_id,
                 title=f"Contract expires in {threshold} days",
-                message=f"{company_name} expires on {end_date_str}. Review the renewal workflow.",
+                message=f"{company_name} expires on {end_date.strftime('%d.%m.%Y')}. Review the renewal workflow.",
                 notification_type=notification_type,
                 action_url=f"/renewal-review/{contract['id']}",
                 category="contract_expiry",

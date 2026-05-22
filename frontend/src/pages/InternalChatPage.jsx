@@ -8,6 +8,7 @@ import {
   sendInternalChatMessage,
 } from "../api";
 import { PageLoader } from "../components/Spinner";
+import { formatDisplayDate, formatDisplayTime } from "../utils/dateFormat";
 
 const MESSAGE_POLL_INTERVAL_MS = 2000;
 
@@ -26,19 +27,11 @@ function initials(name = "") {
 }
 
 function formatTime(value) {
-  if (!value) return "";
-  return new Date(value).toLocaleTimeString("tr-TR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDisplayTime(value);
 }
 
 function formatDay(value) {
-  if (!value) return "";
-  return new Date(value).toLocaleDateString("tr-TR", {
-    day: "2-digit",
-    month: "short",
-  });
+  return formatDisplayDate(value, "");
 }
 
 function participantSubtitle(participants = []) {

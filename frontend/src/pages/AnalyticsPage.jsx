@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { getMarketHistory, getDashboardStats, getRevenueAnalysis } from '../api'
 import Spinner from '../components/Spinner'
+import { formatDisplayDate } from '../utils/dateFormat'
 
 const periods = [
   { label: '30 Days', value: 30 },
@@ -20,12 +21,7 @@ const periods = [
 ]
 
 function formatDate(raw) {
-  if (!raw) return ''
-  const parts = raw.split('-')
-  if (parts.length === 3 && parts[0].length === 2) {
-    return `${parts[0]}/${parts[1]}`
-  }
-  return raw.slice(5)
+  return formatDisplayDate(raw, '')
 }
 
 function ChartCard({ title, subtitle, children }) {

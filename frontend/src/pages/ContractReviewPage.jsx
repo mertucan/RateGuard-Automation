@@ -6,6 +6,7 @@ import ChatPanel from "../components/ChatPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useRateBot } from "../contexts/RateBotContext";
+import { formatDisplayDate } from "../utils/dateFormat";
 import {
   getContracts,
   getContract,
@@ -1181,7 +1182,7 @@ function ContractList() {
                             </div>
                           </td>
                           <td className="hidden truncate px-3 py-3 text-sm md:table-cell">
-                            {c.end_date || "—"}
+                            {formatDisplayDate(c.end_date, "—")}
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex flex-col items-start gap-1.5">
@@ -1302,12 +1303,10 @@ function ContractDocumentPreview({
   formatCurrency,
 }) {
   const sigBlank = "____________________";
-  const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  const endDateText = editEndDate || "the current contract end date";
+  const today = formatDisplayDate(new Date());
+  const endDateText = editEndDate
+    ? formatDisplayDate(editEndDate)
+    : "the current contract end date";
   const renewalTerms = `Renewal pricing is calculated using the ${editRule} rule with an applied adjustment of ${liveAdjustment.toFixed(1)}%. The previous contract value was ${formatCurrency(amount)}, the renewal difference is ${formatCurrency(liveDifference)}, and the renewed contract value is ${formatCurrency(liveNewPrice)}.`;
   const sourceDisclosure = `Inflation data source used for this contract: ${inflationSourceName || "TCMB EVDS"} (${inflationSourceInstitution || "Central Bank of the Republic of Turkiye (TCMB)"}), via ${inflationSourceMethod || "Official EVDS API"}.`;
   const standardServices =
@@ -2907,7 +2906,7 @@ function ContractDetail() {
             </h1>
             <p className="mt-2 flex items-center gap-2 text-sm text-text-muted">
               <span className="material-symbols-outlined text-base">timer</span>
-              End date: {editEndDate || "—"} &bull; ID:{" "}
+              End date: {formatDisplayDate(editEndDate, "—")} &bull; ID:{" "}
               {contract.id.slice(0, 8)}
             </p>
           </div>
@@ -3566,7 +3565,7 @@ function ContractDetail() {
                               )}
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-text-muted">
-                              {version.status || "draft"} · {version.end_date || "No end date"} · {versionDate ? new Date(versionDate).toLocaleDateString("tr-TR") : "No date"}
+                              {version.status || "draft"} · {formatDisplayDate(version.end_date, "No end date")} · {formatDisplayDate(versionDate, "No date")}
                             </span>
                           </span>
                           <span className="shrink-0 text-right">
@@ -3919,13 +3918,7 @@ function ApprovedAgreements() {
                 const tenantName = a.tenant_company?.company_name || "—";
                 const clientName = a.client_company?.company_name || "—";
                 const isExpanded = expandedId === a.id;
-                const approvedDate = a.approved_at
-                  ? new Date(a.approved_at).toLocaleDateString("tr-TR", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })
-                  : "—";
+                const approvedDate = formatDisplayDate(a.approved_at, "—");
 
                 return (
                   <div
@@ -3994,7 +3987,7 @@ function ApprovedAgreements() {
                         <div className="text-center">
                           <p className="text-xs text-text-muted">End Date</p>
                           <p className="font-semibold text-text">
-                            {a.end_date || "—"}
+                            {formatDisplayDate(a.end_date, "—")}
                           </p>
                         </div>
                       </div>
@@ -4104,7 +4097,7 @@ function ApprovedAgreements() {
                                         )}
                                       </div>
                                       <p className="mt-0.5 truncate text-xs text-text-muted">
-                                        {v.status || "draft"} · {v.end_date || "No end date"} · {versionDate ? new Date(versionDate).toLocaleDateString("tr-TR") : "No date"}
+                                        {v.status || "draft"} · {formatDisplayDate(v.end_date, "No end date")} · {formatDisplayDate(versionDate, "No date")}
                                       </p>
                                     </div>
                                     <div className="shrink-0 text-right">
@@ -4209,7 +4202,7 @@ function ApprovedAgreements() {
                           </div>
                           <div>
                             <p className="text-xs text-text-muted">End Date</p>
-                            <p className="font-semibold">{a.end_date || "—"}</p>
+                            <p className="font-semibold">{formatDisplayDate(a.end_date, "—")}</p>
                           </div>
                         </div>
 

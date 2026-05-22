@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { getContractMessages, sendContractMessage, analyzeContractTone } from '../api'
+import { formatDisplayDateTime } from '../utils/dateFormat'
 
 export default function ChatPanel({ contractId }) {
   const { user } = useAuth()
@@ -165,12 +166,7 @@ export default function ChatPanel({ contractId }) {
                     {msg.message_text}
                   </div>
                   <span className="text-[10px] text-text-muted mt-0.5 block">
-                    {new Date(msg.created_at).toLocaleString('tr-TR', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      day: 'numeric',
-                      month: 'short',
-                    })}
+                    {formatDisplayDateTime(msg.created_at)}
                   </span>
                 </div>
               </div>

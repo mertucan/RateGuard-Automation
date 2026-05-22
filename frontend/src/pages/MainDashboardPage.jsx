@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { getDashboardStats, getContracts } from '../api'
 import { PageLoader } from '../components/Spinner'
 import ContractExpiryCalendar from '../components/ContractExpiryCalendar'
+import { formatDisplayDate } from '../utils/dateFormat'
 
 export default function MainDashboardPage() {
   const navigate = useNavigate()
@@ -143,11 +144,7 @@ export default function MainDashboardPage() {
                     {ROLE_LABEL[role] || role}
                   </span>
                   <span className="text-xs font-medium text-text-muted">
-                    {new Date().toLocaleDateString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {formatDisplayDate(new Date())}
                   </span>
                 </div>
                 <h2 className="headline-font truncate text-2xl font-extrabold tracking-tight sm:text-3xl">
@@ -341,7 +338,7 @@ export default function MainDashboardPage() {
                   <h3 className="text-lg font-bold">Upcoming expirations</h3>
                   <p className="mt-1 text-sm text-text-muted">
                     {calendarDay
-                      ? `Ending on ${calendarDay}`
+                      ? `Ending on ${formatDisplayDate(calendarDay)}`
                       : 'Next due dates in the following 120 days.'}
                   </p>
                 </div>
@@ -383,7 +380,7 @@ export default function MainDashboardPage() {
                             {item.company_name}
                           </span>
                           <span className="shrink-0 text-xs text-text-muted">
-                            {item.end_date}
+                            {formatDisplayDate(item.end_date)}
                             {d != null ? (
                               <span
                                 className={
@@ -506,7 +503,7 @@ export default function MainDashboardPage() {
                             </div>
                           </td>
                           <td className="hidden whitespace-nowrap px-4 py-3 text-sm sm:table-cell sm:px-6 sm:py-4">
-                            {row.end_date || '\u2014'}
+                            {formatDisplayDate(row.end_date, '\u2014')}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm sm:px-6 sm:py-4">
                             {formatCurrency(amount)}
@@ -581,7 +578,7 @@ export default function MainDashboardPage() {
                             {formatCurrency(row.previous_amount || 0)}
                           </td>
                           <td className="hidden px-4 py-3 text-sm sm:table-cell sm:px-6 sm:py-4">
-                            {row.end_date || '\u2014'}
+                            {formatDisplayDate(row.end_date, '\u2014')}
                           </td>
                           <td className="px-4 py-3 text-right sm:px-6 sm:py-4">
                             <button

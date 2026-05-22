@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api'
+import { formatDisplayDateTime } from '../utils/dateFormat'
 
 export default function NotificationBell() {
   const navigate = useNavigate()
@@ -122,12 +123,7 @@ export default function NotificationBell() {
                     <p className="text-xs text-text-muted line-clamp-2">{n.message}</p>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <p className="text-[10px] text-text-muted">
-                      {new Date(n.created_at).toLocaleString('tr-TR', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDisplayDateTime(n.created_at)}
                       </p>
                       {(n.action_url || n.contract_id) && (
                         <span className="text-[10px] font-semibold text-primary">Open</span>

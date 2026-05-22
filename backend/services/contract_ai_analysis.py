@@ -17,6 +17,16 @@ CLAUSE_DEFINITIONS = [
 ]
 
 
+def _format_display_date(value):
+    if not value:
+        return ""
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text[:10]).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return text
+
+
 def build_contract_ai_analysis(contract_id, user=None, persist=False):
     current = _fetch_contract(contract_id)
     if not current:
@@ -123,6 +133,8 @@ def _build_snapshot(contract):
     source_name = contract.get("inflation_source_name") or "TCMB EVDS"
     source_method = contract.get("inflation_source_method") or "Official EVDS API"
     status = contract.get("status") or "draft"
+    end_date = _format_display_date(contract.get("end_date")) or "not set"
+    approved_at = _format_display_date(contract.get("approved_at")) or "not approved yet"
 
     texts = {
         "commercial_terms": (
@@ -134,7 +146,7 @@ def _build_snapshot(contract):
             f"{adjustment:.2f}% applied adjustment and {diff:,.2f} {currency} delta."
         ),
         "term": (
-            f"Contract end date is {contract.get('end_date') or 'not set'}."
+            f"Contract end date is {end_date}."
         ),
         "increase_cap": (
             f"Maximum increase limit is "
@@ -144,7 +156,7 @@ def _build_snapshot(contract):
             f"Market data source is {source_name}; method: {source_method}."
         ),
         "approval_state": (
-            f"Workflow status is {status}; approved at {contract.get('approved_at') or 'not approved yet'}."
+            f"Workflow status is {status}; approved at {approved_at}."
         ),
         "client_decision": (
             f"Client rejection reason: {contract.get('client_rejection_reason') or 'none'}."

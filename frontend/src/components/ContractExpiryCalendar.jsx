@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatDisplayDate } from "../utils/dateFormat";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
@@ -67,10 +68,7 @@ export default function ContractExpiryCalendar({
     new Date().getDate(),
   );
 
-  const title = cursor.toLocaleString("en-GB", {
-    month: "long",
-    year: "numeric",
-  });
+  const title = formatDisplayDate(cursor);
 
   return (
     <div

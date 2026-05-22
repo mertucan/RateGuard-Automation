@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import date, datetime
 from typing import Optional
 
 from config import GEMINI_API_KEY
@@ -19,6 +20,20 @@ else:
     print("[RateGuard] WARNING: GEMINI_API_KEY not found!")
 
 
+def _format_display_date(value):
+    if not value:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%d.%m.%Y")
+    if isinstance(value, date):
+        return value.strftime("%d.%m.%Y")
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text[:10]).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return text
+
+
 def generate_email_draft(calc_data: dict) -> dict:
     """
     Generates a professional email draft using Gemini, based on contract data and the client's communication tone.
@@ -32,7 +47,7 @@ def generate_email_draft(calc_data: dict) -> dict:
     new_amount = calc_data.get("new_amount", 0)
     applied_adjustment = calc_data.get("applied_adjustment", 0)
     inflation_rule = calc_data.get("inflation_base_rule", "CPI")
-    end_date = calc_data.get("end_date", "")
+    end_date = _format_display_date(calc_data.get("end_date", ""))
     capped = calc_data.get("capped", False)
     max_limit = calc_data.get("max_increase_limit")
     tufe_rate = calc_data.get("tufe_rate", 0)
@@ -428,7 +443,7 @@ ACTIVE CONTRACT CONTEXT:
 - Applied Adjustment: {c.get("applied_adjustment", "N/A")}%
 - Inflation Rule: {c.get("inflation_base_rule", "N/A")}
 - Max Increase Limit: {c.get("max_increase_limit", "N/A")}%
-- End Date: {c.get("end_date", "N/A")}
+- End Date: {_format_display_date(c.get("end_date")) or "N/A"}
 - Status: {c.get("status", "N/A")}
 - Contract Type: {c.get("contract_type", "N/A")}
 """

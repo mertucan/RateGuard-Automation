@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { getUsers, updateUser, deleteUser } from '../api'
 import { PageLoader } from '../components/Spinner'
+import { formatDisplayDate } from '../utils/dateFormat'
 
 // Team invites only internal roles; clients belong on the Clients flow, not as a team role.
 const TEAM_ROLE_OPTIONS = [
@@ -304,7 +305,7 @@ export default function TeamManagementPage() {
                       </span>
                     </td>
                     <td className="hidden px-4 py-3 text-sm text-text-muted sm:table-cell sm:px-6 sm:py-4">
-                      {new Date(u.created_at).toLocaleDateString('tr-TR')}
+                      {formatDisplayDate(u.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right sm:px-6 sm:py-4">
                       {u.id !== user?.id && (

@@ -26,7 +26,7 @@ export default function TermsOfServicePage() {
           </div>
           <div className="rounded-xl border border-border bg-surface-alt p-5">
             <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Last updated</p>
-            <p className="mt-2 text-2xl font-extrabold">May 14, 2026</p>
+            <p className="mt-2 text-2xl font-extrabold">14.05.2026</p>
             <p className="mt-3 text-sm leading-6 text-text-muted">
               Use RateGuard as an operational assistant, not as a replacement for professional review.
             </p>

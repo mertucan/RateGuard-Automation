@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { getApplications, reviewApplication } from '../api'
 import Spinner from '../components/Spinner'
+import { formatDisplayDate } from '../utils/dateFormat'
 
 const DEPT_LABELS = { sales: 'Sales', finance: 'Finance', hr: 'HR' }
 const STATUS_BADGES = {
@@ -153,7 +154,7 @@ export default function ApplicationManagementPage() {
                           {app.status}
                         </span>
                         <span className="text-[10px] text-text-muted">
-                          {new Date(app.created_at).toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          {formatDisplayDate(app.created_at)}
                         </span>
                       </div>
 

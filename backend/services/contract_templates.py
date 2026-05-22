@@ -122,7 +122,7 @@ def _money_line(calc):
 
 
 def _agreement_today():
-    return date.today().strftime("%d %b, %Y")
+    return date.today().strftime("%d.%m.%Y")
 
 
 def _renewal_terms(calc):
@@ -158,7 +158,7 @@ def _end_pretty(calc):
     if not ed:
         return ""
     try:
-        return date.fromisoformat(ed[:10]).strftime("%d %b, %Y")
+        return date.fromisoformat(ed[:10]).strftime("%d.%m.%Y")
     except ValueError:
         return str(ed)
 

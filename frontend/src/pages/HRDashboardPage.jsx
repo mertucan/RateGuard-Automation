@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getApplications } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { PageLoader } from '../components/Spinner'
+import { formatDisplayDate } from '../utils/dateFormat'
 
 const DEPT_LABELS = { sales: 'Sales', finance: 'Finance', hr: 'HR' }
 const STATUS_BADGES = {
@@ -142,7 +143,7 @@ export default function HRDashboardPage() {
                         {app.status}
                       </span>
                       <span className="text-[10px] text-text-muted">
-                        {new Date(app.created_at).toLocaleDateString('tr-TR')}
+                        {formatDisplayDate(app.created_at)}
                       </span>
                     </div>
                   </div>

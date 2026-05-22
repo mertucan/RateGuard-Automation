@@ -9,6 +9,7 @@ import {
 } from '../api'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDisplayDateTime } from '../utils/dateFormat'
 
 function DeleteModal({ open, name, onConfirm, onCancel, loading }) {
   if (!open) return null
@@ -151,12 +152,7 @@ export default function ClientManagementPage() {
     new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n || 0)
 
   const formatShortDate = (iso) => {
-    if (!iso) return ''
-    try {
-      return new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
-    } catch {
-      return iso
-    }
+    return formatDisplayDateTime(iso, '')
   }
 
   const saveAutomationSettings = async () => {

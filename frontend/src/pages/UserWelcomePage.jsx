@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getApplications } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { PageLoader } from "../components/Spinner";
+import { formatDisplayDate } from "../utils/dateFormat";
 
 const DEPT_LABELS = { sales: "Sales", finance: "Finance", hr: "HR" };
 const STATUS_BADGES = {
@@ -126,11 +127,7 @@ export default function UserWelcomePage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">{app.company?.company_name || "Company"}</p>
                         <p className="mt-0.5 text-xs text-text-muted">
-                          {new Date(app.created_at).toLocaleDateString("tr-TR", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {formatDisplayDate(app.created_at)}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">

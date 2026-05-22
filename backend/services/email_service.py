@@ -1,5 +1,6 @@
 import re
 import smtplib
+from datetime import date, datetime
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -52,6 +53,20 @@ def _format_amount(value):
         return str(value)
 
 
+def _format_display_date(value):
+    if not value:
+        return "N/A"
+    if isinstance(value, datetime):
+        return value.strftime("%d.%m.%Y")
+    if isinstance(value, date):
+        return value.strftime("%d.%m.%Y")
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text[:10]).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return text
+
+
 def _paragraph(text):
     return f'<p style="margin: 0 0 16px; color: #475569; line-height: 1.65; font-size: 14px;">{text}</p>'
 
@@ -90,8 +105,7 @@ def _cta_button(label, path="/dashboard", expected_email=None):
             </a>
         </div>
         <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0 0 8px; text-align: center;">
-            If the button does not work, sign in and open this link:
-            <br><span style="word-break: break-all;">{href}</span>
+            If the button does not work, sign in to RateGuard and open the relevant page from your notifications.
         </p>
     """
 
@@ -214,8 +228,7 @@ def send_contract_created_email(to_email, tenant_name, company_name, contract_id
         details=[
             ("Company", escape(str(company_name))),
             ("Current value", escape(_format_amount(previous_amount))),
-            ("End date", escape(str(end_date or "N/A"))),
-            ("Reference", escape(str(contract_id))),
+            ("End date", escape(_format_display_date(end_date))),
         ],
         action_label="Open contract",
         action_path=f"/renewal-review/{contract_id}",
@@ -245,8 +258,7 @@ def send_finance_contract_created_email(
         details=[
             ("Client company", escape(str(company_name))),
             ("Current value", escape(_format_amount(previous_amount))),
-            ("End date", escape(str(end_date or "N/A"))),
-            ("Reference", escape(str(contract_id))),
+            ("End date", escape(_format_display_date(end_date))),
         ],
         action_label="Review contract",
         action_path=f"/renewal-review/{contract_id}",
@@ -295,7 +307,6 @@ def send_contract_notification(to_email, company_name, days_remaining, contract_
         details=[
             ("Company", escape(str(company_name))),
             ("Days remaining", escape(str(days_remaining))),
-            ("Reference", escape(str(contract_id))),
         ],
         action_label="Review contract",
         action_path=f"/renewal-review/{contract_id}",
@@ -355,7 +366,6 @@ def send_client_review_email(
         ("To", escape(str(company_name))),
         ("Proposed value", escape(_format_amount(new_amount))),
         ("Data source", escape(f"{source_name} ({source_institution}) via {source_method}")),
-        ("Reference", escape(str(contract_id))),
     ]
     if sender_name:
         details.append(("Sent by", escape(f"{sender_name} ({sender_email})" if sender_email else str(sender_name))))
@@ -422,9 +432,8 @@ def send_finance_ready_notification(
             ("Client company", escape(str(client_company_name))),
             ("Current value", escape(_format_amount(previous_amount))),
             ("Proposed value", escape(_format_amount(new_amount))),
-            ("End date", escape(str(end_date or "N/A"))),
+            ("End date", escape(_format_display_date(end_date))),
             ("Inflation rule", escape(str(inflation_rule or "N/A"))),
-            ("Reference", escape(str(contract_id))),
         ],
         action_label="Open contract",
         action_path=f"/renewal-review/{contract_id}",
@@ -495,7 +504,7 @@ def send_application_submitted_email(to_email, applicant_name, company_name, dep
 
 
 def send_admin_approval_request_email(to_email, contract_id, client_company, end_date):
-    subject = f"Admin approval required - Contract {str(contract_id)[:8]}"
+    subject = f"Admin approval required - {client_company}"
     body_html = render_email(
         title="Admin approval required",
         intro=[
@@ -504,8 +513,7 @@ def send_admin_approval_request_email(to_email, contract_id, client_company, end
         ],
         details=[
             ("Client company", escape(str(client_company))),
-            ("End date", escape(str(end_date or "N/A"))),
-            ("Reference", escape(str(contract_id))),
+            ("End date", escape(_format_display_date(end_date))),
         ],
         action_label="Review approval",
         action_path=f"/renewal-review/{contract_id}",
