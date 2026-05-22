@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api'
-import { useAuth } from '../contexts/AuthContext'
 
 export default function NotificationBell() {
-  const { user } = useAuth()
   const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [open, setOpen] = useState(false)
@@ -18,7 +16,7 @@ export default function NotificationBell() {
     } catch {
       /* silent */
     }
-  }, [user])
+  }, [])
 
   useEffect(() => {
     load()

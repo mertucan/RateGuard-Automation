@@ -89,7 +89,7 @@ def create_application():
         result = supabase.table("applications").insert(data).execute()
         application = result.data[0]
 
-        # Send notification email to company admin + control CC
+        # Send notification email to company admin, company HR users, and control CC.
         try:
             admin_res = (
                 supabase.table("users")
@@ -100,6 +100,18 @@ def create_application():
                 .execute()
             )
             admin_email = admin_res.data[0]["email"] if admin_res.data else "mertucan44@gmail.com"
+            hr_res = (
+                supabase.table("users")
+                .select("email")
+                .eq("company_id", target_company_id)
+                .eq("role", "hr")
+                .execute()
+            )
+            hr_emails = [
+                row.get("email")
+                for row in (hr_res.data or [])
+                if row.get("email") and row.get("email") != admin_email
+            ]
 
             from services.email_service import send_application_notification_email, send_application_submitted_email
             send_application_notification_email(
@@ -110,6 +122,7 @@ def create_application():
                 department=target_department,
                 message=message,
                 application_id=application["id"],
+                cc_emails=hr_emails,
             )
             send_application_submitted_email(
                 to_email=user["email"],
@@ -179,6 +192,11 @@ def review_application(app_id):
             }).eq("id", application["applicant_user_id"]).execute()
 
         result = supabase.table("applications").update(update_data).eq("id", app_id).execute()
+        if status == "approved":
+            supabase.table("applications").delete().eq(
+                "applicant_user_id",
+                application["applicant_user_id"],
+            ).neq("id", app_id).execute()
         try:
             from services.notification_service import notify_user
 

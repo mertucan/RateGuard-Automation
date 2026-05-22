@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { getContractMessages, sendContractMessage, analyzeContractTone } from '../api'
 
@@ -30,7 +30,7 @@ export default function ChatPanel({ contractId }) {
     }
   }
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     try {
       const data = await getContractMessages(contractId)
       setMessages(data)
@@ -39,13 +39,13 @@ export default function ChatPanel({ contractId }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [contractId])
 
   useEffect(() => {
     loadMessages()
     pollRef.current = setInterval(loadMessages, 10000)
     return () => clearInterval(pollRef.current)
-  }, [contractId])
+  }, [loadMessages])
 
   useEffect(() => {
     if (scrollRef.current) {

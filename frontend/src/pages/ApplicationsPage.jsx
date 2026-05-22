@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useToast } from '../contexts/ToastContext'
 import { getApplications, createApplication } from '../api'
@@ -10,6 +10,12 @@ const STATUS_BADGES = {
   approved: 'bg-emerald-500/10 text-emerald-500',
   rejected: 'bg-red-500/10 text-red-500',
 }
+const FILTER_OPTIONS = [
+  { key: 'pending', label: 'Pending', icon: 'pending_actions' },
+  { key: 'approved', label: 'Approved', icon: 'check_circle' },
+  { key: 'rejected', label: 'Rejected', icon: 'cancel' },
+  { key: 'all', label: 'All', icon: 'apps' },
+]
 
 export default function ApplicationsPage() {
   const { success: toastSuccess, error: toastError } = useToast()
@@ -19,6 +25,7 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [filter, setFilter] = useState('pending')
   const [form, setForm] = useState({
     target_company_id: '',
     target_department: 'sales',
@@ -89,6 +96,18 @@ export default function ApplicationsPage() {
       setSubmitting(false)
     }
   }
+
+  const counts = useMemo(() => ({
+    all: applications.length,
+    pending: applications.filter((app) => app.status === 'pending').length,
+    approved: applications.filter((app) => app.status === 'approved').length,
+    rejected: applications.filter((app) => app.status === 'rejected').length,
+  }), [applications])
+
+  const filteredApplications = useMemo(
+    () => applications.filter((app) => filter === 'all' || app.status === filter),
+    [applications, filter],
+  )
 
   const inputCls = 'w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-1 focus:ring-primary'
 
@@ -181,6 +200,33 @@ export default function ApplicationsPage() {
             </form>
           )}
 
+          {!loading && applications.length > 0 && (
+            <div className="grid w-full grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-2 shadow-sm sm:grid-cols-4">
+              {FILTER_OPTIONS.map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilter(key)}
+                  className={`flex min-h-12 min-w-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors sm:px-4 ${
+                    filter === key
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'bg-surface-alt/60 text-text-muted hover:bg-hover hover:text-text'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="material-symbols-outlined shrink-0 text-[18px]">
+                      {icon}
+                    </span>
+                    <span className="truncate">{label}</span>
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${filter === key ? 'bg-white/20 text-white' : 'bg-bg text-text'}`}>
+                    {counts[key]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-16"><Spinner size="lg" /></div>
           ) : applications.length === 0 ? (
@@ -191,13 +237,24 @@ export default function ApplicationsPage() {
                 Apply to join a company's department using the button above.
               </p>
             </div>
+          ) : filteredApplications.length === 0 ? (
+            <div className="rounded-xl border border-border bg-surface p-12 text-center">
+              <span className="material-symbols-outlined mb-3 block text-4xl text-text-muted">filter_list_off</span>
+              <p className="text-sm font-semibold text-text">No {filter} applications</p>
+              <p className="mt-1 text-xs text-text-muted">
+                Try another status filter or create a new application.
+              </p>
+            </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border bg-surface">
-              <div className="border-b border-border bg-surface-alt px-4 py-3 sm:px-6">
+              <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-alt px-4 py-3 sm:px-6">
                 <h3 className="text-sm font-semibold">My Applications</h3>
+                <span className="text-xs font-medium text-text-muted">
+                  {filteredApplications.length} shown
+                </span>
               </div>
               <div className="divide-y divide-border">
-                {applications.map((app) => (
+                {filteredApplications.map((app) => (
                   <div key={app.id} className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">

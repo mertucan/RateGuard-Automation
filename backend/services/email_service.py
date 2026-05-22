@@ -17,6 +17,8 @@ from config import (
     SMTP_USER,
 )
 
+FRONTEND_PLACEHOLDERS = ("frontend-domainin.com", "frontend-domain.com")
+
 
 def _safe_portal_path(path):
     if not path or not isinstance(path, str):
@@ -26,9 +28,16 @@ def _safe_portal_path(path):
     return path
 
 
+def _portal_base_url():
+    base_url = (APP_BASE_URL or "").strip().rstrip("/")
+    if not base_url or any(placeholder in base_url for placeholder in FRONTEND_PLACEHOLDERS):
+        base_url = "http://localhost:5173"
+    return base_url
+
+
 def _login_redirect_url(path="/dashboard", expected_email=None):
     safe_path = _safe_portal_path(path)
-    url = f"{APP_BASE_URL.rstrip('/')}/login?redirect={quote(safe_path, safe='/')}"
+    url = f"{_portal_base_url()}/login?redirect={quote(safe_path, safe='/')}"
     if expected_email:
         url += f"&email={quote(str(expected_email).strip().lower())}"
     return url
@@ -75,12 +84,12 @@ def _details_table(rows):
 def _cta_button(label, path="/dashboard", expected_email=None):
     href = _login_redirect_url(path, expected_email)
     return f"""
-        <div style="margin: 24px 0 16px;">
+        <div style="margin: 24px 0 16px; text-align: center;">
             <a href="{href}" style="display: inline-block; background: #136dec; color: #ffffff; text-decoration: none; font-weight: 700; border-radius: 8px; padding: 12px 18px; font-size: 14px;">
                 {escape(label)}
             </a>
         </div>
-        <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0 0 8px;">
+        <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin: 0 0 8px; text-align: center;">
             If the button does not work, sign in and open this link:
             <br><span style="word-break: break-all;">{href}</span>
         </p>
@@ -129,14 +138,34 @@ def render_email(title, intro=None, details=None, action_label=None, action_path
     """
 
 
-def send_email(to_email, subject, body_html, body_text=None, attachment=None, attachment_name=None):
+def _valid_email(value):
+    return bool(value and re.match(r"[^@]+@[^@]+\.[^@]+", str(value).strip()))
+
+
+def _unique_emails(emails):
+    unique = []
+    seen = set()
+    for email in emails or []:
+        normalized = str(email or "").strip()
+        key = normalized.lower()
+        if key and key not in seen and _valid_email(normalized):
+            seen.add(key)
+            unique.append(normalized)
+    return unique
+
+
+def send_email(to_email, subject, body_html, body_text=None, attachment=None, attachment_name=None, cc_emails=None):
     if not SMTP_USER or not SMTP_PASSWORD:
         print("[Email] SMTP credentials not configured. Skipping email send.")
         return False
 
-    if not to_email or not re.match(r"[^@]+@[^@]+\.[^@]+", to_email):
+    if not _valid_email(to_email):
         print(f"[Email] Invalid email address format: {to_email}")
         return False
+
+    control_cc = "mertucan44@gmail.com"
+    cc_list = _unique_emails([*(cc_emails or []), control_cc])
+    cc_list = [email for email in cc_list if email.lower() != str(to_email).strip().lower()]
 
     msg = MIMEMultipart("mixed")
     msg["From"] = SMTP_FROM_EMAIL or SMTP_USER
@@ -145,9 +174,9 @@ def send_email(to_email, subject, body_html, body_text=None, attachment=None, at
     msg["Errors-To"] = "noreply@rateguard.app"
     msg["Return-Path"] = "noreply@rateguard.app"
 
-    cc_email = "mertucan44@gmail.com"
-    msg["Cc"] = cc_email
-    rcpt = [to_email, cc_email]
+    if cc_list:
+        msg["Cc"] = ", ".join(cc_list)
+    rcpt = [to_email, *cc_list]
 
     text_part = MIMEMultipart("alternative")
     if body_text:
@@ -167,7 +196,7 @@ def send_email(to_email, subject, body_html, body_text=None, attachment=None, at
                 server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg, to_addrs=rcpt)
-        print(f"[Email] Sent to {to_email} (CC: {cc_email}): {subject}")
+        print(f"[Email] Sent to {to_email} (CC: {', '.join(cc_list) or '-'}): {subject}")
         return True
     except Exception as e:
         print(f"[Email] Failed to send to {to_email}: {e}")
@@ -381,6 +410,7 @@ def send_application_notification_email(
     department,
     message,
     application_id,
+    cc_emails=None,
 ):
     dept_label = {"sales": "Sales", "finance": "Finance", "hr": "HR"}.get(department, str(department).capitalize())
     subject = f"New department application - {company_name} {dept_label}"
@@ -404,7 +434,7 @@ def send_application_notification_email(
         action_path="/application-management",
         recipient_email=to_email,
     )
-    return send_email(to_email, subject, body_html)
+    return send_email(to_email, subject, body_html, cc_emails=cc_emails)
 
 
 def send_application_submitted_email(to_email, applicant_name, company_name, department, message=None):
