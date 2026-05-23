@@ -7,6 +7,9 @@ from services.supabase_client import supabase
 
 internal_chat_bp = Blueprint("internal_chat", __name__)
 
+CONVERSATION_LIST_LIMIT = 80
+RECENT_MESSAGES_PER_CONVERSATION = 20
+
 
 def _chat_error_response(exc, context):
     text = str(exc)
@@ -39,6 +42,19 @@ def _is_current_user(candidate, current_user):
     candidate_email = (candidate.get("email") or "").strip().lower()
     current_email = (current_user.get("email") or "").strip().lower()
     return bool(candidate_email and current_email and candidate_email == current_email)
+
+
+def _parse_timestamp(value):
+    if not value:
+        return None
+    try:
+        text = str(value).replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
 
 
 def _user_is_participant(conversation_id, user):
@@ -87,6 +103,47 @@ def _fetch_users_by_ids(user_ids):
     ).data or []
 
 
+def _participant_read_state(conversation_id):
+    participants = (
+        supabase.table("internal_chat_participants")
+        .select("user_id, last_read_at")
+        .eq("conversation_id", conversation_id)
+        .execute()
+    ).data or []
+    return {
+        row.get("user_id"): _parse_timestamp(row.get("last_read_at"))
+        for row in participants
+        if row.get("user_id")
+    }
+
+
+def _decorate_messages_with_read_state(messages, conversation_id):
+    read_state = _participant_read_state(conversation_id)
+    participant_ids = set(read_state.keys())
+    decorated = []
+    for message in messages:
+        sender_id = message.get("sender_user_id")
+        created_at = _parse_timestamp(message.get("created_at"))
+        other_ids = [uid for uid in participant_ids if uid != sender_id]
+        read_by_all = bool(other_ids) and bool(created_at) and all(
+            read_state.get(uid) and read_state[uid] >= created_at
+            for uid in other_ids
+        )
+        decorated.append(
+            {
+                **message,
+                "read_by_all": read_by_all,
+                "read_count": sum(
+                    1
+                    for uid in other_ids
+                    if created_at and read_state.get(uid) and read_state[uid] >= created_at
+                ),
+                "recipient_count": len(other_ids),
+            }
+        )
+    return decorated
+
+
 def _decorate_conversations(conversations, current_user):
     if not conversations:
         return []
@@ -94,33 +151,52 @@ def _decorate_conversations(conversations, current_user):
     conversation_ids = [c["id"] for c in conversations]
     participants = (
         supabase.table("internal_chat_participants")
-        .select("conversation_id, user_id")
+        .select("conversation_id, user_id, last_read_at")
         .in_("conversation_id", conversation_ids)
         .execute()
     ).data or []
     user_ids = sorted({p["user_id"] for p in participants if p.get("user_id")})
     users = {u["id"]: u for u in _fetch_users_by_ids(user_ids)}
 
+    messages = (
+        supabase.table("internal_chat_messages")
+        .select("id, conversation_id, sender_user_id, message_text, created_at")
+        .in_("conversation_id", conversation_ids)
+        .order("created_at", desc=True)
+        .limit(max(len(conversation_ids) * RECENT_MESSAGES_PER_CONVERSATION, 100))
+        .execute()
+    ).data or []
+
     last_by_conversation = {}
-    for conversation_id in conversation_ids:
-        latest = (
-            supabase.table("internal_chat_messages")
-            .select("id, conversation_id, sender_user_id, message_text, created_at")
-            .eq("conversation_id", conversation_id)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        ).data or []
-        if latest:
-            last_by_conversation[conversation_id] = latest[0]
+    unread_by_conversation = {conversation_id: 0 for conversation_id in conversation_ids}
+    unread_capped_by_conversation = {conversation_id: False for conversation_id in conversation_ids}
 
     participants_by_conversation = {}
+    current_user_read_at_by_conversation = {}
     for participant in participants:
         cid = participant.get("conversation_id")
         user = users.get(participant.get("user_id"))
-        if not cid or not user:
+        if not cid:
             continue
-        participants_by_conversation.setdefault(cid, []).append(user)
+        if str(participant.get("user_id")) == str(current_user.get("id")):
+            current_user_read_at_by_conversation[cid] = _parse_timestamp(participant.get("last_read_at"))
+        if user:
+            participants_by_conversation.setdefault(cid, []).append(user)
+
+    for message in messages:
+        cid = message.get("conversation_id")
+        if not cid:
+            continue
+        if cid not in last_by_conversation:
+            last_by_conversation[cid] = message
+        if str(message.get("sender_user_id")) == str(current_user.get("id")):
+            continue
+        created_at = _parse_timestamp(message.get("created_at"))
+        last_read_at = current_user_read_at_by_conversation.get(cid)
+        if created_at and (not last_read_at or created_at > last_read_at):
+            unread_by_conversation[cid] = unread_by_conversation.get(cid, 0) + 1
+            if unread_by_conversation[cid] >= RECENT_MESSAGES_PER_CONVERSATION:
+                unread_capped_by_conversation[cid] = True
 
     decorated = []
     for conversation in conversations:
@@ -141,6 +217,8 @@ def _decorate_conversations(conversations, current_user):
                 "display_title": display_title,
                 "participants": conv_participants,
                 "last_message": last_by_conversation.get(cid),
+                "unread_count": unread_by_conversation.get(cid, 0),
+                "unread_count_capped": unread_capped_by_conversation.get(cid, False),
             }
         )
     return decorated
@@ -175,6 +253,7 @@ def list_conversations():
                 supabase.table("internal_chat_conversations")
                 .select("*, companies!internal_chat_conversations_company_id_fkey(id, company_name)")
                 .order("updated_at", desc=True)
+                .limit(CONVERSATION_LIST_LIMIT)
                 .execute()
             ).data or []
         elif _user_is_company_admin(user):
@@ -183,6 +262,7 @@ def list_conversations():
                 .select("*, companies!internal_chat_conversations_company_id_fkey(id, company_name)")
                 .eq("company_id", user.get("company_id"))
                 .order("updated_at", desc=True)
+                .limit(CONVERSATION_LIST_LIMIT)
                 .execute()
             ).data or []
         else:
@@ -200,6 +280,7 @@ def list_conversations():
                 .select("*, companies!internal_chat_conversations_company_id_fkey(id, company_name)")
                 .in_("id", ids)
                 .order("updated_at", desc=True)
+                .limit(CONVERSATION_LIST_LIMIT)
                 .execute()
             ).data or []
         return jsonify(_decorate_conversations(conversations, user))
@@ -259,10 +340,10 @@ def create_conversation():
 @login_required
 def list_messages(conversation_id):
     user = g.current_user
-    _, error = _conversation_for_user(conversation_id, user)
-    if error:
-        return error
     try:
+        _, error = _conversation_for_user(conversation_id, user)
+        if error:
+            return error
         messages = (
             supabase.table("internal_chat_messages")
             .select("*, sender:users!internal_chat_messages_sender_user_id_fkey(id, full_name, email, role)")
@@ -276,7 +357,7 @@ def list_messages(conversation_id):
             supabase.table("internal_chat_participants").update(
                 {"last_read_at": datetime.now(timezone.utc).isoformat()}
             ).eq("conversation_id", conversation_id).eq("user_id", user.get("id")).execute()
-        return jsonify(messages)
+        return jsonify(_decorate_messages_with_read_state(messages, conversation_id))
     except Exception as exc:
         return _chat_error_response(exc, "list messages")
 
@@ -285,21 +366,21 @@ def list_messages(conversation_id):
 @login_required
 def send_message(conversation_id):
     user = g.current_user
-    if _user_is_super_admin(user):
-        return jsonify({"error": "Super admins can read all chats, but cannot post into company chats."}), 403
-
-    _, error = _conversation_for_user(conversation_id, user)
-    if error:
-        return error
-    if not _user_is_participant(conversation_id, user):
-        return jsonify({"error": "Only conversation participants can post messages."}), 403
-
-    body = request.get_json() or {}
-    message_text = (body.get("message_text") or "").strip()
-    if not message_text:
-        return jsonify({"error": "Message cannot be empty."}), 400
-
     try:
+        if _user_is_super_admin(user):
+            return jsonify({"error": "Super admins can read all chats, but cannot post into company chats."}), 403
+
+        _, error = _conversation_for_user(conversation_id, user)
+        if error:
+            return error
+        if not _user_is_participant(conversation_id, user):
+            return jsonify({"error": "Only conversation participants can post messages."}), 403
+
+        body = request.get_json() or {}
+        message_text = (body.get("message_text") or "").strip()
+        if not message_text:
+            return jsonify({"error": "Message cannot be empty."}), 400
+
         created = (
             supabase.table("internal_chat_messages")
             .insert(

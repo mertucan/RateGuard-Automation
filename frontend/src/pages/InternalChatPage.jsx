@@ -70,6 +70,8 @@ function normalizeConversation(item) {
     display_title: item.display_title || item.title || "Internal chat",
     participants: Array.isArray(item.participants) ? item.participants : [],
     last_message: item.last_message || null,
+    unread_count: Number(item.unread_count || 0),
+    unread_count_capped: Boolean(item.unread_count_capped),
   };
 }
 
@@ -104,6 +106,7 @@ export default function InternalChatPage() {
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [newTitle, setNewTitle] = useState("");
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [error, setError] = useState("");
   const messagesEndRef = useRef(null);
   const selectedIdRef = useRef(null);
@@ -197,20 +200,10 @@ export default function InternalChatPage() {
       setLoading(true);
       setError("");
       try {
-        const [conversationData, userData] = await Promise.all([
-          getInternalChatConversations(),
-          getInternalChatUsers(),
-        ]);
+        const conversationData = await getInternalChatConversations();
         if (cancelled) return;
         const normalizedConversations = normalizeConversations(conversationData);
         setConversations(normalizedConversations);
-        setUsers(
-          (Array.isArray(userData) ? userData : [])
-            .map(normalizeChatUser)
-            .filter((item) =>
-              item && !isCurrentChatUser(item, { id: user?.id, email: user?.email }),
-            ),
-        );
         setSelectedId(normalizedConversations?.[0]?.id || null);
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -223,6 +216,29 @@ export default function InternalChatPage() {
       cancelled = true;
     };
   }, [user?.email, user?.id]);
+
+  const loadChatUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const userData = await getInternalChatUsers();
+      setUsers(
+        (Array.isArray(userData) ? userData : [])
+          .map(normalizeChatUser)
+          .filter((item) =>
+            item && !isCurrentChatUser(item, { id: user?.id, email: user?.email }),
+          ),
+      );
+    } catch (err) {
+      setError(err.message || "Chat users could not be loaded.");
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [user?.email, user?.id]);
+
+  useEffect(() => {
+    if (!showNewChat || users.length > 0 || isSuperAdmin) return;
+    loadChatUsers();
+  }, [isSuperAdmin, loadChatUsers, showNewChat, users.length]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -298,6 +314,17 @@ export default function InternalChatPage() {
   const toggleUser = (id) => {
     setSelectedUserIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
+
+  const selectConversation = (conversationId) => {
+    setSelectedId(conversationId);
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, unread_count: 0 }
+          : conversation,
+      ),
     );
   };
 
@@ -419,7 +446,7 @@ export default function InternalChatPage() {
                 <button
                   key={conversation.id}
                   type="button"
-                  onClick={() => setSelectedId(conversation.id)}
+                  onClick={() => selectConversation(conversation.id)}
                   className={`flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors ${
                     active ? "bg-primary-soft" : "hover:bg-hover"
                   }`}
@@ -430,9 +457,18 @@ export default function InternalChatPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-bold">{conversation.display_title}</p>
-                      <span className="shrink-0 text-[11px] text-text-muted">
-                        {formatDay(last?.created_at || conversation.updated_at)}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-[11px] text-text-muted">
+                          {formatDay(last?.created_at || conversation.updated_at)}
+                        </span>
+                        {conversation.unread_count > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold leading-none text-white">
+                            {conversation.unread_count_capped || conversation.unread_count > 99
+                              ? `${Math.min(conversation.unread_count, 99)}+`
+                              : conversation.unread_count}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-0.5 truncate text-xs text-text-muted">
                       {last?.message_text || participantSubtitle(conversation.participants)}
@@ -518,10 +554,18 @@ export default function InternalChatPage() {
                                 className={`material-symbols-outlined notranslate inline-flex w-4 justify-end text-[15px] leading-none ${
                                   message.delivery_status === "sending"
                                     ? "text-slate-400"
-                                    : "text-primary"
+                                    : message.read_by_all
+                                      ? "text-sky-500"
+                                      : "text-slate-400"
                                 }`}
                                 translate="no"
-                                title={message.delivery_status === "sending" ? "Sending" : "Sent"}
+                                title={
+                                  message.delivery_status === "sending"
+                                    ? "Sending"
+                                    : message.read_by_all
+                                      ? "Read by everyone"
+                                      : "Delivered"
+                                }
                               >
                                 {message.delivery_status === "sending" ? "done" : "done_all"}
                               </span>
@@ -594,7 +638,12 @@ export default function InternalChatPage() {
                 className="w-full rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm outline-none focus:border-primary"
               />
               <div className="max-h-80 overflow-y-auto rounded-lg border border-border">
-                {users.length === 0 ? (
+                {usersLoading ? (
+                  <div className="flex items-center gap-2 p-4 text-sm text-text-muted">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+                    Loading teammates...
+                  </div>
+                ) : users.length === 0 ? (
                   <p className="p-4 text-sm text-text-muted">No teammates found.</p>
                 ) : (
                   users.map((item) => (
