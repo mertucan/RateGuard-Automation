@@ -147,6 +147,24 @@ def create_application():
         except Exception as email_err:
             print(f"[applications] Notification/email error: {email_err}")
 
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=user["id"],
+                user_name=user["full_name"],
+                action="submit_application",
+                entity_type="application",
+                entity_id=application["id"],
+                details={
+                    "target_company_id": target_company_id,
+                    "target_department": target_department,
+                    "has_message": bool(message),
+                },
+            )
+        except Exception as audit_err:
+            print(f"[applications] Create audit error: {audit_err}")
+
         return jsonify(application), 201
     except Exception as e:
         print(f"[applications] create error: {e}")
@@ -236,6 +254,25 @@ def review_application(app_id):
                 )
         except Exception as email_err:
             print(f"[applications] Review email error: {email_err}")
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=user["id"],
+                user_name=user["full_name"],
+                action=f"application_{status}",
+                entity_type="application",
+                entity_id=app_id,
+                details={
+                    "applicant_user_id": application.get("applicant_user_id"),
+                    "target_company_id": application.get("target_company_id"),
+                    "target_department": application.get("target_department"),
+                    "reviewer_message_included": bool(reviewer_message),
+                    "status": status,
+                },
+            )
+        except Exception as audit_err:
+            print(f"[applications] Review audit error: {audit_err}")
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[applications] review error: {e}")

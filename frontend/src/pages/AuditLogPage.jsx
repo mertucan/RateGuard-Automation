@@ -18,6 +18,17 @@ const ACTION_META = {
   notify_sales: { label: 'Sales notified', verb: 'notified sales about', icon: 'forward_to_inbox', tone: 'amber' },
   generate_contract_ai_analysis: { label: 'AI analysis', verb: 'generated AI analysis for', icon: 'psychology', tone: 'violet' },
   login: { label: 'Login', verb: 'logged into', icon: 'login', tone: 'blue' },
+  register: { label: 'Registered', verb: 'registered', icon: 'person_add', tone: 'blue' },
+  update_profile: { label: 'Profile updated', verb: 'updated profile for', icon: 'manage_accounts', tone: 'amber' },
+  change_password: { label: 'Password changed', verb: 'changed password for', icon: 'lock_reset', tone: 'red' },
+  create_user: { label: 'User created', verb: 'created', icon: 'person_add', tone: 'emerald' },
+  update_user: { label: 'User updated', verb: 'updated', icon: 'manage_accounts', tone: 'amber' },
+  remove_user_from_company: { label: 'User removed', verb: 'removed', icon: 'person_remove', tone: 'red' },
+  submit_application: { label: 'Application submitted', verb: 'submitted', icon: 'assignment_ind', tone: 'blue' },
+  application_approved: { label: 'Application approved', verb: 'approved', icon: 'how_to_reg', tone: 'emerald' },
+  application_rejected: { label: 'Application rejected', verb: 'rejected', icon: 'person_cancel', tone: 'red' },
+  update_automation_settings: { label: 'Automation updated', verb: 'updated', icon: 'settings_suggest', tone: 'amber' },
+  run_renewal_automation: { label: 'Automation run', verb: 'ran', icon: 'play_circle', tone: 'blue' },
   draft: { label: 'Draft saved', verb: 'saved draft for', icon: 'edit_note', tone: 'amber' },
 }
 
@@ -34,6 +45,9 @@ const ENTITY_LABELS = {
   all: 'All types',
   contract: 'Contracts',
   company: 'Companies',
+  application: 'Applications',
+  session: 'Sessions',
+  user_security: 'Security',
   user: 'Users',
 }
 
@@ -80,27 +94,84 @@ function formatValue(key, value) {
   return String(value)
 }
 
+function formatChangeList(changes) {
+  if (!changes || typeof changes !== 'object') return null
+  const entries = Object.entries(changes)
+  if (!entries.length) return null
+
+  return (
+    <div className="space-y-2">
+      {entries.map(([key, value]) => (
+        <div key={key} className="rounded-lg border border-border bg-surface px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+            {titleize(key)}
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">Before</p>
+              <p className="mt-1 break-words text-xs font-semibold text-text-muted">
+                {formatValue(key, value?.before)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">After</p>
+              <p className="mt-1 break-words text-xs font-semibold text-text">
+                {formatValue(key, value?.after)}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function formatDetails(details) {
   const normalized = normalizeDetails(details)
   if (!normalized) return null
   if (typeof normalized !== 'object') return <p className="text-xs leading-5 text-text-muted">{String(normalized)}</p>
 
-  const entries = Object.entries(normalized)
-  if (!entries.length) return null
+  const { changes, _context: context, ...rest } = normalized
+  const entries = Object.entries(rest)
+  if (!entries.length && !changes && !context) return null
 
   return (
-    <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {entries.map(([key, value]) => (
-        <div key={key} className="rounded-lg border border-border bg-surface px-3 py-2">
-          <dt className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-            {titleize(key)}
-          </dt>
-          <dd className="mt-1 break-words text-xs font-semibold text-text">
-            {formatValue(key, value)}
-          </dd>
+    <div className="space-y-3">
+      {formatChangeList(changes)}
+      {entries.length > 0 && (
+        <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {entries.map(([key, value]) => (
+            <div key={key} className="rounded-lg border border-border bg-surface px-3 py-2">
+              <dt className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                {titleize(key)}
+              </dt>
+              <dd className="mt-1 break-words text-xs font-semibold text-text">
+                {formatValue(key, value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {context && (
+        <div className="flex flex-wrap gap-2 text-[11px] font-semibold text-text-muted">
+          {context.actor?.role && (
+            <span className="rounded-full border border-border bg-surface px-2 py-1">
+              {titleize(context.actor.role)}
+            </span>
+          )}
+          {context.ip_address && (
+            <span className="rounded-full border border-border bg-surface px-2 py-1">
+              IP {context.ip_address}
+            </span>
+          )}
+          {context.request_id && (
+            <span className="rounded-full border border-border bg-surface px-2 py-1">
+              Req {String(context.request_id).slice(0, 8)}
+            </span>
+          )}
         </div>
-      ))}
-    </dl>
+      )}
+    </div>
   )
 }
 

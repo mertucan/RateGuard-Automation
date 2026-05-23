@@ -608,6 +608,27 @@ def create_contract():
         except Exception as email_err:
             print(f"[contracts create] Email send error: {email_err}")
 
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=user["id"],
+                user_name=user["full_name"],
+                action="create",
+                entity_type="contract",
+                entity_id=new_contract["id"],
+                details={
+                    "company_id": new_contract.get("company_id"),
+                    "tenant_company_id": new_contract.get("tenant_company_id"),
+                    "status": new_contract.get("status"),
+                    "previous_amount": new_contract.get("previous_amount"),
+                    "currency": new_contract.get("currency"),
+                    "end_date": new_contract.get("end_date"),
+                },
+            )
+        except Exception as audit_err:
+            print(f"[contracts create] Audit error: {audit_err}")
+
         return jsonify(new_contract), 201
     except Exception as e:
         print(f"[contracts create] Error: {e}")
@@ -645,8 +666,28 @@ def update_contract(contract_id):
             return error
         if contract.get("status") in FINAL_STATUSES:
             return jsonify({"error": "Finalized contracts cannot be edited"}), 409
+        before_res = (
+            supabase.table("contracts").select("*").eq("id", contract_id).limit(1).execute()
+        )
+        before = before_res.data[0] if before_res.data else contract
         result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
-        return jsonify(result.data[0])
+        updated = result.data[0]
+
+        try:
+            from routes.audit_logs import build_change_details, log_audit
+
+            log_audit(
+                user_id=g.current_user["id"],
+                user_name=g.current_user["full_name"],
+                action="update",
+                entity_type="contract",
+                entity_id=contract_id,
+                details=build_change_details(before, updated, fields=data.keys()),
+            )
+        except Exception as audit_err:
+            print(f"[contracts update] Audit error: {audit_err}")
+
+        return jsonify(updated)
     except Exception as e:
         print(f"[contracts update] Error: {e}")
         return jsonify({"error": str(e)}), 400
@@ -683,8 +724,28 @@ def save_draft(contract_id):
             return jsonify({"error": "Insufficient permissions"}), 403
         if contract.get("status") in FINAL_STATUSES:
             return jsonify({"error": "Finalized contracts cannot be edited"}), 409
+        before_res = (
+            supabase.table("contracts").select("*").eq("id", contract_id).limit(1).execute()
+        )
+        before = before_res.data[0] if before_res.data else contract
         result = _supabase_update_with_fallback("contracts", data, "id", contract_id)
-        return jsonify(result.data[0])
+        updated = result.data[0]
+
+        try:
+            from routes.audit_logs import build_change_details, log_audit
+
+            log_audit(
+                user_id=g.current_user["id"],
+                user_name=g.current_user["full_name"],
+                action="draft",
+                entity_type="contract",
+                entity_id=contract_id,
+                details=build_change_details(before, updated, fields=data.keys()),
+            )
+        except Exception as audit_err:
+            print(f"[save-draft] Audit error: {audit_err}")
+
+        return jsonify(updated)
     except Exception as e:
         print(f"[save-draft] Error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1203,7 +1264,20 @@ def delete_contract(contract_id):
     if error:
         return error
     payload = {"status": "cancelled", "rejection_notes": "Cancelled by admin"}
-    supabase.table("contracts").update(payload).eq("id", contract_id).execute()
+    result = supabase.table("contracts").update(payload).eq("id", contract_id).execute()
+    try:
+        from routes.audit_logs import build_change_details, log_audit
+
+        log_audit(
+            user_id=user["id"],
+            user_name=user["full_name"],
+            action="cancel",
+            entity_type="contract",
+            entity_id=contract_id,
+            details=build_change_details(contract, result.data[0] if result.data else payload, fields=payload.keys()),
+        )
+    except Exception as audit_err:
+        print(f"[delete contract] Audit error: {audit_err}")
     return jsonify({"ok": True})
 
 

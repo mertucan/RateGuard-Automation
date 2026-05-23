@@ -85,6 +85,19 @@ def register():
                 send_welcome_email(email, full_name=full_name, role=role)
             except Exception as email_err:
                 print(f"[auth/register] Welcome email error: {email_err}")
+            try:
+                from routes.audit_logs import log_audit
+
+                log_audit(
+                    user_id=user["id"],
+                    user_name=user["full_name"],
+                    action="register",
+                    entity_type="user",
+                    entity_id=user["id"],
+                    details={"role": user.get("role"), "company_id": user.get("company_id")},
+                )
+            except Exception as audit_err:
+                print(f"[auth/register] Audit error: {audit_err}")
         return jsonify(user), 201
     except Exception as e:
         print(f"[auth/register] Error: {e}")
@@ -112,6 +125,19 @@ def login():
 
         sanitized = _sanitize_user(user)
         sanitized["access_token"] = issue_auth_token(user)
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=user["id"],
+                user_name=user["full_name"],
+                action="login",
+                entity_type="session",
+                entity_id=user["id"],
+                details={"role": user.get("role"), "company_id": user.get("company_id")},
+            )
+        except Exception as audit_err:
+            print(f"[auth/login] Audit error: {audit_err}")
         return jsonify(sanitized)
     except Exception as e:
         print(f"[auth/login] Error: {e}")
@@ -149,6 +175,22 @@ def update_profile():
             .execute()
         )
         updated = _get_user_row(current["id"])
+        try:
+            from routes.audit_logs import build_change_details, log_audit
+
+            log_audit(
+                user_id=current["id"],
+                user_name=updated.get("full_name") or current.get("full_name"),
+                action="update_profile",
+                entity_type="user",
+                entity_id=current["id"],
+                details=build_change_details(
+                    {"full_name": current.get("full_name")},
+                    {"full_name": updated.get("full_name")},
+                ),
+            )
+        except Exception as audit_err:
+            print(f"[profile] Audit error: {audit_err}")
         return jsonify(_sanitize_user(updated))
     except Exception as e:
         print(f"[profile] Update error: {e}")
@@ -185,6 +227,19 @@ def update_profile_password():
             send_password_changed_email(user.get("email"), user.get("full_name"))
         except Exception as email_err:
             print(f"[profile/password] Email send error: {email_err}")
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=current["id"],
+                user_name=user.get("full_name"),
+                action="change_password",
+                entity_type="user_security",
+                entity_id=current["id"],
+                details={"method": "profile"},
+            )
+        except Exception as audit_err:
+            print(f"[profile/password] Audit error: {audit_err}")
         return jsonify({"ok": True, "message": "Password updated successfully."})
     except Exception as e:
         print(f"[profile/password] Update error: {e}")
@@ -268,7 +323,24 @@ def create_user():
         data["password_hash"] = generate_password_hash(password)
     try:
         result = supabase.table("users").insert(data).execute()
-        return jsonify(_sanitize_user(result.data[0])), 201
+        created_user = _sanitize_user(result.data[0])
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=g.current_user["id"],
+                user_name=g.current_user["full_name"],
+                action="create_user",
+                entity_type="user",
+                entity_id=created_user["id"],
+                details={
+                    "target_role": created_user.get("role"),
+                    "target_company_id": created_user.get("company_id"),
+                },
+            )
+        except Exception as audit_err:
+            print(f"[users] Create audit error: {audit_err}")
+        return jsonify(created_user), 201
     except Exception as e:
         print(f"[users] Create error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -314,13 +386,33 @@ def update_user(user_id):
                 return jsonify({"error": "Password must be at least 8 characters."}), 400
             data["password_hash"] = generate_password_hash(password)
             password_was_changed = True
+        before = dict(target)
         result = supabase.table("users").update(data).eq("id", user_id).execute()
         if password_was_changed:
             try:
                 send_password_changed_email(target.get("email"), target.get("full_name"))
             except Exception as email_err:
                 print(f"[users/update] Password email send error: {email_err}")
-        return jsonify(_sanitize_user(result.data[0]))
+        updated_user = _sanitize_user(result.data[0])
+        try:
+            from routes.audit_logs import build_change_details, log_audit
+
+            log_audit(
+                user_id=current["id"],
+                user_name=current["full_name"],
+                action="update_user",
+                entity_type="user",
+                entity_id=user_id,
+                details=build_change_details(
+                    before,
+                    updated_user,
+                    fields=("full_name", "email", "role", "company_id", "password_hash"),
+                    extra={"password_changed": password_was_changed},
+                ),
+            )
+        except Exception as audit_err:
+            print(f"[users/update] Audit error: {audit_err}")
+        return jsonify(updated_user)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -352,6 +444,24 @@ def delete_user(user_id):
                 send_user_removed_email(email, full_name, company_name, old_role)
             except Exception as email_err:
                 print(f"[delete_user] Email send error: {email_err}")
+
+        try:
+            from routes.audit_logs import log_audit
+
+            log_audit(
+                user_id=current["id"],
+                user_name=current["full_name"],
+                action="remove_user_from_company",
+                entity_type="user",
+                entity_id=user_id,
+                details={
+                    "previous_company_id": user.get("company_id"),
+                    "previous_role": old_role,
+                    "new_role": "user",
+                },
+            )
+        except Exception as audit_err:
+            print(f"[delete_user] Audit error: {audit_err}")
 
         return jsonify({"ok": True, "message": "User removed from company and reverted to user."})
     except Exception as e:
@@ -441,6 +551,22 @@ def reset_password():
             send_password_changed_email(user.get("email") or email, user.get("full_name"))
         except Exception as email_err:
             print(f"[auth/reset-password] Password email send error: {email_err}")
+        try:
+            user_result = supabase.table("users").select("id, full_name").eq("email", email).limit(1).execute()
+            user = user_result.data[0] if user_result.data else {}
+            if user.get("id"):
+                from routes.audit_logs import log_audit
+
+                log_audit(
+                    user_id=user["id"],
+                    user_name=user.get("full_name"),
+                    action="change_password",
+                    entity_type="user_security",
+                    entity_id=user["id"],
+                    details={"method": "reset_code"},
+                )
+        except Exception as audit_err:
+            print(f"[auth/reset-password] Audit error: {audit_err}")
 
         return jsonify({"ok": True, "message": "Password updated successfully."})
     except Exception as e:

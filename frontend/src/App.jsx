@@ -14,6 +14,7 @@ import ApplicationManagementPage from "./pages/ApplicationManagementPage";
 import HRDashboardPage from "./pages/HRDashboardPage";
 import InternalChatPage from "./pages/InternalChatPage";
 import ProfileSettingsPage from "./pages/ProfileSettingsPage";
+import RoleGuidePage from "./pages/RoleGuidePage";
 import Layout from "./components/Layout";
 import SplashScreen from "./components/SplashScreen";
 import LoginPage from "./pages/LoginPage";
@@ -124,6 +125,17 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/workflows"
+        element={
+          <ProtectedRoute roles={["company_admin", "finance", "sales", "hr"]}>
+            <Layout>
+              <RoleGuidePage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/role-guide" element={<Navigate to="/workflows" replace />} />
       <Route
         path="/renewal-review"
         element={

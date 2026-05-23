@@ -9,6 +9,12 @@ import { useRateBot } from "../contexts/RateBotContext";
 const ALL_NAV_ITEMS = [
   { to: "/dashboard", icon: "dashboard", label: "Dashboard", roles: null },
   {
+    to: "/workflows",
+    icon: "conversion_path",
+    label: "Workflow",
+    roles: ["company_admin", "finance", "sales", "hr"],
+  },
+  {
     to: "/renewal-review",
     icon: "description",
     label: "Contracts",

@@ -16,12 +16,14 @@ from routes.audit_logs import audit_logs_bp
 from routes.applications import applications_bp
 from routes.automation import automation_bp
 from routes.internal_chat import internal_chat_bp
+from services.observability import register_observability
 from services.scheduler import start_scheduler
 
 
 def create_app():
     app = Flask(__name__)
     CORS(app, origins=CORS_ORIGINS, supports_credentials=False)
+    register_observability(app)
 
     app.register_blueprint(companies_bp)
     app.register_blueprint(contracts_bp)
