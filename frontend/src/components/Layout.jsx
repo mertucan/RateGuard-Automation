@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../hooks/useTheme";
 import { useAuth } from "../contexts/AuthContext";
@@ -70,6 +70,8 @@ export default function Layout({ children }) {
   const { dark, toggle } = useTheme();
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef(null);
   const { activeContractId } = useRateBot();
 
   const navItems = ALL_NAV_ITEMS.filter((item) => {
@@ -85,9 +87,24 @@ export default function Layout({ children }) {
       : location.pathname === path;
 
   const handleLogout = () => {
+    setAccountOpen(false);
     logout();
     navigate("/login");
   };
+
+  useEffect(() => {
+    setAccountOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!accountOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (accountRef.current?.contains(event.target)) return;
+      setAccountOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [accountOpen]);
 
   const ROLE_LABEL = {
     super_admin: "Super Admin",
@@ -152,25 +169,54 @@ export default function Layout({ children }) {
             </span>
           </button>
           <div className="hidden h-5 w-px bg-border sm:block" />
-          <div className="hidden sm:flex items-center gap-2">
-            <div className="text-right">
-              <span className="block text-xs font-medium text-text">
-                {user?.full_name || "User"}
+          <div ref={accountRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setAccountOpen((value) => !value)}
+              className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-hover"
+              aria-haspopup="menu"
+              aria-expanded={accountOpen}
+              title="Account menu"
+            >
+              <div className="hidden text-right sm:block">
+                <span className="block text-xs font-medium text-text">
+                  {user?.full_name || "User"}
+                </span>
+                <span className="block text-[10px] text-text-muted">
+                  {ROLE_LABEL[user?.role] || user?.role}
+                </span>
+              </div>
+              <span className="material-symbols-outlined text-[24px] text-text-muted">
+                account_circle
               </span>
-              <span className="block text-[10px] text-text-muted">
-                {ROLE_LABEL[user?.role] || user?.role}
-              </span>
-            </div>
+            </button>
+            {accountOpen && (
+              <div className="absolute right-0 top-11 z-50 w-48 overflow-hidden rounded-lg border border-border bg-surface shadow-xl">
+                <Link
+                  to="/profile"
+                  onClick={() => setAccountOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-text transition-colors hover:bg-hover"
+                  role="menuitem"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-text-muted">
+                    manage_accounts
+                  </span>
+                  Profile
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-red-500 transition-colors hover:bg-hover"
+                  role="menuitem"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    logout
+                  </span>
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-red-500"
-            title="Logout"
-          >
-            <span className="material-symbols-outlined text-[20px]">
-              logout
-            </span>
-          </button>
         </div>
       </header>
 
@@ -195,6 +241,22 @@ export default function Layout({ children }) {
               {item.label}
             </Link>
           ))}
+          <Link
+            to="/profile"
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+              isActive("/profile")
+                ? "bg-primary-soft text-primary"
+                : "text-text-muted hover:bg-hover hover:text-text"
+            }`}
+          >
+            <span
+              className={`material-symbols-outlined text-[18px] ${isActive("/profile") ? "filled" : ""}`}
+            >
+              account_circle
+            </span>
+            Profile
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-red-500 transition-colors hover:bg-hover"

@@ -18,6 +18,39 @@ const FILTER_OPTIONS = [
   { key: 'all', label: 'All', icon: 'apps' },
 ]
 
+const DECISION_PRESETS = {
+  approved: [
+    {
+      label: 'Warm welcome',
+      message: 'Welcome to the team. Your application has been approved and your workspace access has been updated.',
+    },
+    {
+      label: 'Formal approval',
+      message: 'Thank you for your application. We are happy to approve your request and assign you to this department.',
+    },
+  ],
+  rejected: [
+    {
+      label: 'Polite decline',
+      message: 'Thank you for your interest. We are not able to approve this application at this time.',
+    },
+    {
+      label: 'Capacity note',
+      message: 'Thank you for applying. We reviewed your request, but this department is not accepting new members right now.',
+    },
+  ],
+}
+
+function buildGeneratedMessage(app, status) {
+  const dept = DEPT_LABELS[app?.target_department] || app?.target_department || 'the department'
+  const company = app?.company?.company_name || 'our company'
+  const name = app?.applicant?.full_name || 'there'
+  if (status === 'approved') {
+    return `Hi ${name}, your application to join the ${dept} department at ${company} has been approved. Your RateGuard role has been updated, and you can now continue from your dashboard. Welcome aboard.`
+  }
+  return `Hi ${name}, thank you for applying to the ${dept} department at ${company}. After reviewing your application, we are not able to approve it at this time. We appreciate your interest and encourage you to apply again when a suitable opportunity is available.`
+}
+
 export default function ApplicationManagementPage() {
   const { user } = useAuth()
   const { success: toastSuccess, error: toastError } = useToast()
@@ -25,6 +58,8 @@ export default function ApplicationManagementPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('pending')
   const [acting, setActing] = useState(null)
+  const [decision, setDecision] = useState(null)
+  const [decisionMessage, setDecisionMessage] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,11 +77,28 @@ export default function ApplicationManagementPage() {
     load()
   }, [load])
 
-  const handleReview = async (appId, status) => {
-    setActing(appId)
+  const openDecision = (app, status) => {
+    setDecision({ app, status })
+    setDecisionMessage(buildGeneratedMessage(app, status))
+  }
+
+  const closeDecision = () => {
+    if (acting) return
+    setDecision(null)
+    setDecisionMessage('')
+  }
+
+  const handleReview = async () => {
+    if (!decision?.app || !decision?.status) return
+    setActing(decision.app.id)
     try {
-      await reviewApplication(appId, { status })
-      toastSuccess(status === 'approved' ? 'Application approved! User has been assigned to the department.' : 'Application rejected.')
+      await reviewApplication(decision.app.id, {
+        status: decision.status,
+        reviewer_message: decisionMessage.trim(),
+      })
+      toastSuccess(decision.status === 'approved' ? 'Application approved! User has been assigned to the department.' : 'Application rejected.')
+      setDecision(null)
+      setDecisionMessage('')
       await load()
     } catch (err) {
       toastError(err.message || 'Failed to review application.')
@@ -169,14 +221,14 @@ export default function ApplicationManagementPage() {
                     {app.status === 'pending' && (
                       <div className="flex shrink-0 gap-2">
                         <button
-                          onClick={() => handleReview(app.id, 'rejected')}
+                          onClick={() => openDecision(app, 'rejected')}
                           disabled={acting === app.id}
                           className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/5 disabled:opacity-50"
                         >
                           Reject
                         </button>
                         <button
-                          onClick={() => handleReview(app.id, 'approved')}
+                          onClick={() => openDecision(app, 'approved')}
                           disabled={acting === app.id}
                           className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
                         >
@@ -191,6 +243,104 @@ export default function ApplicationManagementPage() {
           )}
         </div>
       </div>
+      {decision && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold">
+                  {decision.status === 'approved' ? 'Approve application' : 'Reject application'}
+                </h3>
+                <p className="mt-1 text-xs text-text-muted">
+                  {decision.app.applicant?.full_name || 'Applicant'} · {DEPT_LABELS[decision.app.target_department] || decision.app.target_department}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDecision}
+                disabled={!!acting}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-hover hover:text-text disabled:opacity-50"
+                title="Close"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-surface-alt p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                  Message tools
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDecisionMessage(buildGeneratedMessage(decision.app, decision.status))}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/25 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary transition-colors hover:bg-primary hover:text-white"
+                >
+                  <span className="material-symbols-outlined text-[15px]">auto_awesome</span>
+                  Generate
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {(DECISION_PRESETS[decision.status] || []).map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setDecisionMessage(preset.message)}
+                    className="rounded-md border border-border bg-surface px-3 py-2 text-left text-xs font-semibold text-text-muted transition-colors hover:border-primary/40 hover:bg-primary-soft hover:text-primary"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="mt-4 block">
+              <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-text-muted">
+                Message included in email
+              </span>
+              <textarea
+                value={decisionMessage}
+                onChange={(event) => setDecisionMessage(event.target.value.slice(0, 1200))}
+                rows={6}
+                className="w-full resize-none rounded-lg border border-border bg-surface-alt px-3 py-2 text-sm text-text outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+              />
+            </label>
+            <div className="mt-1 text-right text-[10px] text-text-muted">
+              {decisionMessage.length}/1200
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeDecision}
+                disabled={!!acting}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-muted transition-colors hover:bg-hover hover:text-text disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReview}
+                disabled={!!acting}
+                className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-wait disabled:opacity-60 ${
+                  decision.status === 'approved'
+                    ? 'bg-emerald-500 hover:bg-emerald-600'
+                    : 'bg-red-500 hover:bg-red-600'
+                }`}
+              >
+                {acting ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                ) : (
+                  <span className="material-symbols-outlined text-[18px]">
+                    {decision.status === 'approved' ? 'check_circle' : 'cancel'}
+                  </span>
+                )}
+                {acting ? 'Sending...' : decision.status === 'approved' ? 'Approve and send' : 'Reject and send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

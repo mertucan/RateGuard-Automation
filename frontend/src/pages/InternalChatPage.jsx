@@ -62,6 +62,33 @@ function isCurrentChatUser(item, currentUser) {
   return Boolean(itemEmail && currentEmail && itemEmail === currentEmail);
 }
 
+function normalizeConversation(item) {
+  if (!item || !item.id) return null;
+  return {
+    ...item,
+    display_title: item.display_title || item.title || "Internal chat",
+    participants: Array.isArray(item.participants) ? item.participants : [],
+    last_message: item.last_message || null,
+  };
+}
+
+function normalizeConversations(data) {
+  return (Array.isArray(data) ? data : [])
+    .map(normalizeConversation)
+    .filter(Boolean);
+}
+
+function mergeMessages(incomingMessages, pendingMessages = []) {
+  const byId = new Map();
+  for (const message of [...incomingMessages, ...pendingMessages]) {
+    if (!message?.id) continue;
+    byId.set(String(message.id), message);
+  }
+  return Array.from(byId.values()).sort((a, b) =>
+    String(a.created_at || "").localeCompare(String(b.created_at || "")),
+  );
+}
+
 export default function InternalChatPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
@@ -78,6 +105,10 @@ export default function InternalChatPage() {
   const [creatingConversation, setCreatingConversation] = useState(false);
   const [error, setError] = useState("");
   const messagesEndRef = useRef(null);
+  const selectedIdRef = useRef(null);
+  const messageRequestRef = useRef(0);
+  const messagesPollingRef = useRef(false);
+  const conversationsPollingRef = useRef(false);
 
   const isSuperAdmin = user?.role === "super_admin";
 
@@ -111,9 +142,19 @@ export default function InternalChatPage() {
   }, [conversations, search]);
 
   const loadConversations = useCallback(async () => {
-    const data = await getInternalChatConversations();
-    setConversations(Array.isArray(data) ? data : []);
-    setSelectedId((current) => current || data?.[0]?.id || null);
+    if (conversationsPollingRef.current) return;
+    conversationsPollingRef.current = true;
+    try {
+      const data = await getInternalChatConversations();
+      const normalized = normalizeConversations(data);
+      setConversations(normalized);
+      setSelectedId((current) => {
+        if (current && normalized.some((item) => item.id === current)) return current;
+        return current === null ? null : normalized[0]?.id || null;
+      });
+    } finally {
+      conversationsPollingRef.current = false;
+    }
   }, []);
 
   const loadMessages = useCallback(async (conversationId, options = {}) => {
@@ -122,15 +163,28 @@ export default function InternalChatPage() {
       setMessages([]);
       return;
     }
+    if (!showLoading && messagesPollingRef.current) return;
+    const requestId = messageRequestRef.current + 1;
+    messageRequestRef.current = requestId;
+    messagesPollingRef.current = true;
     if (showLoading) setMessagesLoading(true);
     try {
       const data = await getInternalChatMessages(conversationId);
+      if (
+        requestId !== messageRequestRef.current ||
+        String(selectedIdRef.current || "") !== String(conversationId)
+      ) {
+        return;
+      }
       const incomingMessages = Array.isArray(data) ? data : [];
       setMessages((prev) => {
         const pendingMessages = prev.filter((message) => message.delivery_status === "sending");
-        return [...incomingMessages, ...pendingMessages];
+        return mergeMessages(incomingMessages, pendingMessages);
       });
+    } catch (err) {
+      if (showLoading) setError(err.message || "Messages could not be loaded.");
     } finally {
+      messagesPollingRef.current = false;
       if (showLoading) setMessagesLoading(false);
     }
   }, []);
@@ -146,7 +200,8 @@ export default function InternalChatPage() {
           getInternalChatUsers(),
         ]);
         if (cancelled) return;
-        setConversations(Array.isArray(conversationData) ? conversationData : []);
+        const normalizedConversations = normalizeConversations(conversationData);
+        setConversations(normalizedConversations);
         setUsers(
           (Array.isArray(userData) ? userData : [])
             .map(normalizeChatUser)
@@ -154,7 +209,7 @@ export default function InternalChatPage() {
               item && !isCurrentChatUser(item, { id: user?.id, email: user?.email }),
             ),
         );
-        setSelectedId(conversationData?.[0]?.id || null);
+        setSelectedId(normalizedConversations?.[0]?.id || null);
       } catch (err) {
         if (!cancelled) setError(err.message);
       } finally {
@@ -168,12 +223,14 @@ export default function InternalChatPage() {
   }, [user?.email, user?.id]);
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
     loadMessages(selectedId, { showLoading: true });
   }, [loadMessages, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return undefined;
     const timer = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       loadMessages(selectedId);
       loadConversations().catch(() => {});
     }, MESSAGE_POLL_INTERVAL_MS);
@@ -237,10 +294,11 @@ export default function InternalChatPage() {
     try {
       const message = await sendInternalChatMessage(selectedId, { message_text: text });
       setMessages((prev) =>
-        prev.map((item) =>
+        mergeMessages(prev.map((item) =>
           item.id === tempId ? { ...message, sender: user, delivery_status: "sent" } : item,
-        ),
+        )),
       );
+      await loadMessages(selectedId);
       await loadConversations();
     } catch (err) {
       setError(err.message);

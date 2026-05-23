@@ -101,19 +101,18 @@ def _decorate_conversations(conversations, current_user):
     user_ids = sorted({p["user_id"] for p in participants if p.get("user_id")})
     users = {u["id"]: u for u in _fetch_users_by_ids(user_ids)}
 
-    messages = (
-        supabase.table("internal_chat_messages")
-        .select("id, conversation_id, sender_user_id, message_text, created_at")
-        .in_("conversation_id", conversation_ids)
-        .order("created_at", desc=True)
-        .execute()
-    ).data or []
-
     last_by_conversation = {}
-    for message in messages:
-        cid = message.get("conversation_id")
-        if cid and cid not in last_by_conversation:
-            last_by_conversation[cid] = message
+    for conversation_id in conversation_ids:
+        latest = (
+            supabase.table("internal_chat_messages")
+            .select("id, conversation_id, sender_user_id, message_text, created_at")
+            .eq("conversation_id", conversation_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        ).data or []
+        if latest:
+            last_by_conversation[conversation_id] = latest[0]
 
     participants_by_conversation = {}
     for participant in participants:
@@ -268,9 +267,11 @@ def list_messages(conversation_id):
             supabase.table("internal_chat_messages")
             .select("*, sender:users!internal_chat_messages_sender_user_id_fkey(id, full_name, email, role)")
             .eq("conversation_id", conversation_id)
-            .order("created_at", desc=False)
+            .order("created_at", desc=True)
+            .limit(200)
             .execute()
         ).data or []
+        messages.reverse()
         if not _user_is_super_admin(user):
             supabase.table("internal_chat_participants").update(
                 {"last_read_at": datetime.now(timezone.utc).isoformat()}

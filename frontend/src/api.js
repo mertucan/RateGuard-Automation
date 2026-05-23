@@ -75,6 +75,17 @@ export const resetPassword = (data) =>
   });
 
 // ── Companies ──────────────────────────────────────────────
+export const getProfile = () => request("/profile");
+
+export const updateProfile = (data) =>
+  request("/profile", { method: "PUT", body: JSON.stringify(data) });
+
+export const updateProfilePassword = (data) =>
+  request("/profile/password", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 export const getCompanies = (search = "", includeAll = false) => {
   const params = new URLSearchParams();
   if (search) params.set("search", search);

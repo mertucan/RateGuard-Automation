@@ -296,6 +296,23 @@ def send_welcome_email(to_email, full_name=None, role=None):
     return send_email(to_email, subject, body_html)
 
 
+def send_password_changed_email(to_email, full_name=None):
+    subject = "Your RateGuard password was changed"
+    body_html = render_email(
+        title="Password changed",
+        intro=[
+            f"Hello <strong>{escape(str(full_name or 'there'))}</strong>,",
+            "Your RateGuard account password was changed successfully.",
+            "If you made this change, no further action is needed.",
+            "If you did not make this change, reset your password immediately and contact your company administrator.",
+        ],
+        action_label="Open RateGuard",
+        action_path="/dashboard",
+        recipient_email=to_email,
+    )
+    return send_email(to_email, subject, body_html)
+
+
 def send_contract_notification(to_email, company_name, days_remaining, contract_id):
     subject = f"Contract expires in {days_remaining} days - {company_name}"
     body_html = render_email(
@@ -498,6 +515,43 @@ def send_application_submitted_email(to_email, applicant_name, company_name, dep
         ],
         action_label="View application status",
         action_path="/applications",
+        recipient_email=to_email,
+    )
+    return send_email(to_email, subject, body_html)
+
+
+def send_application_reviewed_email(
+    to_email,
+    applicant_name,
+    company_name,
+    department,
+    status,
+    reviewer_message=None,
+):
+    dept_label = {"sales": "Sales", "finance": "Finance", "hr": "HR"}.get(department, str(department).capitalize())
+    approved = status == "approved"
+    subject = f"Application {status} - {company_name} {dept_label}"
+    intro = [
+        f"Hi {escape(str(applicant_name or 'there'))},",
+        f"Your application to join the <strong>{escape(dept_label)}</strong> department at <strong>{escape(str(company_name))}</strong> has been <strong>{escape(str(status))}</strong>.",
+    ]
+    if approved:
+        intro.append("Your RateGuard workspace access has been updated with your new department role.")
+    else:
+        intro.append("Thank you for your interest. You can continue using RateGuard and submit another application when appropriate.")
+    if reviewer_message:
+        intro.append(f"<strong>Message from the company team:</strong><br>{escape(str(reviewer_message)).replace(chr(10), '<br>')}")
+
+    body_html = render_email(
+        title="Application decision",
+        intro=intro,
+        details=[
+            ("Company", escape(str(company_name))),
+            ("Department", escape(dept_label)),
+            ("Status", escape(str(status).capitalize())),
+        ],
+        action_label="Open RateGuard",
+        action_path="/dashboard" if approved else "/applications",
         recipient_email=to_email,
     )
     return send_email(to_email, subject, body_html)

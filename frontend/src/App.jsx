@@ -13,6 +13,7 @@ import ApplicationsPage from "./pages/ApplicationsPage";
 import ApplicationManagementPage from "./pages/ApplicationManagementPage";
 import HRDashboardPage from "./pages/HRDashboardPage";
 import InternalChatPage from "./pages/InternalChatPage";
+import ProfileSettingsPage from "./pages/ProfileSettingsPage";
 import Layout from "./components/Layout";
 import SplashScreen from "./components/SplashScreen";
 import LoginPage from "./pages/LoginPage";
@@ -109,6 +110,16 @@ function AppRoutes() {
               ) : (
                 <MainDashboardPage />
               )}
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <ProfileSettingsPage />
             </Layout>
           </ProtectedRoute>
         }

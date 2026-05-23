@@ -6,7 +6,12 @@ from flask import Blueprint, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from services.auth_middleware import issue_auth_token, login_required, role_required
-from services.email_service import render_email, send_email, send_welcome_email
+from services.email_service import (
+    render_email,
+    send_email,
+    send_password_changed_email,
+    send_welcome_email,
+)
 from services.supabase_client import supabase
 
 users_bp = Blueprint("users", __name__)
@@ -113,6 +118,79 @@ def login():
         return jsonify({"error": str(e)}), 500
 
 
+@users_bp.route("/api/profile", methods=["GET"])
+@login_required
+def get_profile():
+    try:
+        user = _get_user_row(g.current_user["id"])
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        return jsonify(_sanitize_user(user))
+    except Exception as e:
+        print(f"[profile] Read error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@users_bp.route("/api/profile", methods=["PUT"])
+@login_required
+def update_profile():
+    current = g.current_user
+    body = request.get_json() or {}
+    full_name = (body.get("full_name") or "").strip()
+
+    if not full_name:
+        return jsonify({"error": "Full name is required."}), 400
+
+    try:
+        (
+            supabase.table("users")
+            .update({"full_name": full_name})
+            .eq("id", current["id"])
+            .execute()
+        )
+        updated = _get_user_row(current["id"])
+        return jsonify(_sanitize_user(updated))
+    except Exception as e:
+        print(f"[profile] Update error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@users_bp.route("/api/profile/password", methods=["POST"])
+@login_required
+def update_profile_password():
+    current = g.current_user
+    body = request.get_json() or {}
+    current_password = body.get("current_password") or ""
+    new_password = body.get("new_password") or ""
+
+    if not current_password or not new_password:
+        return jsonify({"error": "Current password and new password are required."}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+    if current_password == new_password:
+        return jsonify({"error": "New password must be different from the current password."}), 400
+
+    try:
+        user = _get_user_row(current["id"], "id, full_name, email, password_hash")
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        password_hash = user.get("password_hash")
+        if not password_hash or not check_password_hash(password_hash, current_password):
+            return jsonify({"error": "Current password is incorrect."}), 401
+
+        supabase.table("users").update(
+            {"password_hash": generate_password_hash(new_password)}
+        ).eq("id", current["id"]).execute()
+        try:
+            send_password_changed_email(user.get("email"), user.get("full_name"))
+        except Exception as email_err:
+            print(f"[profile/password] Email send error: {email_err}")
+        return jsonify({"ok": True, "message": "Password updated successfully."})
+    except Exception as e:
+        print(f"[profile/password] Update error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @users_bp.route("/api/users", methods=["GET"])
 @login_required
 def list_users():
@@ -205,7 +283,7 @@ def update_user(user_id):
     data = {k: v for k, v in body.items() if k in allowed}
 
     try:
-        target = _get_user_row(user_id, "id, role, company_id")
+        target = _get_user_row(user_id, "id, full_name, email, role, company_id")
         if not target:
             return jsonify({"error": "User not found"}), 404
 
@@ -229,12 +307,19 @@ def update_user(user_id):
             data["email"] = data["email"].strip().lower()
         if "role" in data and data["role"] not in VALID_ROLES:
             return jsonify({"error": "Invalid role."}), 400
+        password_was_changed = False
         if "password" in data:
             password = data.pop("password") or ""
             if len(password) < 8:
                 return jsonify({"error": "Password must be at least 8 characters."}), 400
             data["password_hash"] = generate_password_hash(password)
+            password_was_changed = True
         result = supabase.table("users").update(data).eq("id", user_id).execute()
+        if password_was_changed:
+            try:
+                send_password_changed_email(target.get("email"), target.get("full_name"))
+            except Exception as email_err:
+                print(f"[users/update] Password email send error: {email_err}")
         return jsonify(_sanitize_user(result.data[0]))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -350,6 +435,12 @@ def reset_password():
         record = result.data[0]
         supabase.table("password_reset_codes").update({"used": True}).eq("id", record["id"]).execute()
         supabase.table("users").update({"password_hash": generate_password_hash(new_password)}).eq("email", email).execute()
+        try:
+            user_result = supabase.table("users").select("full_name, email").eq("email", email).limit(1).execute()
+            user = user_result.data[0] if user_result.data else {"email": email}
+            send_password_changed_email(user.get("email") or email, user.get("full_name"))
+        except Exception as email_err:
+            print(f"[auth/reset-password] Password email send error: {email_err}")
 
         return jsonify({"ok": True, "message": "Password updated successfully."})
     except Exception as e:

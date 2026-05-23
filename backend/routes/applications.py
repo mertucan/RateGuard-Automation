@@ -159,14 +159,20 @@ def review_application(app_id):
     user = g.current_user
     body = request.get_json() or {}
     status = body.get("status")
+    reviewer_message = (body.get("reviewer_message") or "").strip()
 
     if status not in ("approved", "rejected"):
         return jsonify({"error": "Status must be 'approved' or 'rejected'"}), 400
+    if len(reviewer_message) > 1200:
+        return jsonify({"error": "Reviewer message must be 1200 characters or fewer"}), 400
 
     try:
         app_res = (
             supabase.table("applications")
-            .select("*")
+            .select(
+                "*, applicant:users!applications_applicant_user_id_fkey(id, full_name, email),"
+                " company:companies!applications_target_company_id_fkey(id, company_name)"
+            )
             .eq("id", app_id)
             .limit(1)
             .execute()
@@ -203,9 +209,10 @@ def review_application(app_id):
             notify_user(
                 application.get("applicant_user_id"),
                 f"Application {status}",
-                f"Your application to the {application.get('target_department')} department has been {status}.",
+                reviewer_message
+                or f"Your application to the {application.get('target_department')} department has been {status}.",
                 company_id=application.get("target_company_id"),
-                action_url="/applications",
+                action_url="/dashboard" if status == "approved" else "/applications",
                 category="application",
                 notification_type="success" if status == "approved" else "warning",
                 event_key=f"application-reviewed:{app_id}:{status}",
@@ -213,6 +220,22 @@ def review_application(app_id):
             )
         except Exception as notification_err:
             print(f"[applications] Notification error: {notification_err}")
+        try:
+            from services.email_service import send_application_reviewed_email
+
+            applicant = application.get("applicant") or {}
+            company = application.get("company") or {}
+            if applicant.get("email"):
+                send_application_reviewed_email(
+                    to_email=applicant.get("email"),
+                    applicant_name=applicant.get("full_name"),
+                    company_name=company.get("company_name") or "the company",
+                    department=application.get("target_department"),
+                    status=status,
+                    reviewer_message=reviewer_message,
+                )
+        except Exception as email_err:
+            print(f"[applications] Review email error: {email_err}")
         return jsonify(result.data[0])
     except Exception as e:
         print(f"[applications] review error: {e}")
