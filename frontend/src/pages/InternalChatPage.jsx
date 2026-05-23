@@ -9,8 +9,9 @@ import {
 } from "../api";
 import { PageLoader } from "../components/Spinner";
 import { formatDisplayDate, formatDisplayTime } from "../utils/dateFormat";
+import { hasSupabaseRealtime, supabaseRealtime } from "../lib/supabaseRealtime";
 
-const MESSAGE_POLL_INTERVAL_MS = 2000;
+const MESSAGE_FALLBACK_POLL_INTERVAL_MS = 15000;
 
 const ROLE_LABELS = {
   super_admin: "Super Admin",
@@ -109,6 +110,7 @@ export default function InternalChatPage() {
   const messageRequestRef = useRef(0);
   const messagesPollingRef = useRef(false);
   const conversationsPollingRef = useRef(false);
+  const realtimeRefreshRef = useRef(null);
 
   const isSuperAdmin = user?.role === "super_admin";
 
@@ -233,8 +235,60 @@ export default function InternalChatPage() {
       if (document.visibilityState === "hidden") return;
       loadMessages(selectedId);
       loadConversations().catch(() => {});
-    }, MESSAGE_POLL_INTERVAL_MS);
+    }, hasSupabaseRealtime ? MESSAGE_FALLBACK_POLL_INTERVAL_MS : 3000);
     return () => clearInterval(timer);
+  }, [loadConversations, loadMessages, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || !supabaseRealtime) return undefined;
+
+    const refreshFromRealtime = () => {
+      window.clearTimeout(realtimeRefreshRef.current);
+      realtimeRefreshRef.current = window.setTimeout(() => {
+        if (String(selectedIdRef.current || "") !== String(selectedId)) return;
+        loadMessages(selectedId);
+        loadConversations().catch(() => {});
+      }, 120);
+    };
+
+    const channel = supabaseRealtime
+      .channel(`internal-chat:${selectedId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "internal_chat_messages",
+          filter: `conversation_id=eq.${selectedId}`,
+        },
+        refreshFromRealtime,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "internal_chat_conversations",
+          filter: `id=eq.${selectedId}`,
+        },
+        refreshFromRealtime,
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setError("Realtime connection is unstable. Fallback refresh is active.");
+        } else if (status === "SUBSCRIBED") {
+          setError((current) =>
+            current === "Realtime connection is unstable. Fallback refresh is active."
+              ? ""
+              : current,
+          );
+        }
+      });
+
+    return () => {
+      window.clearTimeout(realtimeRefreshRef.current);
+      supabaseRealtime.removeChannel(channel);
+    };
   }, [loadConversations, loadMessages, selectedId]);
 
   useEffect(() => {
