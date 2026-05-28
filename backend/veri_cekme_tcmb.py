@@ -1,6 +1,7 @@
 import requests
 import os
 import time
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
@@ -10,6 +11,25 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 API_KEY = os.getenv("TCMB_API_KEY", "")
 
 EVDS_BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
+CACHE_DIR = Path(__file__).resolve().parent / ".cache"
+
+
+def _safe_float(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip().replace("%", "")
+    if not text:
+        return None
+    if "," in text and "." not in text:
+        text = text.replace(",", ".")
+    elif "," in text and "." in text:
+        text = text.replace(",", "")
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def _evds_get(url, label=""):
@@ -36,7 +56,12 @@ def _evds_get(url, label=""):
 
 
 def _extract_float_list(items, field):
-    return [float(x[field]) for x in items if x.get(field)]
+    values = []
+    for item in items:
+        parsed = _safe_float(item.get(field))
+        if parsed is not None:
+            values.append(parsed)
+    return values
 
 
 def _yoy_rate(values):
@@ -44,6 +69,43 @@ def _yoy_rate(values):
     if len(values) >= 13:
         return ((values[-1] - values[-13]) / values[-13]) * 100
     return 0.0
+
+
+def _latest_cached_market_value(field):
+    """
+    EVDS can occasionally return an empty CPI series while other series are valid.
+    Keep the UI/calculations from treating that transient failure as a real 0%.
+    """
+    cache_files = ("market_tcmb_evds.json", "market.json")
+    for filename in cache_files:
+        path = CACHE_DIR / filename
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            data = payload.get("data") if isinstance(payload, dict) else None
+            parsed = _safe_float((data or {}).get(field))
+            if parsed is not None and parsed > 0:
+                return parsed
+        except Exception:
+            pass
+    history_files = ("history_30.json", "history_90.json", "history_180.json", "history_365.json")
+    for filename in history_files:
+        path = CACHE_DIR / filename
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            data = payload.get("data") if isinstance(payload, dict) else None
+            inflation = (data or {}).get("inflation") or []
+            if not inflation:
+                continue
+            parsed = _safe_float((inflation[-1] or {}).get(field))
+            if parsed is not None and parsed > 0:
+                return parsed
+        except Exception:
+            pass
+    return None
 
 
 def get_guaranteed_market_data():
@@ -81,6 +143,11 @@ def get_guaranteed_market_data():
         f"&startDate={str_inf_start}&endDate={str_end}&type=json"
     )
     tufe_orani = _yoy_rate(_extract_float_list(_evds_get(tufe_url, "TUFE"), "TP_FG_J0"))
+    if tufe_orani <= 0:
+        cached_tufe = _latest_cached_market_value("tufe")
+        if cached_tufe is not None:
+            print(f"[EVDS TUFE] Guncel seri bos/0 geldi; son gecerli cache kullaniliyor: %{cached_tufe:.2f}")
+            tufe_orani = cached_tufe
 
     time.sleep(0.5)
 

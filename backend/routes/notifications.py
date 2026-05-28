@@ -35,20 +35,37 @@ def _notification_visible_to_user(notification, user):
 
 
 def _visible_notifications(user, unread_only=False, limit=50):
-    select_clause = "*, contracts(id, status, tenant_company_id, company_id)"
-    fetch_limit = min(max(limit * 5, 100), 500)
+    select_clause = "*"
     try:
+        query = supabase.table("notifications").select(select_clause)
+        if unread_only:
+            query = query.eq("is_read", False)
+
+        role = user.get("role")
+        user_id = str(user.get("id") or "")
+        company_id = str(user.get("company_id") or "")
+        if role != "super_admin":
+            filters = []
+            if user_id:
+                filters.append(f"recipient_user_id.eq.{user_id}")
+            if company_id:
+                filters.append(f"recipient_company_id.eq.{company_id}")
+            if not filters:
+                return []
+            query = query.or_(",".join(filters))
+
+        rows = query.order("created_at", desc=True).limit(limit).execute().data or []
+        return rows
+    except Exception:
+        # Backwards-compatible fallback for old rows/schemas. Keep the cap small so
+        # the notification bell cannot hold the dashboard hostage on large tables.
+        select_clause = "*, contracts(id, status, tenant_company_id, company_id)"
+        fetch_limit = min(max(limit * 2, 50), 100)
         query = supabase.table("notifications").select(select_clause).order("created_at", desc=True)
         if unread_only:
             query = query.eq("is_read", False)
         rows = query.limit(fetch_limit).execute().data or []
-    except Exception:
-        query = supabase.table("notifications").select("*").order("created_at", desc=True)
-        if unread_only:
-            query = query.eq("is_read", False)
-        rows = query.limit(fetch_limit).execute().data or []
-
-    return [row for row in rows if _notification_visible_to_user(row, user)][:limit]
+        return [row for row in rows if _notification_visible_to_user(row, user)][:limit]
 
 
 @notifications_bp.route("/api/notifications", methods=["GET"])

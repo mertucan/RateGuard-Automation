@@ -8,14 +8,19 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([])
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+  const loadingRef = useRef(false)
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return
+    loadingRef.current = true
     try {
       const params = { unread: 'true', limit: 30 }
       const data = await getNotifications(params)
       setNotifications(data)
     } catch {
       /* silent */
+    } finally {
+      loadingRef.current = false
     }
   }, [])
 

@@ -31,6 +31,15 @@ def _read_file_cache(name):
     return None
 
 
+def _market_data_is_usable(data):
+    if not isinstance(data, dict):
+        return False
+    try:
+        return float(data.get("tufe") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _write_file_cache(name, data, ttl):
     _ensure_cache_dir()
     path = CACHE_DIR / f"{name}.json"
@@ -47,11 +56,11 @@ def get_cached_market_data(source=None):
     source = normalize_source(source)
     now = time.time()
     entry = _cache.get(source)
-    if entry and (now - entry["ts"]) < CACHE_TTL:
+    if entry and (now - entry["ts"]) < CACHE_TTL and _market_data_is_usable(entry["data"]):
         return entry["data"]
 
     file_data = _read_file_cache(f"market_{source}")
-    if file_data:
+    if file_data and _market_data_is_usable(file_data):
         _cache[source] = {"data": file_data, "ts": now}
         return file_data
 
