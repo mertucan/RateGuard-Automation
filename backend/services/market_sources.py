@@ -78,7 +78,29 @@ def get_market_data_from_source(source=None):
         return _with_meta(_fetch_world_bank(), source)
     if source == "private_sector_expectations":
         return _with_meta(_fetch_private_sector_expectation(), source)
-    return _with_meta(get_guaranteed_market_data(), "tcmb_evds")
+    return _with_meta(_fetch_tcmb_evds_with_cpi_fallback(), "tcmb_evds")
+
+
+def _fetch_tcmb_evds_with_cpi_fallback():
+    data = dict(get_guaranteed_market_data() or {})
+    if _num(data.get("tufe")) > 0:
+        return data
+
+    try:
+        fallback = _fetch_private_sector_expectation()
+        fallback_tufe = _num(fallback.get("tufe"))
+        if fallback_tufe > 0:
+            data["tufe"] = fallback_tufe
+            data["tufe_fallback_source"] = "private_sector_expectations"
+            data["source_description"] = (
+                "TCMB EVDS CPI index returned no usable CPI value, so CPI uses "
+                "the TCMB Survey of Market Participants 12-month CPI expectation. "
+                "FX and PPI still come from TCMB EVDS."
+            )
+            data["as_of"] = fallback.get("as_of") or data.get("as_of")
+    except Exception as exc:
+        print(f"[market-data] CPI fallback failed: {exc}")
+    return data
 
 
 def _with_meta(data, source):
@@ -92,7 +114,7 @@ def _with_meta(data, source):
     out["source_name"] = meta["name"]
     out["source_institution"] = meta["institution"]
     out["source_method"] = meta["method"]
-    out["source_description"] = meta.get("description", "")
+    out["source_description"] = out.get("source_description") or meta.get("description", "")
     out["data_source"] = meta
     out["supports_ufe"] = meta.get("supports_ufe", True)
     out["as_of"] = out.get("as_of") or date.today().isoformat()

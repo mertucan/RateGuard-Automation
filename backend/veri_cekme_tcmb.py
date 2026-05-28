@@ -11,6 +11,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 API_KEY = os.getenv("TCMB_API_KEY", "")
 
 EVDS_BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
+EVDS_SERVICE_BASE = "https://evds2.tcmb.gov.tr/service/evds/"
 CACHE_DIR = Path(__file__).resolve().parent / ".cache"
 TUFE_SERIES = (
     ("TP.FE.OKTG01", "TP_FE_OKTG01"),
@@ -59,6 +60,30 @@ def _evds_get(url, label=""):
         return []
 
 
+def _evds_get_series(series, start_date, end_date, label=""):
+    urls = [
+        (
+            f"{EVDS_BASE}series={series}"
+            f"&startDate={start_date}&endDate={end_date}&type=json"
+        ),
+        (
+            f"{EVDS_SERVICE_BASE}series={series}"
+            f"&startDate={start_date}&endDate={end_date}&type=json"
+        ),
+    ]
+    if API_KEY:
+        urls.append(
+            f"{EVDS_SERVICE_BASE}series={series}"
+            f"&startDate={start_date}&endDate={end_date}&type=json&key={API_KEY}"
+        )
+
+    for index, url in enumerate(urls, start=1):
+        items = _evds_get(url, f"{label}:try{index}")
+        if items:
+            return items
+    return []
+
+
 def _extract_float_list(items, field):
     values = []
     for item in items:
@@ -76,11 +101,10 @@ def _yoy_rate(values):
 
 
 def _fetch_yoy_from_series(series, field, start_date, end_date, label):
-    url = (
-        f"{EVDS_BASE}series={series}"
-        f"&startDate={start_date}&endDate={end_date}&type=json"
+    values = _extract_float_list(
+        _evds_get_series(series, start_date, end_date, label),
+        field,
     )
-    values = _extract_float_list(_evds_get(url, label), field)
     return _yoy_rate(values)
 
 
@@ -94,11 +118,7 @@ def _fetch_tufe_yoy(start_date, end_date):
 
 def _fetch_tufe_items(start_date, end_date):
     for series, field in TUFE_SERIES:
-        url = (
-            f"{EVDS_BASE}series={series}"
-            f"&startDate={start_date}&endDate={end_date}&type=json"
-        )
-        items = _evds_get(url, f"TUFE-HIST:{series}")
+        items = _evds_get_series(series, start_date, end_date, f"TUFE-HIST:{series}")
         values = []
         for item in items:
             parsed = _safe_float(item.get(field))
