@@ -81,6 +81,21 @@ function normalizeConversations(data) {
     .filter(Boolean);
 }
 
+function readableChatError(err, fallback = "Chat is temporarily unavailable. Please try again shortly.") {
+  const message = String(err?.message || err || "").trim();
+  if (!message) return fallback;
+  const lower = message.slice(0, 300).toLowerCase();
+  if (
+    lower.startsWith("<!doctype html") ||
+    lower.startsWith("<html") ||
+    lower.includes("<body") ||
+    lower.includes("</html>")
+  ) {
+    return fallback;
+  }
+  return message.length > 240 ? `${message.slice(0, 240)}...` : message;
+}
+
 function mergeMessages(incomingMessages, pendingMessages = []) {
   const byId = new Map();
   for (const message of [...incomingMessages, ...pendingMessages]) {
@@ -187,7 +202,7 @@ export default function InternalChatPage() {
         return mergeMessages(incomingMessages, pendingMessages);
       });
     } catch (err) {
-      if (showLoading) setError(err.message || "Messages could not be loaded.");
+      if (showLoading) setError(readableChatError(err, "Messages could not be loaded."));
     } finally {
       messagesPollingRef.current = false;
       if (showLoading) setMessagesLoading(false);
@@ -206,7 +221,7 @@ export default function InternalChatPage() {
         setConversations(normalizedConversations);
         setSelectedId(normalizedConversations?.[0]?.id || null);
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setError(readableChatError(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -229,7 +244,7 @@ export default function InternalChatPage() {
           ),
       );
     } catch (err) {
-      setError(err.message || "Chat users could not be loaded.");
+      setError(readableChatError(err, "Chat users could not be loaded."));
     } finally {
       setUsersLoading(false);
     }
@@ -350,7 +365,7 @@ export default function InternalChatPage() {
       setNewTitle("");
       setShowNewChat(false);
     } catch (err) {
-      setError(err.message);
+      setError(readableChatError(err, "Conversation could not be started."));
     } finally {
       setCreatingConversation(false);
     }
@@ -382,7 +397,7 @@ export default function InternalChatPage() {
       await loadMessages(selectedId);
       await loadConversations();
     } catch (err) {
-      setError(err.message);
+      setError(readableChatError(err, "Message could not be sent."));
       setDraft(text);
       setMessages((prev) => prev.filter((item) => item.id !== tempId));
     }
@@ -424,7 +439,7 @@ export default function InternalChatPage() {
         </div>
 
         {error && (
-          <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-600">
+          <div className="break-words border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-600">
             {error}
           </div>
         )}

@@ -27,6 +27,25 @@ function parseFilenameFromContentDisposition(header) {
   return u ? u[1].replace(/^"+|"+$/g, "") : null;
 }
 
+function normalizeErrorMessage(text, status) {
+  const value = String(text || "").trim();
+  if (!value) return `Request failed (${status})`;
+
+  const lower = value.slice(0, 300).toLowerCase();
+  if (
+    lower.startsWith("<!doctype html") ||
+    lower.startsWith("<html") ||
+    lower.includes("<body") ||
+    lower.includes("</html>")
+  ) {
+    return status >= 500
+      ? "Server is temporarily unavailable. Please try again shortly."
+      : `Request failed (${status}). Please try again.`;
+  }
+
+  return value.length > 500 ? `${value.slice(0, 500)}...` : value;
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -38,12 +57,15 @@ async function request(path, options = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    let message = text;
+    let message = normalizeErrorMessage(text, res.status);
     let payload = null;
     try {
       const json = JSON.parse(text);
       payload = json;
-      message = json.error || json.message || json.detail || text;
+      message = normalizeErrorMessage(
+        json.error || json.message || json.detail || text,
+        res.status,
+      );
     } catch {
       // plain text error
     }

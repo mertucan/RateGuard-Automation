@@ -5,7 +5,6 @@ import {
   getRevenueAnalysis,
   getAutomationSettings,
   updateAutomationSettings,
-  runRenewalAutomation,
 } from '../api'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../contexts/AuthContext'
@@ -59,7 +58,7 @@ export default function ClientManagementPage() {
   const [reportLoading, setReportLoading] = useState(true)
   const [automationLoading, setAutomationLoading] = useState(false)
   const [automationSaving, setAutomationSaving] = useState(false)
-  const [automationRunning, setAutomationRunning] = useState(false)
+  const [automationOpen, setAutomationOpen] = useState(false)
   const [automationSettings, setAutomationSettings] = useState({
     auto_renewal_enabled: false,
     require_admin_approval_before_auto_renew: true,
@@ -170,21 +169,6 @@ export default function ClientManagementPage() {
     }
   }
 
-  const runAutomationNow = async () => {
-    setAutomationRunning(true)
-    try {
-      const res = await runRenewalAutomation()
-      showToast(
-        `Done: checked ${res.checked}, new periods ${res.renewed_created || 0}, pending admin approval ${res.pending_admin_approval}, emails sent ${res.emails_sent}`,
-      )
-      await loadReport()
-    } catch (err) {
-      showToast(`Automation failed: ${err.message}`, 'error')
-    } finally {
-      setAutomationRunning(false)
-    }
-  }
-
   const copyReportSummary = () => {
     if (!report) return
     const p = report.portfolio || {}
@@ -236,14 +220,43 @@ export default function ClientManagementPage() {
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-8">
         {['company_admin', 'super_admin'].includes(user?.role) && (
-          <section className="mb-8 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-text">Company Admin - Renewal Automation</h3>
-              <p className="mt-1 text-sm text-text-muted">
-                Company admins control whether eligible contracts can renew automatically. Individual contracts
-                must also have automatic renewal enabled, so teams can opt in contract by contract.
-              </p>
-            </div>
+          <section className="mb-8 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+            <button
+              type="button"
+              onClick={() => setAutomationOpen((value) => !value)}
+              className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-hover sm:px-6"
+              aria-expanded={automationOpen}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[22px]">autorenew</span>
+                  <h3 className="text-base font-bold text-text sm:text-lg">
+                    Renewal automation settings
+                  </h3>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      automationSettings.auto_renewal_enabled
+                        ? 'bg-emerald-500/10 text-emerald-600'
+                        : 'bg-text-muted/10 text-text-muted'
+                    }`}
+                  >
+                    {automationSettings.auto_renewal_enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-text-muted">
+                  Control automatic renewal eligibility, admin approval, and notification emails.
+                </p>
+              </div>
+              <span
+                className={`material-symbols-outlined shrink-0 text-text-muted transition-transform ${
+                  automationOpen ? 'rotate-180' : ''
+                }`}
+              >
+                expand_more
+              </span>
+            </button>
+            {automationOpen && (
+              <div className="border-t border-border px-5 py-5 sm:px-6">
             {automationLoading ? (
               <div className="py-4"><Spinner size="md" /></div>
             ) : (
@@ -295,28 +308,21 @@ export default function ClientManagementPage() {
                 </label>
               </div>
             )}
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs leading-5 text-text-muted">
+                Individual contracts must also have automatic renewal enabled before this setting can apply.
+              </p>
               <button
                 type="button"
                 disabled={automationSaving || automationLoading}
                 onClick={saveAutomationSettings}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {automationSaving ? 'Saving…' : 'Save settings'}
               </button>
-              <button
-                type="button"
-                disabled={automationRunning}
-                onClick={runAutomationNow}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text hover:bg-hover disabled:opacity-50"
-              >
-                {automationRunning ? 'Running…' : 'Run automation now'}
-              </button>
-              <p className="w-full text-xs text-text-muted">
-                Backend approval actions: Approve · Reject · Send back for revision. Decisions are stored in approval
-                logs.
-              </p>
             </div>
+              </div>
+            )}
           </section>
         )}
 
