@@ -174,7 +174,7 @@ def get_guaranteed_market_data():
     end_date = datetime.now()
     str_end = end_date.strftime("%d-%m-%Y")
     str_fx_start = (end_date - timedelta(days=14)).strftime("%d-%m-%Y")
-    str_inf_start = (end_date - timedelta(days=480)).strftime("%d-%m-%Y")
+    str_inf_start = (end_date - timedelta(days=760)).strftime("%d-%m-%Y")
 
     print(f"Veriler cekiliyor... ({str_inf_start} - {str_end})")
 
@@ -230,7 +230,7 @@ def get_historical_data(days=90):
     end_date = datetime.now()
     str_end = end_date.strftime("%d-%m-%Y")
     str_start = (end_date - timedelta(days=days)).strftime("%d-%m-%Y")
-    str_inf_start = (end_date - timedelta(days=max(days, 480))).strftime("%d-%m-%Y")
+    str_inf_start = (end_date - timedelta(days=max(days, 760))).strftime("%d-%m-%Y")
 
     # FX daily data
     fx_url = (
