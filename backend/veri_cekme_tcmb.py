@@ -12,6 +12,10 @@ API_KEY = os.getenv("TCMB_API_KEY", "")
 
 EVDS_BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis/"
 CACHE_DIR = Path(__file__).resolve().parent / ".cache"
+TUFE_SERIES = (
+    ("TP.FE.OKTG01", "TP_FE_OKTG01"),
+    ("TP.FG.J0", "TP_FG_J0"),
+)
 
 
 def _safe_float(value):
@@ -69,6 +73,40 @@ def _yoy_rate(values):
     if len(values) >= 13:
         return ((values[-1] - values[-13]) / values[-13]) * 100
     return 0.0
+
+
+def _fetch_yoy_from_series(series, field, start_date, end_date, label):
+    url = (
+        f"{EVDS_BASE}series={series}"
+        f"&startDate={start_date}&endDate={end_date}&type=json"
+    )
+    values = _extract_float_list(_evds_get(url, label), field)
+    return _yoy_rate(values)
+
+
+def _fetch_tufe_yoy(start_date, end_date):
+    for series, field in TUFE_SERIES:
+        rate = _fetch_yoy_from_series(series, field, start_date, end_date, f"TUFE:{series}")
+        if rate > 0:
+            return rate
+    return 0.0
+
+
+def _fetch_tufe_items(start_date, end_date):
+    for series, field in TUFE_SERIES:
+        url = (
+            f"{EVDS_BASE}series={series}"
+            f"&startDate={start_date}&endDate={end_date}&type=json"
+        )
+        items = _evds_get(url, f"TUFE-HIST:{series}")
+        values = []
+        for item in items:
+            parsed = _safe_float(item.get(field))
+            if parsed is not None:
+                values.append({"date": item.get("Tarih", ""), "value": parsed})
+        if values:
+            return values
+    return []
 
 
 def _latest_cached_market_value(field):
@@ -137,12 +175,8 @@ def get_guaranteed_market_data():
 
     time.sleep(0.5)
 
-    # --- 2. TUFE / CPI endeksi (TP.FG.J0) ---
-    tufe_url = (
-        f"{EVDS_BASE}series=TP.FG.J0"
-        f"&startDate={str_inf_start}&endDate={str_end}&type=json"
-    )
-    tufe_orani = _yoy_rate(_extract_float_list(_evds_get(tufe_url, "TUFE"), "TP_FG_J0"))
+    # --- 2. TUFE / CPI endeksi (guncel seri: TP.FE.OKTG01) ---
+    tufe_orani = _fetch_tufe_yoy(str_inf_start, str_end)
     if tufe_orani <= 0:
         cached_tufe = _latest_cached_market_value("tufe")
         if cached_tufe is not None:
@@ -199,11 +233,7 @@ def get_historical_data(days=90):
     time.sleep(0.5)
 
     # TUFE monthly index
-    tufe_url = (
-        f"{EVDS_BASE}series=TP.FG.J0"
-        f"&startDate={str_inf_start}&endDate={str_end}&type=json"
-    )
-    tufe_items = _evds_get(tufe_url, "TUFE-HIST")
+    tufe_values = _fetch_tufe_items(str_inf_start, str_end)
 
     time.sleep(0.5)
 
@@ -213,12 +243,6 @@ def get_historical_data(days=90):
         f"&startDate={str_inf_start}&endDate={str_end}&type=json"
     )
     ufe_items = _evds_get(ufe_url, "UFE-HIST")
-
-    tufe_values = []
-    for item in tufe_items:
-        val = item.get("TP_FG_J0")
-        if val:
-            tufe_values.append({"date": item.get("Tarih", ""), "value": float(val)})
 
     ufe_values = []
     for item in ufe_items:
