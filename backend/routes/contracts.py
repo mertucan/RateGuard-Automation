@@ -1110,7 +1110,7 @@ def client_reject(contract_id):
         # Fetch contract to verify company ownership before mutating
         contract_res = (
             supabase.table("contracts")
-            .select("company_id, tenant_company_id")
+            .select("company_id, tenant_company_id, status")
             .eq("id", contract_id)
             .limit(1)
             .execute()
